@@ -202,4 +202,12 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0005_voice_tracks',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE shots ADD COLUMN audio_asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL;
+      `)
+    },
+  },
 ]

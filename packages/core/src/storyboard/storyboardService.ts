@@ -6,7 +6,7 @@
  * and served by the main process through the restricted mirai-asset://
  * protocol (asset id → validated path inside the project).
  */
-import { copyFileSync, mkdirSync, statSync, unlinkSync } from 'node:fs'
+import { copyFileSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { extname, join } from 'node:path'
 import { z } from 'zod'
 import {
@@ -25,6 +25,17 @@ import type { Clock } from '../types'
 import { newEntityId } from '../types'
 
 const STYLE_KEY = 'style-bible'
+const DECISIONS_KEY = 'ai-decisions'
+const AUDIO_MIME: Record<string, string> = {
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.flac': 'audio/flac',
+  '.aac': 'audio/aac',
+  '.weba': 'audio/webm',
+}
+const MAX_AUDIO_BYTES = 80 * 1024 * 1024
 const IMAGE_MIME: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -46,6 +57,7 @@ interface ShotRow {
   dialogue: string | null
   notes: string | null
   frame_asset_id: string | null
+  audio_asset_id: string | null
   status: string
   created_at: string
   updated_at: string
@@ -103,8 +115,8 @@ export class StoryboardService {
         .prepare(
           `INSERT INTO shots
            (id, scene_id, order_index, title, shot_type, lens, camera_movement,
-            duration_seconds, dialogue, notes, frame_asset_id, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'TODO', ?, ?)`,
+            duration_seconds, dialogue, notes, frame_asset_id, audio_asset_id, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'TODO', ?, ?)`,
         )
         .run(
           id,
@@ -248,6 +260,150 @@ export class StoryboardService {
     tx()
   }
 
+  // ------------------------------------------------------------------- voice
+
+  /** Copies a real audio file into the project as the shot's voice line. */
+  importVoice(shotId: EntityId, sourcePath: string): AssetRecord {
+    this.requireShot(shotId)
+    const ext = extname(sourcePath).toLowerCase()
+    if (!(ext in AUDIO_MIME)) {
+      throw new MiraiError(
+        'VALIDATION_ERROR',
+        `Unsupported audio type "${ext || 'unknown'}" — allowed: ${Object.keys(AUDIO_MIME).join(', ')}.`,
+      )
+    }
+    let size: number
+    try {
+      size = statSync(sourcePath).size
+    } catch {
+      throw new MiraiError('PATH_INVALID', `File not found: ${sourcePath}`)
+    }
+    if (size > MAX_AUDIO_BYTES) {
+      throw new MiraiError(
+        'VALIDATION_ERROR',
+        `Audio is too large (${(size / 1024 / 1024).toFixed(1)} MB) — the limit is 80 MB.`,
+      )
+    }
+
+    const id = newEntityId()
+    const now = this.clock.isoNow()
+    const relativePath = join('audio', 'voice', `${id}${ext}`)
+    const tx = this.db.transaction(() => {
+      mkdirSync(join(this.projectRoot, 'audio', 'voice'), { recursive: true })
+      copyFileSync(sourcePath, join(this.projectRoot, relativePath))
+      this.db
+        .prepare(
+          `INSERT INTO assets (id, kind, relative_path, original_name, mime, bytes, created_at)
+           VALUES (?, 'AUDIO', ?, ?, ?, ?, ?)`,
+        )
+        .run(id, relativePath, basename(sourcePath), AUDIO_MIME[ext] ?? 'application/octet-stream', size, now)
+      const previous = this.requireShot(shotId).voiceAssetId
+      this.db
+        .prepare('UPDATE shots SET audio_asset_id = ?, updated_at = ? WHERE id = ?')
+        .run(id, now, shotId)
+      if (previous) this.pruneAssetIfOrphan(previous)
+    })
+    tx()
+    return this.getAsset(id)
+  }
+
+  clearVoice(shotId: EntityId): void {
+    const shot = this.requireShot(shotId)
+    if (!shot.voiceAssetId) return
+    const tx = this.db.transaction(() => {
+      this.db
+        .prepare('UPDATE shots SET audio_asset_id = NULL, updated_at = ? WHERE id = ?')
+        .run(this.clock.isoNow(), shotId)
+      this.pruneAssetIfOrphan(shot.voiceAssetId!)
+    })
+    tx()
+  }
+
+  // ------------------------------------------------------ generated assets
+
+  /**
+   * Registers AI-generated image bytes as a project asset and attaches it to
+   * a shot as the frame (Phase 4 image pipeline — real files, real registry).
+   */
+  registerGeneratedFrame(shotId: EntityId, bytes: Buffer, mime: string): AssetRecord {
+    this.requireShot(shotId)
+    const ext = mime === 'image/jpeg' ? '.jpg' : mime === 'image/webp' ? '.webp' : '.png'
+    const id = newEntityId()
+    const now = this.clock.isoNow()
+    const relativePath = join('images', 'generated', `${id}${ext}`)
+    const tx = this.db.transaction(() => {
+      mkdirSync(join(this.projectRoot, 'images', 'generated'), { recursive: true })
+      writeFileSync(join(this.projectRoot, relativePath), bytes)
+      this.db
+        .prepare(
+          `INSERT INTO assets (id, kind, relative_path, original_name, mime, bytes, created_at)
+           VALUES (?, 'IMAGE', ?, ?, ?, ?, ?)`,
+        )
+        .run(id, relativePath, `generated-frame${ext}`, mime, bytes.length, now)
+      const previous = this.requireShot(shotId).frameAssetId
+      this.db
+        .prepare('UPDATE shots SET frame_asset_id = ?, updated_at = ? WHERE id = ?')
+        .run(id, now, shotId)
+      if (previous) this.pruneAssetIfOrphan(previous)
+    })
+    tx()
+    return this.getAsset(id)
+  }
+
+  // ------------------------------------------------------------ decisions
+
+  /** Creative decision log — the project's AI memory (spec §43, Phase 2). */
+  addDecision(input: {
+    kind: string
+    summary: string
+    sceneId?: EntityId
+    shotId?: EntityId
+  }): { id: string; createdAt: string } {
+    const list = this.listDecisions(200)
+    const decision = {
+      id: newEntityId(),
+      kind: input.kind,
+      summary: input.summary,
+      sceneId: input.sceneId ?? null,
+      shotId: input.shotId ?? null,
+      createdAt: this.clock.isoNow(),
+    }
+    list.unshift(decision)
+    this.db
+      .prepare(
+        `INSERT INTO kv_store (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      )
+      .run(DECISIONS_KEY, JSON.stringify(list.slice(0, 200)), this.clock.isoNow())
+    return decision
+  }
+
+  listDecisions(limit: number): Array<{
+    id: string
+    kind: string
+    summary: string
+    sceneId: string | null
+    shotId: string | null
+    createdAt: string
+  }> {
+    const row = this.db
+      .prepare('SELECT value FROM kv_store WHERE key = ?')
+      .get(DECISIONS_KEY) as { value: string } | undefined
+    if (!row) return []
+    try {
+      const parsed = JSON.parse(row.value) as unknown
+      if (!Array.isArray(parsed)) return []
+      return parsed
+        .filter(
+          (d): d is { id: string; kind: string; summary: string; sceneId: string | null; shotId: string | null; createdAt: string } =>
+            typeof d === 'object' && d !== null && 'id' in d && 'summary' in d,
+        )
+        .slice(0, Math.max(1, Math.min(limit, 200)))
+    } catch {
+      return []
+    }
+  }
+
   // ----------------------------------------------------------------- assets
 
   getAsset(id: EntityId): AssetRecord {
@@ -339,6 +495,11 @@ export class StoryboardService {
     if (!row) throw new MiraiError('NOT_FOUND', `Scene ${sceneId} not found.`)
   }
 
+  /** Look up a single shot (used by the AI frame pipeline). */
+  getShotById(id: EntityId): ShotRecord {
+    return this.requireShot(id)
+  }
+
   private requireShot(id: EntityId): ShotRecord {
     const row = this.db
       .prepare('SELECT * FROM shots WHERE id = ?')
@@ -363,6 +524,7 @@ function rowToShot(row: ShotRow): ShotRecord {
     dialogue: row.dialogue ?? undefined,
     notes: row.notes ?? undefined,
     frameAssetId: row.frame_asset_id,
+    voiceAssetId: row.audio_asset_id,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

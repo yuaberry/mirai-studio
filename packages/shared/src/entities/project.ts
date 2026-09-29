@@ -38,6 +38,8 @@ export const zResolution = z.object({
 export const ProjectConfig = z.object({
   title: z.string().min(1).max(120),
   genre: z.string().max(80).optional(),
+  /** Full anime taxonomy tags (spec §genres — Ecchi, Isekai, …). */
+  genres: z.array(z.string().max(40)).max(12).default([]),
   language: z.string().min(2).max(16).default('ja'),
   aspectRatio: z.enum(ASPECT_RATIOS).default('16:9'),
   resolution: zResolution.default({ width: 1920, height: 1080 }),

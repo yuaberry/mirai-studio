@@ -12,8 +12,11 @@ import {
   Clock,
   ImagePlus,
   LayoutGrid,
+  Mic,
   Plus,
+  Sparkles,
   Trash2,
+  Volume2,
   X,
 } from 'lucide-react'
 import {
@@ -37,6 +40,10 @@ import {
   useScenes,
   useShots,
   useShotMutations,
+  useAiStatus,
+  useGenerateFrame,
+  useVoiceActions,
+  useRecordDecision,
   assetUrl,
 } from '../../lib/queries'
 import { toast } from '../../store/appStore'
@@ -352,6 +359,10 @@ function ShotCard({
 
 function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }) {
   const mutations = useShotMutations()
+  const { data: ai } = useAiStatus()
+  const generateFrame = useGenerateFrame()
+  const voice = useVoiceActions()
+  const recordDecision = useRecordDecision()
   const [form, setForm] = useState({
     title: shot.title,
     shotType: shot.shotType,
@@ -412,6 +423,39 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
     })
   }
 
+  const generateWithAi = () => {
+    generateFrame.mutate(
+      { shotId: shot.id },
+      {
+        onSuccess: () => {
+          recordDecision.mutate({
+            kind: 'image',
+            summary: `Queued AI frame generation for shot "${shot.title}" (${shot.shotType}).`,
+            shotId: shot.id,
+          })
+          toast({
+            kind: 'info',
+            title: 'Frame generation queued',
+            description: 'Watch the Jobs panel — the result attaches here automatically.',
+          })
+        },
+        onError: (err) =>
+          toast({ kind: 'error', title: 'Generation failed to start', description: err.message }),
+      },
+    )
+  }
+
+  const importVoice = () => {
+    voice.importVoice.mutate(shot.id, {
+      onSuccess: (asset) =>
+        toast({ kind: 'success', title: `Voice line imported (${(asset.bytes / 1024).toFixed(0)} KB)` }),
+      onError: (err) => {
+        if (err.message.includes('cancelled')) return
+        toast({ kind: 'error', title: 'Voice import failed', description: err.message })
+      },
+    })
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-3 flex items-center justify-between">
@@ -448,9 +492,23 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
               </div>
             )}
           </div>
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" loading={mutations.importFrame.isPending} onClick={importFrame}>
-              <ImagePlus className="h-3.5 w-3.5" /> {shot.frameAssetId ? 'Replace Frame' : 'Import Frame'}
+              <ImagePlus className="h-3.5 w-3.5" /> {shot.frameAssetId ? 'Replace' : 'Import'}
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              loading={generateFrame.isPending}
+              disabled={!ai?.imageConfigured}
+              title={
+                ai?.imageConfigured
+                  ? 'Generate this frame with AI — Style Bible + camera context'
+                  : 'Configure an image provider in Settings → Providers first'
+              }
+              onClick={generateWithAi}
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Generate (AI)
             </Button>
             {shot.frameAssetId && (
               <Button
@@ -467,6 +525,50 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
               </Button>
             )}
           </div>
+          {!ai?.imageConfigured && (
+            <p className="mt-1.5 text-[10px] text-mirai-faint">
+              AI frame generation needs an image provider (Settings → Providers).
+            </p>
+          )}
+        </div>
+
+        {/* voice line */}
+        <div>
+          <Label>
+            Voice line
+            <span className="ml-2 font-normal text-mirai-faint">audio for this shot</span>
+          </Label>
+          {shot.voiceAssetId ? (
+            <div className="space-y-1.5">
+              <audio
+                controls
+                preload="metadata"
+                src={assetUrl(shot.voiceAssetId)}
+                className="h-8 w-full"
+              />
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" loading={voice.importVoice.isPending} onClick={importVoice}>
+                  <Volume2 className="h-3.5 w-3.5" /> Replace
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    voice.clearVoice.mutate(
+                      { shotId: shot.id },
+                      { onError: (err) => toast({ kind: 'error', title: 'Failed', description: err.message }) },
+                    )
+                  }
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button size="sm" variant="outline" loading={voice.importVoice.isPending} onClick={importVoice}>
+              <Mic className="h-3.5 w-3.5" /> Import Voice Line
+            </Button>
+          )}
         </div>
 
         <div>

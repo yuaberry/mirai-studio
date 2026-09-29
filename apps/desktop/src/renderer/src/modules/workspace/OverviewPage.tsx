@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { Pencil, ShieldCheck, AlertTriangle, CheckCircle2, Clock } from 'lucide-react'
 import {
+  ANIME_GENRES,
   ASPECT_RATIOS,
   FPS_OPTIONS,
   MiraiError,
@@ -66,7 +67,6 @@ export function OverviewPage() {
           </div>
           <div className="grid grid-cols-2 gap-x-8 gap-y-3 md:grid-cols-3">
             <Fact label="Work title" value={config.title} />
-            <Fact label="Genre" value={config.genre ?? '—'} />
             <Fact label="Language" value={config.language} />
             <Fact label="Aspect ratio" value={config.aspectRatio} />
             <Fact label="Resolution" value={`${config.resolution.width} × ${config.resolution.height}`} />
@@ -75,10 +75,24 @@ export function OverviewPage() {
             <Fact label="Visual style" value={config.visualStyle ?? '—'} />
             <Fact label="Content rating" value={config.contentRating ?? '—'} />
           </div>
-          {manifest.description && (
-            <p className="mt-4 border-t border-mirai-border pt-3 text-xs leading-relaxed text-mirai-dim">
-              {manifest.description}
-            </p>
+          {(config.genres.length > 0 || manifest.description) && (
+            <div className="mt-4 space-y-3 border-t border-mirai-border pt-3">
+              {config.genres.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {config.genres.map((genre) => (
+                    <span
+                      key={genre}
+                      className="rounded-full border border-mirai-accent-2/30 bg-mirai-accent-2/10 px-2.5 py-0.5 text-[11px] font-semibold text-mirai-accent-2"
+                    >
+                      {genre}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {manifest.description && (
+                <p className="text-xs leading-relaxed text-mirai-dim">{manifest.description}</p>
+              )}
+            </div>
           )}
         </Card>
 
@@ -188,6 +202,7 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
   const manifest = project?.manifest
   const [title, setTitle] = useState('')
   const [genre, setGenre] = useState('')
+  const [genres, setGenres] = useState<string[]>([])
   const [aspectRatio, setAspectRatio] = useState('16:9')
   const [fps, setFps] = useState('24')
 
@@ -195,6 +210,7 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
     if (manifest) {
       setTitle(manifest.config.title)
       setGenre(manifest.config.genre ?? '')
+      setGenres(manifest.config.genres ?? [])
       setAspectRatio(manifest.config.aspectRatio)
       setFps(String(manifest.config.fps))
     }
@@ -207,6 +223,7 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
       ...manifest.config,
       title,
       genre: genre.trim() || undefined,
+      genres,
       aspectRatio,
       fps: Number(fps),
     })
@@ -246,8 +263,37 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
           <Input id="ce-title" value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
         <div className="col-span-2">
-          <Label htmlFor="ce-genre">Genre</Label>
+          <Label htmlFor="ce-genre">Genre (free text)</Label>
           <Input id="ce-genre" value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="Romance, Fantasy…" />
+        </div>
+        <div className="col-span-2">
+          <Label>
+            Anime genres
+            <span className="ml-2 font-normal text-mirai-faint">(max 12)</span>
+          </Label>
+          <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-mirai-border bg-mirai-panel p-2">
+            {ANIME_GENRES.map((g) => {
+              const active = genres.includes(g)
+              return (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() =>
+                    setGenres((list) =>
+                      list.includes(g) ? list.filter((x) => x !== g) : list.length >= 12 ? list : [...list, g],
+                    )
+                  }
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    active
+                      ? 'border-mirai-accent/40 bg-mirai-accent/15 text-mirai-accent'
+                      : 'border-mirai-border-strong bg-mirai-raise text-mirai-faint hover:text-mirai-dim'
+                  }`}
+                >
+                  {g}
+                </button>
+              )
+            })}
+          </div>
         </div>
         <div>
           <Label htmlFor="ce-aspect">Aspect ratio</Label>

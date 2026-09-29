@@ -28,7 +28,12 @@ import {
   plaintextCodec,
   type AppDirs,
 } from '@mirai/core'
-import { OpenRouterProvider, buildSystemPrompt } from '@mirai/ai'
+import {
+  OpenRouterProvider,
+  OpenAIImagesProvider,
+  buildSystemPrompt,
+  buildImagePrompt,
+} from '@mirai/ai'
 import { ProjectConfig, PROJECT_PRESETS, type FetchResponse } from '@mirai/shared'
 
 const steps: Array<{ name: string; ok: boolean; detail?: string }> = []
@@ -370,6 +375,91 @@ async function main(): Promise<void> {
     expectOrder(ctx.storyboard.listShots(scene.id), ['City lights below', 'The promise — close'])
   })
 
+  await step('GENRES: project config accepts the full anime taxonomy', () => {
+    const manifest = projects.updateActiveConfig(
+      ProjectConfig.parse({
+        ...ctx.manifest.config,
+        genres: ['Isekai', 'Romance', 'Ecchi', 'Psychological', 'Shounen'],
+      }),
+    )
+    if (manifest.config.genres.length !== 5 || !manifest.config.genres.includes('Ecchi')) {
+      throw new Error('genre taxonomy not persisted')
+    }
+  })
+
+  await step('VOICE: real audio import attaches to a shot', () => {
+    const scene = ctx.creative.listScenes(ctx.creative.listEpisodes()[0]!.id)[0]!
+    const shot = ctx.storyboard.listShots(scene.id)[0]!
+    const wavSource = join(root, 'fake-line.wav')
+    writeFileSync(wavSource, Buffer.alloc(2048, 0x52))
+    const asset = ctx.storyboard.importVoice(shot.id, wavSource)
+    if (asset.kind !== 'AUDIO' || asset.mime !== 'audio/wav') throw new Error('voice metadata broken')
+    if (!existsSync(join(summary.path, asset.relativePath))) throw new Error('voice not copied')
+    if (ctx.storyboard.getShotById(shot.id).voiceAssetId !== asset.id) throw new Error('voice not attached')
+  })
+
+  await step('STYLE BIBLE round-trips the visual identity', () => {
+    const style = { artDirection: 'Luminous TV-anime, painted skies.', palette: 'Sakura pink, dusk violet.' }
+    ctx.storyboard.updateStyleBible(style)
+    if (ctx.storyboard.getStyleBible().artDirection !== style.artDirection) {
+      throw new Error('style bible lost')
+    }
+  })
+
+  await step('IMAGE PIPELINE: consistency prompt + provider + generated frame lands in project', async () => {
+    // 1. The studio-consistency prompt bakes in Style Bible + camera metadata.
+    const scene = ctx.creative.listScenes(ctx.creative.listEpisodes()[0]!.id)[0]!
+    const shot = ctx.storyboard.listShots(scene.id)[1]!
+    const prompt = buildImagePrompt({
+      styleBible: ctx.storyboard.getStyleBible(),
+      scene: {
+        title: scene.title,
+        timeOfDay: scene.timeOfDay,
+        synopsis: scene.synopsis,
+        locationName: ctx.creative.locationName(scene.locationId),
+        castNames: ['Yuna Hoshimiya'],
+      },
+      shot: {
+        title: shot.title,
+        shotType: shot.shotType,
+        lens: shot.lens,
+        cameraMovement: shot.cameraMovement,
+        durationSeconds: shot.durationSeconds,
+        notes: shot.notes,
+      },
+      characters: [{ name: 'Yuna Hoshimiya' }],
+      extraPrompt: 'sakura petals falling',
+    })
+    if (!prompt.includes('Sakura pink, dusk violet.')) throw new Error('Style Bible missing from prompt')
+    if (!prompt.includes('dolly in')) throw new Error('camera metadata missing from prompt')
+
+    // 2. The REAL provider against a fake transport returns real bytes…
+    const b64 = Buffer.from('generated-frame-bytes').toString('base64')
+    const provider = new OpenAIImagesProvider({
+      apiKey: 'img-smoke-key',
+      baseUrl: 'https://images.smoke.test/v1',
+      fetchFn: async (): Promise<FetchResponse> => ({
+        ok: true,
+        status: 200,
+        body: null,
+        text: async () => JSON.stringify({ data: [{ b64_json: b64 }] }),
+      }),
+      timeoutMs: 0,
+    })
+    const result = await provider.generate({ model: 'sd/smoke', prompt, size: '1344x768' })
+
+    // 3. …and the pipeline stores them as a REAL project asset attached to the shot.
+    const asset = ctx.storyboard.registerGeneratedFrame(shot.id, result.bytes, result.mimeType)
+    if (!existsSync(join(summary.path, asset.relativePath))) throw new Error('generated frame not on disk')
+    if (ctx.storyboard.getShotById(shot.id).frameAssetId !== asset.id) throw new Error('frame not attached')
+  })
+
+  await step('DECISIONS: accepted AI proposals become project memory', () => {
+    ctx.storyboard.addDecision({ kind: 'screenplay', summary: 'Accepted draft — rooftop scene.' })
+    ctx.storyboard.addDecision({ kind: 'image', summary: 'Approved generated keyframe.' })
+    if (ctx.storyboard.listDecisions(10).length !== 2) throw new Error('decisions lost')
+  })
+
   await step('STORYBOARD: real frame import, orphan pruning, security', () => {
     const scene = ctx.creative.listScenes(ctx.creative.listEpisodes()[0]!.id)[0]!
     const shot = ctx.storyboard.listShots(scene.id)[1]!
@@ -383,14 +473,6 @@ async function main(): Promise<void> {
 
     ctx.storyboard.clearFrame(shot.id)
     if (existsSync(join(summary.path, asset.relativePath))) throw new Error('orphan file not pruned')
-  })
-
-  await step('STYLE BIBLE round-trips the visual identity', () => {
-    const style = { artDirection: 'Luminous TV-anime, painted skies.', palette: 'Sakura pink, dusk violet.' }
-    ctx.storyboard.updateStyleBible(style)
-    if (ctx.storyboard.getStyleBible().artDirection !== style.artDirection) {
-      throw new Error('style bible lost')
-    }
   })
 
   await step('DUPLICATE produces a clean independent copy', () => {

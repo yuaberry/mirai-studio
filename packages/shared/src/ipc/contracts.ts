@@ -12,6 +12,7 @@ import { type ErrorPayload } from '../errors'
 import { AppSettings, zCredentialKey } from '../entities/settings'
 import { JobRecord } from '../entities/job'
 import { LogEntry } from '../entities/log'
+
 import {
   OpenedProject,
   ProjectConfig,
@@ -298,6 +299,10 @@ export const ipcContracts = {
       configured: z.boolean(),
       secure: z.boolean(),
       defaultModel: z.string().nullable(),
+      /** Which chat provider is active. */
+      provider: z.enum(['openrouter', 'nvidia']),
+      /** Whether an image-generation provider is configured. */
+      imageConfigured: z.boolean(),
     }),
   },
   'ai:models': {
@@ -322,6 +327,68 @@ export const ipcContracts = {
   },
   'ai:abort': {
     request: z.object({ requestId: z.string().min(1) }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /**
+   * Scene Writer agent (Phase 2 completion): drafts a screenplay for a scene
+   * from its consented context. Returns the DRAFT only — applying it is an
+   * explicit user action (human-in-the-loop via ai:applyDraft).
+   */
+  'ai:draftScreenplay': {
+    request: z.object({
+      sceneId: zEntityId,
+      guidance: z.string().max(2_000).optional(),
+    }),
+    response: z.object({
+      draft: z.string(),
+      model: z.string(),
+      durationMs: z.number().int().min(0),
+    }),
+  },
+  /** Records a creative decision (memory of accepted AI proposals). */
+  'ai:recordDecision': {
+    request: z.object({
+      kind: z.enum(['screenplay', 'image', 'other']),
+      summary: z.string().min(1).max(2_000),
+      sceneId: zEntityId.optional(),
+      shotId: zEntityId.optional(),
+    }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'ai:decisions:list': {
+    request: z.object({ limit: z.number().int().min(1).max(200).default(50) }).default({ limit: 50 }),
+    response: z.object({
+      decisions: z.array(
+        z.object({
+          id: z.string(),
+          kind: z.string(),
+          summary: z.string(),
+          sceneId: z.string().nullable(),
+          shotId: z.string().nullable(),
+          createdAt: zIsoDate,
+        }),
+      ),
+    }),
+  },
+  /**
+   * Frame generation job (Phase 4): queues an AI image generation for a shot
+   * using the project Style Bible + scene/cast context for consistency.
+   * The completed job attaches a real asset to the shot.
+   */
+  'ai:generateFrame': {
+    request: z.object({
+      shotId: zEntityId,
+      extraPrompt: z.string().max(4_000).optional(),
+    }),
+    response: z.object({ jobId: zEntityId }),
+  },
+  /** Voice line (Phase 4): native file dialog → real audio attached to a shot. */
+  'media:importVoice': {
+    request: z.object({ shotId: zEntityId }),
+    response: z.object({ asset: AssetRecord }),
+  },
+  'shots:clearVoice': {
+    request: z.object({ shotId: zEntityId }),
     response: z.object({ ok: z.boolean() }),
   },
 

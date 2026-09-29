@@ -5,8 +5,10 @@
 import { useMemo, useState } from 'react'
 import { FolderOpen, Loader2, Sparkles } from 'lucide-react'
 import {
+  ANIME_GENRES,
   ASPECT_RATIOS,
   FPS_OPTIONS,
+  HOT_GENRES,
   MiraiError,
   ProjectConfig,
   PROJECT_PRESETS,
@@ -25,11 +27,18 @@ interface FormState {
   presetId: string
   title: string
   genre: string
+  genres: string[]
   language: string
   aspectRatio: string
   fps: string
   resolution: string
   episodeCount: string
+}
+
+function toggleGenre(list: string[], genre: string): string[] {
+  if (list.includes(genre)) return list.filter((g) => g !== genre)
+  if (list.length >= 12) return list
+  return [...list, genre]
 }
 
 const RESOLUTIONS: Record<string, { width: number; height: number }> = {
@@ -56,6 +65,7 @@ const EMPTY_FORM: FormState = {
   presetId: 'anime-12',
   title: '',
   genre: '',
+  genres: [],
   language: 'ja',
   aspectRatio: '16:9',
   fps: '24',
@@ -130,6 +140,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
     const parsed = ProjectConfig.safeParse({
       title: form.title.trim(),
       genre: form.genre.trim() || undefined,
+      genres: form.genres,
       language: form.language,
       aspectRatio: form.aspectRatio,
       fps: Number(form.fps),
@@ -159,7 +170,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
             onSuccess: () => {
               setView('overview')
               onClose()
-              setForm(EMPTY_FORM)
+              setForm({ ...EMPTY_FORM })
             },
             onError: (err) =>
               setServerError(err instanceof MiraiError ? err.message : `Open failed: ${err.message}`),
@@ -259,13 +270,44 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div>
-          <Label htmlFor="np-genre">Genre</Label>
+          <Label htmlFor="np-genre">Genre (free text)</Label>
           <Input
             id="np-genre"
             placeholder="Romance, Fantasy, Drama"
             value={form.genre}
             onChange={(e) => set('genre', e.target.value)}
           />
+        </div>
+
+        <div>
+          <Label>
+            Anime genres
+            <span className="ml-2 font-normal text-mirai-faint">
+              tap to tag — Isekai, Ecchi, Psychological… (max 12)
+            </span>
+          </Label>
+          <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-mirai-border bg-mirai-panel p-2">
+            {ANIME_GENRES.map((genre) => {
+              const active = form.genres.includes(genre)
+              const hot = HOT_GENRES.has(genre)
+              return (
+                <button
+                  key={genre}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, genres: toggleGenre(f.genres, genre) }))}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    active
+                      ? hot
+                        ? 'border-mirai-accent/40 bg-mirai-accent/15 text-mirai-accent'
+                        : 'border-mirai-accent-2/40 bg-mirai-accent-2/15 text-mirai-accent-2'
+                      : 'border-mirai-border-strong bg-mirai-raise text-mirai-faint hover:text-mirai-dim'
+                  }`}
+                >
+                  {genre}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         <div>

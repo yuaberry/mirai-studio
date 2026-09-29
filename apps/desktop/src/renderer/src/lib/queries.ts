@@ -204,7 +204,7 @@ export function useCredentialsStatus() {
 export function useSetCredential() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { key: 'openrouter'; value: string }) =>
+    mutationFn: (input: { key: 'openrouter' | 'nvidia' | 'image'; value: string }) =>
       invoke('credentials:set', input).then((r) => r.secure),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.credentials }),
   })
@@ -213,7 +213,7 @@ export function useSetCredential() {
 export function useClearCredential() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (key: 'openrouter') => invoke('credentials:clear', { key }),
+    mutationFn: (key: 'openrouter' | 'nvidia' | 'image') => invoke('credentials:clear', { key }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.credentials }),
   })
 }
@@ -465,6 +465,59 @@ export function useAiStatus() {
     queryKey: ['ai', 'status'],
     queryFn: () => invoke('ai:status'),
   })
+}
+
+export function useDecisions(limit = 50) {
+  return useQuery({
+    queryKey: ['ai', 'decisions', limit],
+    queryFn: () => invoke('ai:decisions:list', { limit }).then((r) => r.decisions),
+  })
+}
+
+export function useRecordDecision() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      kind: 'screenplay' | 'image' | 'other'
+      summary: string
+      sceneId?: string
+      shotId?: string
+    }) => invoke('ai:recordDecision', input).then(() => undefined),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ai', 'decisions'] }),
+  })
+}
+
+export function useDraftScreenplay() {
+  return useMutation({
+    mutationFn: (input: { sceneId: string; guidance?: string }) =>
+      invoke('ai:draftScreenplay', input),
+  })
+}
+
+export function useGenerateFrame() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { shotId: string; extraPrompt?: string }) =>
+      invoke('ai:generateFrame', input).then((r) => r.jobId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shots'] }),
+  })
+}
+
+export function useVoiceActions() {
+  const queryClient = useQueryClient()
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['shots'] })
+  return {
+    importVoice: useMutation({
+      mutationFn: (shotId: string) =>
+        invoke('media:importVoice', { shotId }).then((r) => r.asset as AssetRecord),
+      onSuccess: invalidate,
+    }),
+    clearVoice: useMutation({
+      mutationFn: (vars: { shotId: string }) =>
+        invoke('shots:clearVoice', { shotId: vars.shotId }).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+  }
 }
 
 export function useAiModels(force = false) {

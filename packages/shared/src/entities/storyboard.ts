@@ -96,6 +96,8 @@ export const ShotRecord = z.object({
   notes: z.string().max(8_000).optional(),
   /** Imported frame image, served via the mirai-asset:// protocol. */
   frameAssetId: zEntityId.nullable(),
+  /** Voice line audio attached to this shot (Phase 4). */
+  voiceAssetId: zEntityId.nullable(),
   status: zTaskStatus,
   createdAt: zIsoDate,
   updatedAt: zIsoDate,

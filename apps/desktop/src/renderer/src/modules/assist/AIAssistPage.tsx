@@ -5,13 +5,23 @@
  * Prompts from the Prompt Library can be seeded into the input.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, Send, Settings as SettingsIcon, Square, WifiOff } from 'lucide-react'
+import { Loader2, PenLine, Send, Settings as SettingsIcon, Square, WifiOff } from 'lucide-react'
 import { type ChatMessage } from '@mirai/shared'
 import { Badge, Button, Select } from '../../system/ui'
 import { EmptyState } from '../../system/EmptyState'
+import { Modal } from '../../system/Modal'
 import { invoke, onEvent } from '../../lib/ipc'
-import { useAiStatus, useCurrentProject, useEpisodes, useScenes, useCharacters } from '../../lib/queries'
-import { useAppStore } from '../../store/appStore'
+import {
+  useAiStatus,
+  useCurrentProject,
+  useEpisodes,
+  useScenes,
+  useCharacters,
+  useDraftScreenplay,
+  useSceneMutations,
+  useRecordDecision,
+} from '../../lib/queries'
+import { useAppStore, toast } from '../../store/appStore'
 import { MiniMarkdown } from './MiniMarkdown'
 
 interface UIMessage extends ChatMessage {
@@ -33,12 +43,17 @@ export function AIAssistPage() {
   const [input, setInput] = useState('')
   const [requestId, setRequestId] = useState<string | null>(null)
   const streaming = requestId !== null
+  const [draft, setDraft] = useState<{ sceneId: string; text: string; model: string } | null>(null)
+  const [draftGuidance, setDraftGuidance] = useState('')
+  const draftScreenplay = useDraftScreenplay()
+  const sceneMutations = useSceneMutations()
+  const recordDecision = useRecordDecision()
 
   const [includeBible, setIncludeBible] = useState(false)
   const [includeCharacters, setIncludeCharacters] = useState(false)
   const [sceneId, setSceneId] = useState('')
   const [episodeId, setEpisodeId] = useState('')
-  const { data: scenes } = useScenes(episodeId || undefined)
+  const { data: scenesForEpisode } = useScenes(episodeId || undefined)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -131,6 +146,56 @@ export function AIAssistPage() {
     if (requestId) void invoke('ai:abort', { requestId })
   }
 
+  const startDraft = () => {
+    if (!sceneId) {
+      toast({ kind: 'warning', title: 'Select a scene first (episode + scene pickers above).' })
+      return
+    }
+    draftScreenplay.mutate(
+      { sceneId, guidance: draftGuidance.trim() || undefined },
+      {
+        onSuccess: (result) => setDraft({ sceneId, text: result.draft, model: result.model }),
+        onError: (err) =>
+          toast({ kind: 'error', title: 'Draft failed', description: err.message }),
+      },
+    )
+  }
+
+  const applyDraft = () => {
+    if (!draft) return
+    const scenes = scenesForEpisode ?? []
+    const scene = scenes.find((s) => s.id === draft.sceneId)
+    if (!scene) return
+    sceneMutations.update.mutate(
+      {
+        id: scene.id,
+        episodeId: episodeId,
+        input: {
+          title: scene.title,
+          timeOfDay: scene.timeOfDay,
+          locationId: scene.locationId,
+          characterIds: scene.characterIds,
+          synopsis: scene.synopsis,
+          screenplay: draft.text,
+        },
+      },
+      {
+        onSuccess: () => {
+          recordDecision.mutate({
+            kind: 'screenplay',
+            summary: `Accepted AI screenplay draft for "${scene.title}" (${draft.model}).`,
+            sceneId: scene.id,
+          })
+          setDraft(null)
+          setDraftGuidance('')
+          toast({ kind: 'success', title: 'Screenplay applied to the scene' })
+        },
+        onError: (err) =>
+          toast({ kind: 'error', title: 'Apply failed', description: err.message }),
+      },
+    )
+  }
+
   const contextNotice = useMemo(() => {
     const parts: string[] = []
     if (includeBible) parts.push('Story Bible')
@@ -164,7 +229,7 @@ export function AIAssistPage() {
             onToggleCast={() => setIncludeCharacters((v) => !v)}
             episodes={episodes ?? []}
             episodeId={episodeId}
-            scenes={scenes ?? []}
+            scenes={scenesForEpisode ?? []}
             sceneId={sceneId}
             onSelectEpisode={setEpisodeId}
             onSelectScene={setSceneId}
@@ -210,6 +275,31 @@ export function AIAssistPage() {
         )}
       </div>
 
+      {/* --------------------------------------------------- scene writer */}
+      <div className="border-t border-mirai-border bg-mirai-raise/40 px-8 py-3">
+        <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2">
+          <Badge tone="violet">Scene Writer</Badge>
+          <span className="text-[11px] text-mirai-dim">
+            Drafts a full screenplay for the selected scene — you approve before anything changes.
+          </span>
+          <input
+            value={draftGuidance}
+            onChange={(e) => setDraftGuidance(e.target.value)}
+            placeholder="optional guidance — e.g. 'end on an interrupted confession'"
+            className="h-7 min-w-48 flex-1 rounded-md border border-mirai-border bg-mirai-panel px-2.5 text-xs text-mirai-text placeholder:text-mirai-faint focus:border-mirai-accent/50 focus:outline-none"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            loading={draftScreenplay.isPending}
+            disabled={!ai?.configured || streaming}
+            onClick={startDraft}
+          >
+            <PenLine className="h-3.5 w-3.5" /> Draft Scene
+          </Button>
+        </div>
+      </div>
+
       {/* ------------------------------------------------------------- input */}
       <div className="border-t border-mirai-border px-8 py-4">
         <div className="mx-auto max-w-3xl">
@@ -251,6 +341,53 @@ export function AIAssistPage() {
           </div>
         </div>
       </div>
+      {/* --------------------------------------- human-in-the-loop approval */}
+      <Modal
+        open={draft !== null}
+        onClose={() => setDraft(null)}
+        title="AI Screenplay Draft — review before applying"
+        description={`Proposed for this scene by ${draft?.model ?? ''}. Nothing changes until you approve.`}
+        width="max-w-3xl"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDraft(null)}>
+              Discard
+            </Button>
+            <Button
+              variant="outline"
+              loading={draftScreenplay.isPending}
+              onClick={() => {
+                if (!sceneId) return
+                draftScreenplay.mutate(
+                  { sceneId, guidance: draftGuidance.trim() || undefined },
+                  {
+                    onSuccess: (result) =>
+                      setDraft({ sceneId, text: result.draft, model: result.model }),
+                    onError: (err) =>
+                      toast({ kind: 'error', title: 'Draft failed', description: err.message }),
+                  },
+                )
+              }}
+            >
+              Regenerate
+            </Button>
+            <Button
+              variant="primary"
+              loading={sceneMutations.update.isPending}
+              onClick={applyDraft}
+            >
+              Apply to Scene
+            </Button>
+          </>
+        }
+      >
+        <pre
+          data-selectable="true"
+          className="max-h-[50vh] overflow-y-auto rounded-lg border border-mirai-border bg-mirai-base p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-mirai-dim"
+        >
+          {draft?.text ?? ''}
+        </pre>
+      </Modal>
     </div>
   )
 }

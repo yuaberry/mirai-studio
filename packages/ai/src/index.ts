@@ -39,3 +39,9 @@ export function estimateCostUsd(
     usage.completionTokens * model.completionPricePerToken
   )
 }
+
+// ------------------------------------------------------- image generation
+export { OpenAIImagesProvider } from './images'
+export type { ImageOptions, ImageResult } from './images'
+export { buildImagePrompt, draftScreenplayInstruction } from './consistency'
+export type { ConsistencyData, ConsistencyScene, ConsistencyShot } from './consistency'

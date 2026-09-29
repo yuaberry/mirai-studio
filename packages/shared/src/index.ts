@@ -102,6 +102,8 @@ export {
 export type { PromptCategory } from './entities/prompt'
 
 export { AppSettings, DEFAULT_APP_SETTINGS, CREDENTIAL_KEYS, zCredentialKey } from './entities/settings'
+export { ANIME_GENRES, HOT_GENRES } from './entities/genres'
+export type { AnimeGenre } from './entities/genres'
 export type { CredentialKey } from './entities/settings'
 
 export { BUILTIN_JOB_TYPES, JobRecord, jobIsActive } from './entities/job'

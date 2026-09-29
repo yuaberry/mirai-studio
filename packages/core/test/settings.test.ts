@@ -83,7 +83,11 @@ describe('CredentialStore', () => {
     const store = new CredentialStore(db, fakeSecureCodec, makeClock())
     store.set('openrouter', 'value')
     const status = store.status()
-    expect(status).toEqual([{ key: 'openrouter', configured: true, secure: true }])
+    expect(status).toEqual([
+      { key: 'openrouter', configured: true, secure: true },
+      { key: 'nvidia', configured: false, secure: false },
+      { key: 'image', configured: false, secure: false },
+    ])
     db.close()
   })
 

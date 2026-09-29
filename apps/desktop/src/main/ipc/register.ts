@@ -284,6 +284,82 @@ export function registerIpcHandlers(c: Container): void {
 
   handleIpc('ai:abort', (req) => ({ ok: c.ai.abort(req.requestId) }))
 
+  // ---- Scene Writer agent (draft + explicit approval) -----------------------
+  handleIpc('ai:draftScreenplay', async (req) => c.ai.draftScreenplay(req.sceneId, req.guidance))
+
+  handleIpc('ai:recordDecision', (req) => {
+    const ctx = requireActive(c)
+    ctx.storyboard.addDecision({
+      kind: req.kind,
+      summary: req.summary,
+      sceneId: req.sceneId,
+      shotId: req.shotId,
+    })
+    c.logger.log('info', 'AI', `Decision recorded: ${req.kind}`)
+    return { ok: true }
+  })
+
+  handleIpc('ai:decisions:list', (req) => {
+    const ctx = requireActive(c)
+    return { decisions: ctx.storyboard.listDecisions(req.limit) }
+  })
+
+  // ---- Frame generation (Phase 4) -------------------------------------------
+  handleIpc('ai:generateFrame', async (req) => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('ai.generateFrame', async (job, jobCtx) => {
+      const payload = (job.payload ?? {}) as { shotId?: string; extraPrompt?: string }
+      if (!payload.shotId) {
+        throw new MiraiError('VALIDATION_ERROR', 'generateFrame payload missing shotId.')
+      }
+      // Bridge the cooperative flag to a real AbortSignal for fetch.
+      const controller = new AbortController()
+      const watcher = setInterval(() => {
+        if (jobCtx.signal.aborted) controller.abort()
+      }, 100)
+      try {
+        return await c.ai.generateFrame(
+          payload.shotId,
+          payload.extraPrompt,
+          controller.signal,
+          jobCtx.reportProgress,
+        )
+      } finally {
+        clearInterval(watcher)
+      }
+    })
+    const job = await ctx.jobs.enqueue(
+      'ai.generateFrame',
+      { shotId: req.shotId, extraPrompt: req.extraPrompt },
+      { priority: 8, maxAttempts: 2 },
+    )
+    return { jobId: job.id }
+  })
+
+  // ---- Voice import (Phase 4) -------------------------------------------------
+  handleIpc('media:importVoice', async (req) => {
+    const ctx = requireActive(c)
+    const win = c.emitter.window
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Import a voice line',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Audio', extensions: ['wav', 'mp3', 'ogg', 'm4a', 'flac', 'aac', 'weba'] },
+      ],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      throw new MiraiError('CANCELLED', 'Voice import cancelled.')
+    }
+    const asset = ctx.storyboard.importVoice(req.shotId, result.filePaths[0]!)
+    c.logger.info('MEDIA', `Voice imported for shot ${req.shotId}`, { assetId: asset.id })
+    return { asset }
+  })
+
+  handleIpc('shots:clearVoice', (req) => {
+    requireActive(c).storyboard.clearVoice(req.shotId)
+    return { ok: true }
+  })
+
   // ---------------------------------------------------------------- settings
   handleIpc('settings:get', () => ({ settings: c.settings.get() }))
 
@@ -406,4 +482,5 @@ function requireActive(c: Container) {
   if (!ctx) throw new MiraiError('NOT_FOUND', 'No project is open.')
   return ctx
 }
+
 

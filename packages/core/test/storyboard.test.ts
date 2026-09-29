@@ -19,7 +19,7 @@ function makeEnv(name: string) {
   const storyboard = new StoryboardService(db, clock, dir)
   const episode = creative.createEpisode({ season: 1, number: 1, title: 'Episode One' })
   const scene = creative.createScene(episode.id, { title: 'The rooftop promise' })
-  return { dir, db, creative, storyboard, episode, scene }
+  return { dir, db, clock, creative, storyboard, episode, scene }
 }
 
 function makeFakeImage(name: string, size = 1024): string {
@@ -191,5 +191,69 @@ describe('Style Bible', () => {
   it('rejects an over-long field via zod', () => {
     const { storyboard } = makeEnv('style-invalid')
     expect(() => storyboard.updateStyleBible({ palette: 'x'.repeat(5_000) })).toThrow(MiraiError)
+  })
+})
+
+describe('Voice lines', () => {
+  it('imports an audio file as the shot voice, replaces and prunes', () => {
+    const { storyboard, dir, scene } = makeEnv('voice')
+    const shot = storyboard.createShot(scene.id, { title: 'voiced' })
+    const wav = makeFakeImage('line.wav', 4096)
+
+    const asset = storyboard.importVoice(shot.id, wav)
+    expect(asset.kind).toBe('AUDIO')
+    expect(asset.mime).toBe('audio/wav')
+    expect(asset.relativePath.startsWith('audio/voice/')).toBe(true)
+    expect(existsSync(join(dir, asset.relativePath))).toBe(true)
+    expect(storyboard.getAsset(asset.id).id).toBe(asset.id)
+
+    // replace → previous orphan pruned
+    const wav2 = makeFakeImage('line2.mp3', 2048)
+    const asset2 = storyboard.importVoice(shot.id, wav2)
+    expect(() => storyboard.getAsset(asset.id)).toThrow(/not found/i)
+    expect(asset2.mime).toBe('audio/mpeg')
+
+    // clear → pruned + file removed
+    storyboard.clearVoice(shot.id)
+    expect(() => storyboard.getAsset(asset2.id)).toThrow(/not found/i)
+    expect(existsSync(join(dir, asset2.relativePath))).toBe(false)
+  })
+
+  it('validates audio extensions and size', () => {
+    const { storyboard, scene } = makeEnv('voice-invalid')
+    const shot = storyboard.createShot(scene.id, { title: 's' })
+    const text = makeFakeImage('notes.txt')
+    expect(() => storyboard.importVoice(shot.id, text)).toThrow(/Unsupported audio type/i)
+    const big = makeFakeImage('huge.wav', 81 * 1024 * 1024)
+    expect(() => storyboard.importVoice(shot.id, big)).toThrow(/too large/i)
+  })
+})
+
+describe('Generated frames', () => {
+  it('registers AI-generated image bytes as the shot frame (real file + registry)', () => {
+    const { storyboard, dir, scene } = makeEnv('genframe')
+    const shot = storyboard.createShot(scene.id, { title: 'gen' })
+    const bytes = Buffer.from('fake-generated-png-contents')
+
+    const asset = storyboard.registerGeneratedFrame(shot.id, bytes, 'image/png')
+    expect(asset.originalName).toBe('generated-frame.png')
+    expect(asset.bytes).toBe(bytes.length)
+    expect(existsSync(join(dir, asset.relativePath))).toBe(true)
+    expect(storyboard.getShotById(shot.id).frameAssetId).toBe(asset.id)
+  })
+})
+
+describe('Decisions (project AI memory)', () => {
+  it('records and lists creative decisions, newest first', () => {
+    const { storyboard, clock } = makeEnv('decisions')
+    expect(storyboard.listDecisions(10)).toEqual([])
+    storyboard.addDecision({ kind: 'screenplay', summary: 'Accepted draft for the rooftop scene.' })
+    clock.advance(10)
+    storyboard.addDecision({ kind: 'image', summary: 'Approved generated keyframe for shot 1.' })
+
+    const list = storyboard.listDecisions(10)
+    expect(list).toHaveLength(2)
+    expect(list[0]!.summary).toContain('keyframe')
+    expect(list[1]!.summary).toContain('rooftop')
   })
 })

@@ -7,7 +7,7 @@ import type { StoryBible } from '@mirai/shared'
 
 export interface ContextCharacter {
   name: string
-  role: string
+  role?: string
   personality?: string
   goals?: string
   fears?: string

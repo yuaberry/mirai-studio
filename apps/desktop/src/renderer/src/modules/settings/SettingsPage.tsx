@@ -3,7 +3,7 @@
  * appearance, shortcuts reference.
  */
 import { useEffect, useState } from 'react'
-import { EyeOff, KeyRound, RefreshCw, Save } from 'lucide-react'
+import { RefreshCw, Save } from 'lucide-react'
 import { MiraiError, type AppSettings } from '@mirai/shared'
 import { Badge, Button, Card, Input, Label, SectionTitle, Select, Spinner } from '../../system/ui'
 import { ErrorState } from '../../system/EmptyState'
@@ -44,7 +44,7 @@ export function SettingsPage() {
       <h1 className="mb-8 font-display text-2xl font-bold text-mirai-text">Settings</h1>
       <div className="space-y-6">
         <GeneralCard settings={settings} />
-        <AICard />
+        <ProvidersCard />
         <ShortcutsCard />
       </div>
     </div>
@@ -118,50 +118,47 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
   )
 }
 
-function AICard() {
+function ProvidersCard() {
   const { data: credentials, isLoading } = useCredentialsStatus()
   const { data: aiStatus } = useAiStatus()
-  const { data: models, isLoading: modelsLoading, isError: modelsError, error: modelsError_, refetch: refetchModels } = useAiModels()
   const { data: settings } = useSettings()
   const updateSettings = useUpdateSettings()
   const setCredential = useSetCredential()
   const clearCredential = useClearCredential()
-  const [keyValue, setKeyValue] = useState('')
-  const [selectedModel, setSelectedModel] = useState<string>(settings?.ai.defaultModel ?? '')
+  const { data: models, isLoading: modelsLoading, refetch: refetchModels } = useAiModels()
 
-  // Sync the picker when settings arrive/change externally.
+  const [openrouterKey, setOpenrouterKey] = useState('')
+  const [nvidiaKey, setNvidiaKey] = useState('')
+  const [imageKey, setImageKey] = useState('')
+  const [nvidiaModel, setNvidiaModel] = useState(settings?.ai.nvidia.model ?? 'nvidia/z-ai/glm-5.3')
+  const [imageBaseUrl, setImageBaseUrl] = useState(settings?.ai.image.baseUrl ?? '')
+  const [imageModel, setImageModel] = useState(settings?.ai.image.model ?? '')
+  const [imageSize, setImageSize] = useState(settings?.ai.image.size ?? '1344x768')
+
   useEffect(() => {
-    if (settings?.ai.defaultModel) {
-      setSelectedModel(settings.ai.defaultModel)
+    if (settings) {
+      setNvidiaModel(settings.ai.nvidia.model)
+      setImageBaseUrl(settings.ai.image.baseUrl ?? '')
+      setImageModel(settings.ai.image.model ?? '')
+      setImageSize(settings.ai.image.size)
     }
-  }, [settings?.ai.defaultModel])
+  }, [settings?.ai.nvidia.model, settings?.ai.nvidia.baseUrl, settings?.ai.image.baseUrl, settings?.ai.image.model, settings?.ai.image.size]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openrouter = credentials?.find((c) => c.key === 'openrouter')
+  const cred = (key: string) => credentials?.find((c) => c.key === key)
 
-  const saveModelPrefs = () => {
-    if (!settings) return
-    updateSettings.mutate(
-      { ...settings, ai: { ...settings.ai, defaultModel: selectedModel || undefined } },
-      {
-        onSuccess: () => toast({ kind: 'success', title: 'AI preferences saved' }),
-        onError: (err) => toast({ kind: 'error', title: 'Save failed', description: err.message }),
-      },
-    )
-  }
-
-  const saveKey = () => {
-    if (!keyValue.trim()) {
-      toast({ kind: 'warning', title: 'Paste an API key first' })
+  const saveKey = (key: 'openrouter' | 'nvidia' | 'image', value: string, clear: () => void) => {
+    if (!value.trim()) {
+      toast({ kind: 'warning', title: 'Paste the key first' })
       return
     }
     setCredential.mutate(
-      { key: 'openrouter', value: keyValue.trim() },
+      { key, value: value.trim() },
       {
         onSuccess: (secure) => {
-          setKeyValue('')
+          clear()
           toast({
             kind: secure ? 'success' : 'warning',
-            title: 'OpenRouter key stored',
+            title: `${key === 'nvidia' ? 'NVIDIA' : key === 'image' ? 'Image provider' : 'OpenRouter'} key stored`,
             description: secure
               ? 'Encrypted with your OS keychain.'
               : 'Stored WITHOUT encryption — OS secure storage unavailable.',
@@ -172,131 +169,303 @@ function AICard() {
     )
   }
 
+  const saveProviderPrefs = (patch: Record<string, unknown>) => {
+    if (!settings) return
+    updateSettings.mutate(
+      { ...settings, ai: { ...settings.ai, ...patch } },
+      {
+        onSuccess: () => toast({ kind: 'success', title: 'Provider preferences saved' }),
+        onError: (err) => toast({ kind: 'error', title: 'Save failed', description: err.message }),
+      },
+    )
+  }
+
   return (
     <Card className="p-5">
       <SectionTitle
         right={
           isLoading ? (
             <Spinner className="h-4 w-4" />
-          ) : openrouter?.configured ? (
-            <Badge tone={openrouter.secure ? 'success' : 'warn'}>
-              <KeyRound className="h-3 w-3" />
-              {openrouter.secure ? 'Stored encrypted' : 'Stored unencrypted'}
-            </Badge>
           ) : (
-            <Badge tone="neutral">Not configured</Badge>
+            <Badge tone={aiStatus?.configured ? 'success' : 'neutral'}>
+              {aiStatus ? `chat: ${aiStatus.provider}` : 'not configured'}
+            </Badge>
           )
         }
       >
-        AI — OpenRouter
+        Providers
       </SectionTitle>
 
-      <p className="mb-4 text-xs leading-relaxed text-mirai-dim">
-        The key is encrypted with your OS keychain and only used to call OpenRouter directly.
-        It is never shown again, never logged, and the renderer only ever sees whether it exists.
-        Model discovery uses OpenRouter's public catalog.
+      {/* -------------------------------------------- chat provider choice */}
+      <p className="mb-3 text-xs leading-relaxed text-mirai-dim">
+        Choose who powers chat, screenplay drafting and future text agents. Both are
+        OpenAI-compatible; keys are encrypted and never leave this machine except to call the
+        provider you pick.
       </p>
-
-      <div className="flex gap-2">
-        <Input
-          type="password"
-          placeholder={openrouter?.configured ? 'Replace stored key…' : 'sk-or-v1-…'}
-          value={keyValue}
-          onChange={(e) => setKeyValue(e.target.value)}
-        />
-        <Button variant="primary" className="shrink-0" loading={setCredential.isPending} onClick={saveKey}>
-          {openrouter?.configured ? 'Replace' : 'Save Key'}
-        </Button>
-        {openrouter?.configured && (
-          <Button
-            variant="outline"
-            className="shrink-0"
-            loading={clearCredential.isPending}
-            onClick={() =>
-              clearCredential.mutate('openrouter', {
-                onSuccess: () => toast({ kind: 'success', title: 'Key removed' }),
-              })
-            }
-          >
-            Remove
-          </Button>
-        )}
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <button
+          onClick={() => saveProviderPrefs({ chatProvider: 'openrouter' })}
+          className={`rounded-lg border p-3 text-left transition-colors ${
+            settings?.ai.chatProvider === 'openrouter'
+              ? 'border-mirai-accent/40 bg-mirai-accent/10'
+              : 'border-mirai-border bg-mirai-panel hover:border-mirai-border-strong'
+          }`}
+        >
+          <p className="text-xs font-semibold text-mirai-text">OpenRouter</p>
+          <p className="mt-0.5 text-[10px] text-mirai-faint">many models, free-tier discovery</p>
+          <p className="mt-1 text-[10px] text-mirai-accent-3">
+            {cred('openrouter')?.configured ? 'key stored' : 'no key'}
+          </p>
+        </button>
+        <button
+          onClick={() => saveProviderPrefs({ chatProvider: 'nvidia' })}
+          className={`rounded-lg border p-3 text-left transition-colors ${
+            settings?.ai.chatProvider === 'nvidia'
+              ? 'border-mirai-success/40 bg-mirai-success/10'
+              : 'border-mirai-border bg-mirai-panel hover:border-mirai-border-strong'
+          }`}
+        >
+          <p className="text-xs font-semibold text-mirai-text">NVIDIA NIM (GLM)</p>
+          <p className="mt-0.5 text-[10px] text-mirai-faint">your NVIDIA endpoint & GLM model</p>
+          <p className="mt-1 text-[10px] text-mirai-accent-3">
+            {cred('nvidia')?.configured ? 'key stored' : 'no key'}
+          </p>
+        </button>
       </div>
-      <p className="mt-2 flex items-center gap-1.5 text-[10px] text-mirai-faint">
-        <EyeOff className="h-3 w-3" /> Values are write-only — this field is emptied after saving.
-      </p>
 
-      {/* ------------------------------------------------ default model picker */}
-      <div className="mt-6 border-t border-mirai-border pt-4">
-        <div className="mb-2 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-mirai-text">Default model</p>
-            <p className="text-[11px] text-mirai-dim">
-              Used by AI Assist. Free models are marked — they can disappear anytime (spec §38).
-            </p>
+      {/* -------------------------------------------------- provider blocks */}
+      <div className="space-y-5">
+        {/* OpenRouter */}
+        <div className="rounded-lg border border-mirai-border bg-mirai-panel p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold text-mirai-text">OpenRouter key</p>
+            {cred('openrouter')?.configured && (
+              <Button
+                size="sm"
+                variant="ghost"
+                loading={clearCredential.isPending}
+                onClick={() =>
+                  clearCredential.mutate('openrouter', {
+                    onSuccess: () => toast({ kind: 'success', title: 'Key removed' }),
+                  })
+                }
+              >
+                Remove
+              </Button>
+            )}
           </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            loading={modelsLoading}
-            onClick={() => void refetchModels()}
-          >
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh catalog
-          </Button>
-        </div>
-
-        {modelsError ? (
-          <p className="rounded-md border border-mirai-warn/25 bg-mirai-warn/10 px-3 py-2 text-[11px] text-mirai-warn">
-            Couldn't reach the model catalog ({modelsError_ instanceof Error ? modelsError_.message : 'network error'}).
-            Check your connection and refresh — chat still works with a previously chosen model.
-          </p>
-        ) : (
-          <Select
-            className="h-8 text-xs"
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            disabled={modelsLoading}
-          >
-            <option value="">
-              {modelsLoading ? 'Loading catalog…' : '— choose a model —'}
-            </option>
-            {(models?.models ?? [])
-              .slice()
-              .sort((a, b) => Number(b.isFree) - Number(a.isFree) || a.id.localeCompare(b.id))
-              .map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.isFree ? 'FREE · ' : ''}
-                  {model.id}
-                  {model.contextLength ? ` · ${Math.round(model.contextLength / 1000)}k ctx` : ''}
-                </option>
-              ))}
-          </Select>
-        )}
-
-        <div className="mt-3 flex items-center justify-between">
-          {aiStatus?.defaultModel ? (
-            <span className="text-[11px] text-mirai-faint">
-              Current: <span className="text-mirai-dim">{aiStatus.defaultModel}</span>
-            </span>
-          ) : (
-            <span className="text-[11px] text-mirai-warn">No model selected yet — AI Assist needs one.</span>
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              placeholder={cred('openrouter')?.configured ? 'Replace stored key…' : 'sk-or-v1-…'}
+              value={openrouterKey}
+              onChange={(e) => setOpenrouterKey(e.target.value)}
+            />
+            <Button
+              variant="primary"
+              className="shrink-0"
+              loading={setCredential.isPending}
+              onClick={() => saveKey('openrouter', openrouterKey, () => setOpenrouterKey(''))}
+            >
+              Save
+            </Button>
+          </div>
+          {settings?.ai.chatProvider === 'openrouter' && (
+            <div className="mt-3">
+              <Label htmlFor="pv-ormodel">Default model</Label>
+              <Select
+                id="pv-ormodel"
+                className="h-8 text-xs"
+                value={settings.ai.defaultModel ?? ''}
+                onChange={(e) => saveProviderPrefs({ defaultModel: e.target.value || undefined })}
+                disabled={modelsLoading}
+              >
+                <option value="">{modelsLoading ? 'Loading catalog…' : '— choose a model —'}</option>
+                {(models?.models ?? [])
+                  .slice()
+                  .sort((a, b) => Number(b.isFree) - Number(a.isFree) || a.id.localeCompare(b.id))
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.isFree ? 'FREE · ' : ''}
+                      {m.id}
+                      {m.contextLength ? ` · ${Math.round(m.contextLength / 1000)}k` : ''}
+                    </option>
+                  ))}
+              </Select>
+              <div className="mt-1.5 flex items-center justify-between">
+                <p className="text-[10px] text-mirai-faint">
+                  {models
+                    ? `${models.models.length} models · ${models.models.filter((m) => m.isFree).length} free · ${models.cached ? 'cached' : 'live'}`
+                    : 'catalog needs connection'}
+                </p>
+                <Button size="sm" variant="ghost" loading={modelsLoading} onClick={() => void refetchModels()}>
+                  <RefreshCw className="h-3 w-3" /> Refresh
+                </Button>
+              </div>
+            </div>
           )}
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={!selectedModel}
-            loading={updateSettings.isPending}
-            onClick={saveModelPrefs}
-          >
-            Save Model
-          </Button>
         </div>
-        {models && (
-          <p className="mt-1 text-[10px] text-mirai-faint">
-            {models.models.length} models discovered · {models.cached ? 'from cache' : 'live'} ·{' '}
-            {models.models.filter((m) => m.isFree).length} free
+
+        {/* NVIDIA NIM (GLM) */}
+        <div className="rounded-lg border border-mirai-border bg-mirai-panel p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold text-mirai-text">
+              NVIDIA NIM key
+              <span className="ml-2 font-normal text-mirai-faint">build.nvidia.com</span>
+            </p>
+            {cred('nvidia')?.configured && (
+              <Button
+                size="sm"
+                variant="ghost"
+                loading={clearCredential.isPending}
+                onClick={() =>
+                  clearCredential.mutate('nvidia', {
+                    onSuccess: () => toast({ kind: 'success', title: 'Key removed' }),
+                  })
+                }
+              >
+                Remove
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              placeholder="nvapi-…"
+              value={nvidiaKey}
+              onChange={(e) => setNvidiaKey(e.target.value)}
+            />
+            <Button
+              variant="primary"
+              className="shrink-0"
+              loading={setCredential.isPending}
+              onClick={() => saveKey('nvidia', nvidiaKey, () => setNvidiaKey(''))}
+            >
+              Save
+            </Button>
+          </div>
+          {settings?.ai.chatProvider === 'nvidia' && (
+            <div className="mt-3">
+              <Label htmlFor="pv-glmodel">
+                GLM model id
+                <span className="ml-1 font-normal text-mirai-faint">(NVIDIA catalog id)</span>
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="pv-glmodel"
+                  className="h-8 text-xs"
+                  value={nvidiaModel}
+                  onChange={(e) => setNvidiaModel(e.target.value)}
+                  placeholder="nvidia/z-ai/glm-5.3"
+                />
+                <Button
+                  size="sm"
+                  variant="primary"
+                  className="shrink-0"
+                  loading={updateSettings.isPending}
+                  disabled={nvidiaModel.trim() === (settings?.ai.nvidia.model ?? '')}
+                  onClick={() => saveProviderPrefs({ nvidia: { ...settings!.ai.nvidia, model: nvidiaModel.trim() } })}
+                >
+                  Save
+                </Button>
+              </div>
+              <p className="mt-1 text-[10px] text-mirai-faint">
+                Endpoint: {settings?.ai.nvidia.baseUrl}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Image provider */}
+        <div className="rounded-lg border border-mirai-border bg-mirai-panel p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold text-mirai-text">
+              Image provider
+              <span className="ml-2 font-normal text-mirai-faint">OpenAI Images-compatible</span>
+            </p>
+            <Badge tone={aiStatus?.imageConfigured ? 'success' : 'neutral'}>
+              {aiStatus?.imageConfigured ? 'ready' : 'not set'}
+            </Badge>
+          </div>
+          <p className="mb-2 text-[11px] leading-relaxed text-mirai-dim">
+            Any endpoint speaking <code>POST /images/generations</code> (b64 response) — NVIDIA
+            hosted diffusion models, local bridges, any compatible service you own. Generation
+            bakes in your Style Bible + shot camera for studio consistency.
           </p>
-        )}
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              placeholder={cred('image')?.configured ? 'Replace image provider key…' : 'API key'}
+              value={imageKey}
+              onChange={(e) => setImageKey(e.target.value)}
+            />
+            <Button
+              variant="primary"
+              className="shrink-0"
+              loading={setCredential.isPending}
+              onClick={() => saveKey('image', imageKey, () => setImageKey(''))}
+            >
+              Save
+            </Button>
+          </div>
+          <div className="mt-3 grid grid-cols-[1fr_170px_110px_auto] gap-2">
+            <div>
+              <Label htmlFor="pv-imgbase">Base URL</Label>
+              <Input
+                id="pv-imgbase"
+                className="h-8 text-xs"
+                placeholder="https://…/v1"
+                value={imageBaseUrl}
+                onChange={(e) => setImageBaseUrl(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="pv-imgmodel">Model</Label>
+              <Input
+                id="pv-imgmodel"
+                className="h-8 text-xs"
+                placeholder="sd3.5 / flux / …"
+                value={imageModel}
+                onChange={(e) => setImageModel(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="pv-imgsize">Size</Label>
+              <Select
+                id="pv-imgsize"
+                className="h-8 text-xs"
+                value={imageSize}
+                onChange={(e) => setImageSize(e.target.value)}
+              >
+                <option value="1344x768">1344×768</option>
+                <option value="1024x1024">1024×1024</option>
+                <option value="768x1344">768×1344</option>
+              </Select>
+            </div>
+            <div className="flex items-end">
+              <Button
+                size="sm"
+                variant="primary"
+                loading={updateSettings.isPending}
+                disabled={!imageBaseUrl.trim() || !imageModel.trim()}
+                onClick={() =>
+                  saveProviderPrefs({
+                    image: {
+                      baseUrl: imageBaseUrl.trim(),
+                      model: imageModel.trim(),
+                      size: imageSize,
+                    },
+                  })
+                }
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+          <p className="mt-1.5 text-[10px] text-mirai-faint">
+            All three fields (key, URL, model) enable the “Generate (AI)” button on storyboard shots.
+          </p>
+        </div>
       </div>
     </Card>
   )

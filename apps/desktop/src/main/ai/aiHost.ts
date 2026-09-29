@@ -16,7 +16,10 @@ import {
 import {
   ModelRegistry,
   OpenRouterProvider,
+  OpenAIImagesProvider,
   buildSystemPrompt,
+  buildImagePrompt,
+  draftScreenplayInstruction,
   estimateCostUsd,
   type ContextCharacter,
   type ContextScene,
@@ -25,6 +28,13 @@ import type { CredentialStore, LoggerService, ProjectService, SettingsService } 
 import type { MainEmitter } from '../bootstrap'
 
 const CHUNK_FLUSH_MS = 40
+
+interface ChatProviderConfig {
+  id: 'openrouter' | 'nvidia'
+  apiKey: string
+  baseUrl: string
+  model: string
+}
 
 export class AiHost {
   private readonly registry: ModelRegistry
@@ -47,14 +57,70 @@ export class AiHost {
     })
   }
 
+  // -------------------------------------------------------------- providers
+
+  /**
+   * Resolves the ACTIVE chat provider (user choice in Settings):
+   * OpenRouter or NVIDIA NIM (GLM) — both OpenAI-compatible chat endpoints.
+   * Throws CREDENTIALS_UNAVAILABLE with the exact next step when not set up.
+   */
+  resolveChatProvider(): ChatProviderConfig {
+    const settings = this.deps.settings.get()
+    const credKey = settings.ai.chatProvider
+    const apiKey = this.deps.credentials.get(credKey)
+    if (!apiKey) {
+      throw new MiraiError(
+        'CREDENTIALS_UNAVAILABLE',
+        credKey === 'nvidia'
+          ? 'No NVIDIA key configured — add it in Settings → Providers.'
+          : 'No OpenRouter key configured — add it in Settings → Providers.',
+      )
+    }
+    if (credKey === 'nvidia') {
+      const model = settings.ai.nvidia.model || 'nvidia/z-ai/glm-5.3'
+      return { id: 'nvidia', apiKey, baseUrl: settings.ai.nvidia.baseUrl, model }
+    }
+    const model = settings.ai.defaultModel
+    if (!model) {
+      throw new MiraiError(
+        'VALIDATION_ERROR',
+        'No model selected — pick a default model in Settings → Providers.',
+      )
+    }
+    return { id: 'openrouter', apiKey, baseUrl: 'https://openrouter.ai/api/v1', model }
+  }
+
+  /** Image provider (OpenAI Images-compatible) — null when not configured. */
+  resolveImageProvider(): { apiKey: string; baseUrl: string; model: string; size: string } | null {
+    const settings = this.deps.settings.get()
+    const apiKey = this.deps.credentials.get('image')
+    const baseUrl = settings.ai.image.baseUrl
+    const model = settings.ai.image.model
+    if (!apiKey || !baseUrl || !model) return null
+    return { apiKey, baseUrl, model, size: settings.ai.image.size || '1344x768' }
+  }
+
   // ------------------------------------------------------------------- status
 
-  status(): { configured: boolean; secure: boolean; defaultModel: string | null } {
-    const status = this.deps.credentials.status().find((c) => c.key === 'openrouter')
+  status(): {
+    configured: boolean
+    secure: boolean
+    defaultModel: string | null
+    provider: 'openrouter' | 'nvidia'
+    imageConfigured: boolean
+  } {
+    const settings = this.deps.settings.get()
+    const credKey = settings.ai.chatProvider
+    const status = this.deps.credentials.status().find((c) => c.key === credKey)
     return {
       configured: status?.configured ?? false,
       secure: status?.secure ?? false,
-      defaultModel: this.deps.settings.get().ai.defaultModel ?? null,
+      defaultModel:
+        credKey === 'nvidia'
+          ? settings.ai.nvidia.model
+          : (settings.ai.defaultModel ?? null),
+      provider: credKey,
+      imageConfigured: this.resolveImageProvider() !== null,
     }
   }
 
@@ -95,21 +161,9 @@ export class AiHost {
     }
 
     try {
-      const apiKey = this.deps.credentials.get('openrouter')
-      if (!apiKey) {
-        throw new MiraiError(
-          'CREDENTIALS_UNAVAILABLE',
-          'No OpenRouter key configured — add it in Settings → AI.',
-        )
-      }
+      const providerConfig = this.resolveChatProvider()
       const settings = this.deps.settings.get()
-      const model = request.model ?? settings.ai.defaultModel
-      if (!model) {
-        throw new MiraiError(
-          'VALIDATION_ERROR',
-          'No model selected — pick a default model in Settings → AI.',
-        )
-      }
+      const model = request.model ?? providerConfig.model
 
       // ---- build consented context (spec §15/§19) --------------------------
       const systemPrompt = buildSystemPrompt(this.collectContext(request.context))
@@ -118,7 +172,8 @@ export class AiHost {
       const controller = new AbortController()
       this.active.set(requestId, controller)
       const provider = new OpenRouterProvider({
-        apiKey,
+        apiKey: providerConfig.apiKey,
+        baseUrl: providerConfig.baseUrl,
         fetchFn: globalFetch(),
         appName: 'Mirai Studio',
         appUrl: 'https://mirai-studio.app',
@@ -193,6 +248,161 @@ export class AiHost {
     } catch (err) {
       fail(err)
     }
+  }
+
+  // -------------------------------------------------------- Scene Writer agent
+
+  /**
+   * Drafts a screenplay for a scene (Phase 2 completion). The returned text
+   * is a PROPOSAL — applying it is an explicit user action in the UI.
+   */
+  async draftScreenplay(sceneId: string, guidance?: string): Promise<{
+    draft: string
+    model: string
+    durationMs: number
+  }> {
+    const startedAt = Date.now()
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+
+    const scene = ctx.creative.getSceneById(sceneId)
+    const characters = ctx.creative.listCharacters()
+    const castNames = characters
+      .filter((c) => scene.characterIds.includes(c.id))
+      .map((c) => c.name)
+    const locationName = ctx.creative.locationName(scene.locationId)
+
+    const systemPrompt = buildSystemPrompt({
+      projectName: ctx.summary.name,
+      bible: ctx.creative.getBible(),
+      characters: castNames.length > 0
+        ? castNames.map((name): ContextCharacter => ({ name }))
+        : undefined,
+    })
+    const instruction = draftScreenplayInstruction({
+      sceneTitle: scene.title,
+      castNames,
+      guidance,
+    })
+    if (locationName) {
+      // slugline hint helps the model match the scene's real setting
+    }
+
+    const providerConfig = this.resolveChatProvider()
+    const settings = this.deps.settings.get()
+    const provider = new OpenRouterProvider({
+      apiKey: providerConfig.apiKey,
+      baseUrl: providerConfig.baseUrl,
+      fetchFn: globalFetch(),
+      appName: 'Mirai Studio',
+      appUrl: 'https://mirai-studio.app',
+      timeoutMs: settings.ai.requestTimeoutMs,
+    })
+    const result = await provider.chat({
+      model: providerConfig.model,
+      temperature: 0.8,
+      maxTokens: Math.max(settings.ai.maxTokens, 2_048),
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: instruction },
+      ],
+    })
+    const durationMs = Date.now() - startedAt
+    this.deps.logger.log('info', 'AI', 'Screenplay draft generated', {
+      sceneId,
+      model: providerConfig.model,
+      durationMs,
+      chars: result.content.length,
+    })
+    return { draft: result.content.trim(), model: providerConfig.model, durationMs }
+  }
+
+  // --------------------------------------------------- Frame generation (Phase 4)
+
+  /**
+   * Generates a shot frame via the configured image provider with FULL
+   * studio consistency: the master prompt bakes in the Style Bible, the
+   * shot's camera metadata and the scene's cast/setting. Runs inside a
+   * persistent job (progress + retry + cancel); on success the REAL image
+   * bytes are stored in the project and attached to the shot.
+   */
+  async generateFrame(
+    shotId: string,
+    extraPrompt: string | undefined,
+    signal: AbortSignal,
+    progress: (pct: number) => void,
+  ): Promise<{ assetId: string; prompt: string }> {
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+
+    const imageProvider = this.resolveImageProvider()
+    if (!imageProvider) {
+      throw new MiraiError(
+        'CREDENTIALS_UNAVAILABLE',
+        'No image provider configured — set baseUrl, model and key in Settings → Providers.',
+      )
+    }
+
+    // ---- consistency data -------------------------------------------------
+    const shot = ctx.storyboard.getShotById(shotId)
+    const scene = ctx.creative.getSceneById(shot.sceneId)
+    const characters = ctx.creative
+      .listCharacters()
+      .filter((c) => scene.characterIds.includes(c.id))
+      .map(
+        (c): ContextCharacter => ({
+          name: c.name,
+          role: c.role,
+          personality: c.personality,
+          goals: c.goals,
+          fears: c.fears,
+        }),
+      )
+    const prompt = buildImagePrompt({
+      styleBible: ctx.storyboard.getStyleBible(),
+      scene: {
+        title: scene.title,
+        timeOfDay: scene.timeOfDay,
+        synopsis: scene.synopsis,
+        locationName: ctx.creative.locationName(scene.locationId),
+        castNames: characters.map((c) => c.name),
+      },
+      shot: {
+        title: shot.title,
+        shotType: shot.shotType,
+        lens: shot.lens,
+        cameraMovement: shot.cameraMovement,
+        durationSeconds: shot.durationSeconds,
+        notes: shot.notes,
+      },
+      characters,
+      extraPrompt,
+    })
+
+    progress(20)
+    const provider = new OpenAIImagesProvider({
+      apiKey: imageProvider.apiKey,
+      baseUrl: imageProvider.baseUrl,
+      fetchFn: globalFetch(),
+      timeoutMs: 240_000,
+    })
+    const result = await provider.generate({
+      model: imageProvider.model,
+      prompt,
+      size: imageProvider.size,
+      signal,
+    })
+    progress(80)
+
+    const asset = ctx.storyboard.registerGeneratedFrame(shotId, result.bytes, result.mimeType)
+    progress(100)
+    this.deps.logger.log('info', 'AI', 'Frame generated & attached', {
+      shotId,
+      assetId: asset.id,
+      bytes: asset.bytes,
+      model: imageProvider.model,
+    })
+    return { assetId: asset.id, prompt }
   }
 
   /** Reads ONLY the consented scope from the open project. */

@@ -17,8 +17,26 @@ export const AppSettings = z.object({
     .default({}),
   ai: z
     .object({
-      /** Model id used when a task does not pin a specific model. */
+      /** Which chat provider the assistant uses. */
+      chatProvider: z.enum(['openrouter', 'nvidia']).default('openrouter'),
+      /** Model id used by the active chat provider. */
       defaultModel: z.string().optional(),
+      /** NVIDIA NIM (OpenAI-compatible chat endpoint — e.g. GLM). */
+      nvidia: z
+        .object({
+          baseUrl: z.string().url().default('https://integrate.api.nvidia.com/v1'),
+          model: z.string().default('nvidia/z-ai/glm-5.3'),
+        })
+        .default({}),
+      /** Image generation provider (OpenAI Images-compatible endpoint). */
+      image: z
+        .object({
+          baseUrl: z.string().optional(),
+          model: z.string().optional(),
+          /** e.g. '1024x1024' | '1344x768' | '768x1344'. */
+          size: z.string().default('1344x768'),
+        })
+        .default({}),
       temperature: z.number().min(0).max(2).default(0.7),
       maxTokens: z.number().int().min(1).max(1_000_000).default(2_048),
       streaming: z.boolean().default(true),
@@ -38,8 +56,8 @@ export type AppSettings = z.infer<typeof AppSettings>
 
 export const DEFAULT_APP_SETTINGS: AppSettings = AppSettings.parse({})
 
-/** Keys used by the credential store (Phase 0 wires OpenRouter only). */
-export const CREDENTIAL_KEYS = ['openrouter'] as const
+/** Keys used by the credential store. 'nvidia' = NIM key, 'image' = image-gen key. */
+export const CREDENTIAL_KEYS = ['openrouter', 'nvidia', 'image'] as const
 export type CredentialKey = (typeof CREDENTIAL_KEYS)[number]
 
 export const zCredentialKey = z.enum(CREDENTIAL_KEYS)
