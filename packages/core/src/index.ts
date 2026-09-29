@@ -33,6 +33,9 @@ export { CreativeService } from './creative/creativeService'
 // prompts
 export { PromptService } from './prompts/promptService'
 
+// storyboard (Phase 3)
+export { StoryboardService } from './storyboard/storyboardService'
+
 // settings
 export { SettingsService, CredentialStore } from './settings/settingsService'
 export type { CredentialStatus } from './settings/settingsService'

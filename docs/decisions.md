@@ -19,3 +19,11 @@
   binary caught a missing runtime dep (`bindings`) before it ever reached a user.
 - **D12 External backup after every milestone** — a workspace loss incident (v0.1.0) taught us:
   code outside git's directory needs a tarball outside the directory too.
+
+- **D13 mirai-asset:// custom protocol** — frames are served by the main process through a
+  restricted scheme (asset id → validated path inside the open project). No renderer path
+  access, no directory traversal; plain `<img src>` works. Replaces data-URL IPC round-trips
+  and is the foundation for the Phase 4 DAM.
+- **D14 Frames are imported files, not generated placeholders** — Phase 3 ships a REAL
+  image pipeline (validate → copy → registry → prune orphans). AI image generation gets its
+  provider contracts only when a real provider is wired (spec §51: never fake the button).

@@ -10,9 +10,11 @@ export type AppView = 'hub' | 'settings' | 'diagnostics'
 export type ProjectView =
   | 'overview'
   | 'bible'
+  | 'style'
   | 'characters'
   | 'locations'
   | 'episodes'
+  | 'storyboard'
   | 'prompts'
   | 'assist'
   | 'jobs'
@@ -23,9 +25,11 @@ export type MainView = AppView | ProjectView
 export const PROJECT_VIEWS: readonly ProjectView[] = [
   'overview',
   'bible',
+  'style',
   'characters',
   'locations',
   'episodes',
+  'storyboard',
   'prompts',
   'assist',
   'jobs',

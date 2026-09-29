@@ -3,7 +3,7 @@
  * Built-in curated prompts ship with every project; users create, tune,
  * copy and send them to the AI Assist. Mangá-first.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Copy, Pencil, Plus, Search, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import {
   MiraiError,
@@ -250,21 +250,15 @@ function PromptEditModal({
     body: '',
     tags: '',
   })
-  const [initializedFor, setInitializedFor] = useState<string | null>(null)
 
-  if (prompt && initializedFor !== prompt.id) {
-    setInitializedFor(prompt.id)
-    setForm({
-      category: prompt.category,
-      title: prompt.title,
-      body: prompt.body,
-      tags: prompt.tags ?? '',
-    })
-  }
-  if (!prompt && initializedFor !== '__new__') {
-    setInitializedFor('__new__')
-    setForm({ category: 'MANGA_PANEL', title: '', body: '', tags: '' })
-  }
+  // Re-seed the form whenever the modal target changes (edit / new / switch).
+  useEffect(() => {
+    setForm(
+      prompt
+        ? { category: prompt.category, title: prompt.title, body: prompt.body, tags: prompt.tags ?? '' }
+        : { category: 'MANGA_PANEL', title: '', body: '', tags: '' },
+    )
+  }, [prompt?.id, open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = () => {
     if (!form.title.trim() || !form.body.trim()) {

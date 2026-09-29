@@ -52,33 +52,33 @@ export function AIAssistPage() {
     }
   }, [assistSeed, setAssistSeed])
 
-  // Streaming events.
+  // Streaming events. The assistant bubble is keyed `a-<requestId>`.
   useEffect(() => {
     const offChunk = onEvent('ai:chunk', ({ requestId: rid, delta }) => {
       setMessages((prev) =>
-        prev.map((m) => (m.id === rid ? { ...m, content: m.content + delta } : m)),
+        prev.map((m) => (m.id === `a-${rid}` ? { ...m, content: m.content + delta } : m)),
       )
     })
     const offDone = onEvent('ai:done', ({ requestId: rid }) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === rid ? { ...m, streaming: false } : m)),
-      )
-      if (requestId === rid) setRequestId(null)
+      setMessages((prev) => prev.map((m) => (m.id === `a-${rid}` ? { ...m, streaming: false } : m)))
+      setRequestId((current) => (current === rid ? null : current))
     })
     const offError = onEvent('ai:error', ({ requestId: rid, error }) => {
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === rid ? { ...m, streaming: false, error: `${error.code}: ${error.message}` } : m,
+          m.id === `a-${rid}`
+            ? { ...m, streaming: false, error: `${error.code}: ${error.message}` }
+            : m,
         ),
       )
-      if (requestId === rid) setRequestId(null)
+      setRequestId((current) => (current === rid ? null : current))
     })
     return () => {
       offChunk()
       offDone()
       offError()
     }
-  }, [requestId])
+  }, [])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
@@ -89,22 +89,17 @@ export function AIAssistPage() {
 
   const send = async () => {
     if (!canChat || streaming || !input.trim()) return
-    const userMessage: UIMessage = { id: Math.random().toString(36).slice(2), role: 'user', content: input.trim() }
-    const assistantId = `ai-${Math.random().toString(36).slice(2)}`
+    const content = input.trim()
     const history = messages
       .filter((m) => !m.error)
       .map((m) => ({ role: m.role, content: m.content }))
 
-    setMessages((prev) => [
-      ...prev,
-      userMessage,
-      { id: assistantId, role: 'assistant', content: '', streaming: true },
-    ])
     setInput('')
-
     try {
+      // Invoke first — it returns instantly with the real requestId, so the
+      // streaming placeholder is born with the correct key (no re-key race).
       const result = await invoke('ai:chat', {
-        messages: [...history, { role: userMessage.role, content: userMessage.content }],
+        messages: [...history, { role: 'user', content }],
         context: {
           includeBible,
           includeCharacters,
@@ -112,16 +107,23 @@ export function AIAssistPage() {
         },
       })
       setRequestId(result.requestId)
-      // Re-key the streaming placeholder so events find it by requestId.
-      setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? { ...m, id: result.requestId } : m)),
-      )
+      setMessages((prev) => [
+        ...prev,
+        { id: result.requestId, role: 'user', content },
+        { id: `a-${result.requestId}`, role: 'assistant', content: '', streaming: true },
+      ])
     } catch (err) {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId ? { ...m, streaming: false, error: (err as Error).message } : m,
-        ),
-      )
+      setMessages((prev) => [
+        ...prev,
+        { id: `u-${Math.random().toString(36).slice(2)}`, role: 'user', content },
+        {
+          id: `e-${Math.random().toString(36).slice(2)}`,
+          role: 'assistant',
+          content: '',
+          streaming: false,
+          error: (err as Error).message,
+        },
+      ])
     }
   }
 

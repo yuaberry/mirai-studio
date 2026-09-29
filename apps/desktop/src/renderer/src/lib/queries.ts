@@ -5,6 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type AppSettings,
+  type AssetRecord,
   type BackupInfo,
   type CharacterInput,
   type CharacterRecord,
@@ -23,7 +24,10 @@ import {
   type PromptRecord,
   type SceneInput,
   type SceneRecord,
+  type ShotInput,
+  type ShotRecord,
   type StoryBible as StoryBibleType,
+  type StyleBible as StyleBibleType,
 } from '@mirai/shared'
 import { invoke } from './ipc'
 
@@ -45,6 +49,8 @@ export const creativeKeys = {
   episodes: ['episodes'] as const,
   scenes: (episodeId: string) => ['scenes', episodeId] as const,
   prompts: ['prompts'] as const,
+  shots: (sceneId: string) => ['shots', sceneId] as const,
+  styleBible: ['style-bible'] as const,
   aiModels: (force: boolean) => ['ai', 'models', force] as const,
 }
 
@@ -475,3 +481,79 @@ export function copyText(text: string): Promise<void> {
 }
 
 export type { OpenedProject, ProjectSummary, BackupInfo }
+
+// ---------------------------------------------------------------- Storyboard
+
+export function useShots(sceneId: string | undefined) {
+  return useQuery({
+    queryKey: creativeKeys.shots(sceneId ?? 'none'),
+    queryFn: () => invoke('shots:list', { sceneId: sceneId! }).then((r) => r.shots as ShotRecord[]),
+    enabled: sceneId !== undefined,
+  })
+}
+
+export function useShotMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = (sceneId?: string) => {
+    if (sceneId) {
+      void queryClient.invalidateQueries({ queryKey: creativeKeys.shots(sceneId) })
+    } else {
+      void queryClient.invalidateQueries({ queryKey: ['shots'] })
+    }
+  }
+  return {
+    create: useMutation({
+      mutationFn: ({ sceneId, input }: { sceneId: string; input: ShotInput }) =>
+        invoke('shots:create', { sceneId, input }).then((r) => r.shot),
+      onSuccess: (_s, vars) => invalidate(vars.sceneId),
+    }),
+    update: useMutation({
+      mutationFn: (vars: { id: string; input: ShotInput; sceneId: string }) =>
+        invoke('shots:update', { id: vars.id, input: vars.input }).then((r) => r.shot),
+      onSuccess: (_s, vars) => invalidate(vars.sceneId),
+    }),
+    remove: useMutation({
+      mutationFn: (shot: { id: string; sceneId: string }) =>
+        invoke('shots:delete', { id: shot.id }).then(() => undefined),
+      onSuccess: (_s, vars) => invalidate(vars.sceneId),
+    }),
+    move: useMutation({
+      mutationFn: (shot: { id: string; sceneId: string; direction: 'up' | 'down' }) =>
+        invoke('shots:move', { id: shot.id, direction: shot.direction }).then(() => undefined),
+      onSuccess: (_s, vars) => invalidate(vars.sceneId),
+    }),
+    importFrame: useMutation({
+      mutationFn: (shotId: string) =>
+        invoke('shots:importFrame', { shotId }).then((r) => r.asset as AssetRecord),
+      onSuccess: () => invalidate(),
+    }),
+    clearFrame: useMutation({
+      mutationFn: (vars: { shotId: string; sceneId: string }) =>
+        invoke('shots:clearFrame', { shotId: vars.shotId }).then(() => undefined),
+      onSuccess: (_s, vars) => invalidate(vars.sceneId),
+    }),
+  }
+}
+
+/** Frame URL served by the main process's restricted mirai-asset:// protocol. */
+export function assetUrl(assetId: string): string {
+  return `mirai-asset://${assetId}/`
+}
+
+// ---------------------------------------------------------------- Style Bible
+
+export function useStyleBible() {
+  return useQuery({
+    queryKey: creativeKeys.styleBible,
+    queryFn: () => invoke('style-bible:get').then((r) => r.style),
+  })
+}
+
+export function useUpdateStyleBible() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (style: StyleBibleType) =>
+      invoke('style-bible:update', { style }).then((r) => r.style),
+    onSuccess: (style) => queryClient.setQueryData(creativeKeys.styleBible, style),
+  })
+}

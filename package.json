@@ -1,11 +1,16 @@
 {
   "name": "mirai-studio",
   "private": true,
-  "version": "0.2.0",
-  "description": "Mirai Studio — AI-Native Anime & Animation Production Studio",
+  "version": "0.2.1",
+  "description": "Mirai Studio \u2014 AI-Native Anime & Animation Production Studio",
   "license": "UNLICENSED",
-  "workspaces": ["apps/*", "packages/*"],
-  "engines": { "bun": ">=1.1.0" },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "bun": ">=1.1.0"
+  },
   "scripts": {
     "dev": "bun run --filter '@mirai/desktop' dev",
     "build": "bun run --filter '@mirai/desktop' build",
@@ -19,7 +24,8 @@
     "package:linux": "bun run --filter '@mirai/desktop' package:linux",
     "icons": "bun run --filter '@mirai/desktop' icons",
     "verify": "bun run typecheck && bun run test && bun run test:core && bun run build && bun run smoke",
-    "smoke": "cd apps/desktop && bun build scripts/smoke-backend.ts --target=node --format=cjs --external=better-sqlite3 --outfile=out/smoke/smoke-backend.cjs && ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron out/smoke/smoke-backend.cjs"
+    "smoke": "cd apps/desktop && bun build scripts/smoke-backend.ts --target=node --format=cjs --external=better-sqlite3 --outfile=out/smoke/smoke-backend.cjs && ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron out/smoke/smoke-backend.cjs",
+    "package:dir": "bun run --filter '@mirai/desktop' package:dir"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",

@@ -8,9 +8,12 @@
   consent context, streaming AI Assist, model picker. *Remaining:* agents with tools + permissions
   + human-in-the-loop approvals, structured screenplay generation, project memory (FTS/summaries),
   cost dashboard, fallback chains.
-- **Phase 3 — Storyboard** (NEXT): Storyboard Studio (shots with camera/lens/movement), Shot
-  Designer, Reference Board, Style Bible, Character Consistency Engine, image-generation
-  provider contracts (real adapters or clearly-marked experimental), image import for frames.
+- **Phase 3 — Storyboard (first slice ✅, v0.2.1)**: Storyboard Studio (shots with 10 framing
+  types, lens presets, 10 camera movements, duration + scene runtime, reorder), REAL frame import
+  (native dialog → images/assets inside the project → restricted `mirai-asset://` serving with
+  path-escape protection and orphan pruning), Style Bible (Module 23, autosave).
+  *Remaining:* Reference Board (infinite canvas), Character Consistency Engine (reference sets),
+  image-generation provider contracts (wired when a real provider is configured — never faked).
 - **Phase 4 — Media** — voice/TTS + music/SFX contracts, Subtitle Studio (SRT/VTT/ASS),
   image/video pipelines with capability detection, thumbnails/proxies.
 - **Phase 5 — Editing** — Master Timeline (canvas), Audio Mixer, Compositing, Keyframes,

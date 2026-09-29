@@ -6,9 +6,13 @@ import { app, BrowserWindow, dialog } from 'electron'
 import { join } from 'node:path'
 import { bootstrap, type Container } from './bootstrap'
 import { registerIpcHandlers } from './ipc/register'
+import { declareAssetScheme, registerAssetProtocol } from './assets/assetProtocol'
 
 // Security defaults — the renderer is untrusted.
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
+
+// Custom scheme must be declared before the app is ready.
+declareAssetScheme()
 
 let mainWindow: BrowserWindow | null = null
 let container: Container | null = null
@@ -38,6 +42,7 @@ if (!gotLock) {
       return
     }
     registerIpcHandlers(container)
+    registerAssetProtocol(() => container?.projects.current()?.storyboard ?? null)
     createWindow(container)
     app.on('activate', () => {
       // macOS: re-create the window on dock click.

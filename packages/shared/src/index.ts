@@ -60,6 +60,21 @@ export {
 export type { ProjectPreset } from './entities/project'
 
 export {
+  SHOT_TYPES,
+  CAMERA_MOVEMENTS,
+  LENS_PRESETS,
+  SHOT_TYPE_LABEL,
+  CAMERA_MOVEMENT_LABEL,
+  ShotInput,
+  ShotRecord,
+  StyleBible,
+  ASSET_KINDS,
+  IMAGE_EXTENSIONS,
+  AssetRecord,
+} from './entities/storyboard'
+export type { ShotType, CameraMovement, LensPreset, AssetKind } from './entities/storyboard'
+
+export {
   StoryBible,
   CHARACTER_ROLES,
   zCharacterRole,

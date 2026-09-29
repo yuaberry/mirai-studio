@@ -18,10 +18,11 @@ Story → World → Characters → Script → Storyboard → Assets → Animatio
 | 1 — Creative Core | Story Bible (autosave), Character Studio, Locations, Episodes & Scenes (cast, location, time of day, screenplay text, reorder), creative data travels with duplicates/backups | ✅ |
 | 2 — AI Core (first slice) | Real OpenRouter provider (chat/stream/model discovery via injected transport), model registry with TTL cache + FREE flags, consent-based context builder, streaming AI Assist chat with abort + cost estimate, live model picker in Settings | ✅ |
 | — Prompt Library | 12 built-in professional manga/anime prompts (panels, character sheets, keyframes, style anchors, negatives, story tools), user CRUD, tags, copy, "Use in Assist" | ✅ |
+| 3 — Storyboard (first slice) | Storyboard Studio: shots with framing (10 types), lens presets, 10 camera movements, duration + scene runtime; **real frame import** (native dialog → stored inside the project → served via the restricted `mirai-asset://` protocol with path-escape protection); Style Bible (visual identity, autosave); orphan-asset pruning | ✅ |
 | — Packaging | `.deb` (primary) + AppImage + portable dir, brand icon, boot-tested binaries | ✅ |
 
-**Verification:** `bun run verify` → typecheck (4 workspaces) + **79 tests** + production build +
-**18-step end-to-end smoke** (project → creative → prompts → AI provider integration → backup/restore → crash recovery). All green.
+**Verification:** `bun run verify` → typecheck (4 workspaces) + **89 tests** + production build +
+**21-step end-to-end smoke** (project → creative → prompts → AI provider → storyboard with real frames → backup/restore → crash recovery). All green.
 
 ## Quick start
 
@@ -33,8 +34,8 @@ bun run verify
 bun run dev        # launch with HMR
 ```
 
-Installers: `bun run package:linux` → `apps/desktop/release/` (`mirai-studio_0.2.0_amd64.deb` +
-AppImage). `sudo apt install ./mirai-studio_0.2.0_amd64.deb`.
+Installers: `bun run package:linux` → `apps/desktop/release/` (`mirai-studio_0.2.1_amd64.deb` +
+AppImage). `sudo apt install ./mirai-studio_0.2.1_amd64.deb`.
 
 | Script | Purpose |
 |---|---|

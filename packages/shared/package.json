@@ -1,9 +1,11 @@
 {
   "name": "@mirai/shared",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
-  "description": "Mirai Studio — shared types, schemas and IPC contracts",
-  "exports": { ".": "./src/index.ts" },
+  "description": "Mirai Studio \u2014 shared types, schemas and IPC contracts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

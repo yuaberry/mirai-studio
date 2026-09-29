@@ -12,7 +12,7 @@
  * OpenRouterProvider + context builder with an in-memory transport —
  * the network itself is exercised manually in the app.
  */
-import { mkdtempSync, mkdirSync, existsSync, rmSync, readFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, existsSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -33,6 +33,13 @@ import { ProjectConfig, PROJECT_PRESETS, type FetchResponse } from '@mirai/share
 
 const steps: Array<{ name: string; ok: boolean; detail?: string }> = []
 let current = ''
+
+function expectOrder(shots: Array<{ title: string }>, titles: string[]): void {
+  const actual = shots.map((s) => s.title)
+  if (JSON.stringify(actual) !== JSON.stringify(titles)) {
+    throw new Error(`order mismatch: ${JSON.stringify(actual)}`)
+  }
+}
 
 function step(name: string, fn: () => void | Promise<void>): Promise<void> {
   return Promise.resolve()
@@ -335,6 +342,55 @@ async function main(): Promise<void> {
     const sent = (lastBody['messages'] as Array<{ role: string; content: string }>)[0]!
     if (!sent.content.includes('Two girls bond over magic')) throw new Error('context not sent')
     void provider
+  })
+
+  await step('STORYBOARD: shots with camera metadata + runtime total', () => {
+    const scene = ctx.creative.listScenes(ctx.creative.listEpisodes()[0]!.id)[0]!
+    const shot = ctx.storyboard.createShot(scene.id, {
+      title: 'The promise — close',
+      shotType: 'CLOSE_UP',
+      lens: '85mm',
+      cameraMovement: 'DOLLY_IN',
+      durationSeconds: 4.5,
+      dialogue: 'YUNA: "I will protect you."',
+      notes: 'Push in on the last word.',
+    })
+    if (shot.orderIndex !== 0) throw new Error('shot order broken')
+    const wide = ctx.storyboard.createShot(scene.id, {
+      title: 'City lights below',
+      shotType: 'WIDE',
+      lens: '24mm',
+      cameraMovement: 'STATIC',
+      durationSeconds: 2.5,
+    })
+    const shots = ctx.storyboard.listShots(scene.id)
+    const total = shots.reduce((acc, sh) => acc + sh.durationSeconds, 0)
+    if (Math.abs(total - 7) > 0.001) throw new Error(`runtime total mismatch: ${total}`)
+    ctx.storyboard.moveShot(wide.id, 'up')
+    expectOrder(ctx.storyboard.listShots(scene.id), ['City lights below', 'The promise — close'])
+  })
+
+  await step('STORYBOARD: real frame import, orphan pruning, security', () => {
+    const scene = ctx.creative.listScenes(ctx.creative.listEpisodes()[0]!.id)[0]!
+    const shot = ctx.storyboard.listShots(scene.id)[1]!
+    const sourceFile = join(root, 'fake-frame.png')
+    writeFileSync(sourceFile, Buffer.alloc(2048, 0x89))
+
+    const asset = ctx.storyboard.importFrame(shot.id, sourceFile)
+    if (asset.mime !== 'image/png' || asset.bytes !== 2048) throw new Error('asset metadata broken')
+    if (!existsSync(join(summary.path, asset.relativePath))) throw new Error('frame not copied')
+    if (!existsSync(ctx.storyboard.assetAbsolutePath(asset.id))) throw new Error('frame not servable')
+
+    ctx.storyboard.clearFrame(shot.id)
+    if (existsSync(join(summary.path, asset.relativePath))) throw new Error('orphan file not pruned')
+  })
+
+  await step('STYLE BIBLE round-trips the visual identity', () => {
+    const style = { artDirection: 'Luminous TV-anime, painted skies.', palette: 'Sakura pink, dusk violet.' }
+    ctx.storyboard.updateStyleBible(style)
+    if (ctx.storyboard.getStyleBible().artDirection !== style.artDirection) {
+      throw new Error('style bible lost')
+    }
   })
 
   await step('DUPLICATE produces a clean independent copy', () => {

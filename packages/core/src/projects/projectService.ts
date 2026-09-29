@@ -38,6 +38,7 @@ import { APP_DB_MIGRATIONS, PROJECT_DB_MIGRATIONS } from '../db/migrations'
 import { JobQueue, type JobHandler } from '../jobs/jobQueue'
 import { CreativeService } from '../creative/creativeService'
 import { PromptService } from '../prompts/promptService'
+import { StoryboardService } from '../storyboard/storyboardService'
 import { newEntityId, type AppDirs, type Clock } from '../types'
 import type { LoggerService } from '../logger/logger'
 import { readManifest, writeManifest } from './manifest'
@@ -65,6 +66,8 @@ export interface OpenProjectContext {
   creative: CreativeService
   /** Prompt library bound to this project's DB. */
   prompts: PromptService
+  /** Storyboard core (shots, frames, style bible) for this project. */
+  storyboard: StoryboardService
   /** Jobs recovered as PAUSED after an interrupted session. */
   recoveredCount: number
 }
@@ -469,6 +472,8 @@ export class ProjectService {
           db.prepare('SELECT 1 FROM schema_migrations LIMIT 1').get()
           db.prepare('SELECT 1 FROM job_records LIMIT 1').get()
           db.prepare('SELECT 1 FROM prompts LIMIT 1').get()
+          db.prepare('SELECT 1 FROM shots LIMIT 1').get()
+          db.prepare('SELECT 1 FROM assets LIMIT 1').get()
         } finally {
           db.close()
         }
@@ -552,12 +557,13 @@ export class ProjectService {
 
     const creative = new CreativeService(db, this.opts.clock)
     const prompts = new PromptService(db, this.opts.clock)
+    const storyboard = new StoryboardService(db, this.opts.clock, path)
 
     const now = this.opts.clock.isoNow()
     this.upsertRegistry(manifest, path, now)
 
     const summary = this.summaryById(manifest.id)
-    this.active = { summary, manifest, db, jobs, creative, prompts, recoveredCount }
+    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, recoveredCount }
     this.opts.logger.info('PROJECT', `Project opened: "${manifest.name}"`, {
       id: manifest.id,
       recoveredJobs: recoveredCount,

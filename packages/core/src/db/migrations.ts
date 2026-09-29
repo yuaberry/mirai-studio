@@ -167,4 +167,39 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0004_storyboard',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE assets (
+          id TEXT PRIMARY KEY,
+          kind TEXT NOT NULL,
+          relative_path TEXT NOT NULL,
+          original_name TEXT NOT NULL,
+          mime TEXT NOT NULL,
+          bytes INTEGER NOT NULL,
+          created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE shots (
+          id TEXT PRIMARY KEY,
+          scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+          order_index INTEGER NOT NULL DEFAULT 0,
+          title TEXT NOT NULL,
+          shot_type TEXT NOT NULL DEFAULT 'MEDIUM',
+          lens TEXT NOT NULL DEFAULT '50mm',
+          camera_movement TEXT NOT NULL DEFAULT 'STATIC',
+          duration_seconds REAL NOT NULL DEFAULT 3,
+          dialogue TEXT,
+          notes TEXT,
+          frame_asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL,
+          status TEXT NOT NULL DEFAULT 'TODO',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_shots_scene ON shots (scene_id, order_index);
+      `)
+    },
+  },
 ]

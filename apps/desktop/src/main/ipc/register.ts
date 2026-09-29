@@ -196,6 +196,68 @@ export function registerIpcHandlers(c: Container): void {
     return { ok: true }
   })
 
+  // -------------------------------------------------------------- Storyboard
+  handleIpc('shots:list', (req) => ({
+    shots: requireActive(c).storyboard.listShots(req.sceneId),
+  }))
+
+  handleIpc('shots:create', (req) => ({
+    shot: requireActive(c).storyboard.createShot(req.sceneId, req.input),
+  }))
+
+  handleIpc('shots:update', (req) => ({
+    shot: requireActive(c).storyboard.updateShot(req.id, req.input),
+  }))
+
+  handleIpc('shots:delete', (req) => {
+    requireActive(c).storyboard.deleteShot(req.id)
+    return { ok: true }
+  })
+
+  handleIpc('shots:move', (req) => {
+    requireActive(c).storyboard.moveShot(req.id, req.direction)
+    return { ok: true }
+  })
+
+  handleIpc('shots:importFrame', async (req) => {
+    const ctx = requireActive(c)
+    const win = c.emitter.window
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Import a frame image',
+      properties: ['openFile'],
+      filters: [
+        {
+          name: 'Images',
+          extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
+        },
+      ],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      throw new MiraiError('CANCELLED', 'Frame import cancelled.')
+    }
+    const asset = ctx.storyboard.importFrame(req.shotId, result.filePaths[0]!)
+    c.logger.info('MEDIA', `Frame imported for shot ${req.shotId}`, { assetId: asset.id, bytes: asset.bytes })
+    return { asset }
+  })
+
+  handleIpc('shots:clearFrame', (req) => {
+    requireActive(c).storyboard.clearFrame(req.shotId)
+    return { ok: true }
+  })
+
+  handleIpc('assets:reveal', (req) => {
+    const ctx = requireActive(c)
+    shell.showItemInFolder(ctx.storyboard.revealAssetPath(req.assetId))
+    return { ok: true }
+  })
+
+  // ---- Style Bible (Module 23)
+  handleIpc('style-bible:get', () => ({ style: requireActive(c).storyboard.getStyleBible() }))
+
+  handleIpc('style-bible:update', (req) => ({
+    style: requireActive(c).storyboard.updateStyleBible(req.style),
+  }))
+
   // -------------------------------------------------------------------- AI Core
   handleIpc('ai:status', () => c.ai.status())
 

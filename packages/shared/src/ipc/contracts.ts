@@ -32,6 +32,7 @@ import {
 } from '../entities/creative'
 import { AiContextScope, AiModelInfo, ChatMessage } from '../entities/ai'
 import { PromptInput, PromptRecord } from '../entities/prompt'
+import { AssetRecord, ShotInput, ShotRecord, StyleBible } from '../entities/storyboard'
 
 const emptyRequest = z.object({}).default({})
 
@@ -222,6 +223,54 @@ export const ipcContracts = {
   'scenes:move': {
     request: z.object({ id: zEntityId, direction: z.enum(['up', 'down']) }),
     response: z.object({ ok: z.boolean() }),
+  },
+
+  // --------------------------------------------------------------- Storyboard
+  'shots:list': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ shots: z.array(ShotRecord) }),
+  },
+  'shots:create': {
+    request: z.object({ sceneId: zEntityId, input: ShotInput }),
+    response: z.object({ shot: ShotRecord }),
+  },
+  'shots:update': {
+    request: z.object({ id: zEntityId, input: ShotInput }),
+    response: z.object({ shot: ShotRecord }),
+  },
+  'shots:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'shots:move': {
+    request: z.object({ id: zEntityId, direction: z.enum(['up', 'down']) }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /**
+   * Opens a native file dialog, copies the chosen image into the project's
+   * images/ folder and attaches it as the shot's frame. Returns the asset.
+   */
+  'shots:importFrame': {
+    request: z.object({ shotId: zEntityId }),
+    response: z.object({ asset: AssetRecord }),
+  },
+  'shots:clearFrame': {
+    request: z.object({ shotId: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'assets:reveal': {
+    request: z.object({ assetId: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+
+  // ---- Style Bible (Module 23)
+  'style-bible:get': {
+    request: emptyRequest,
+    response: z.object({ style: StyleBible }),
+  },
+  'style-bible:update': {
+    request: z.object({ style: StyleBible }),
+    response: z.object({ style: StyleBible }),
   },
 
   // ------------------------------------------------------------- Prompt Library

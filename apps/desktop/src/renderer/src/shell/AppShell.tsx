@@ -11,7 +11,9 @@ import {
   Clapperboard,
   HardDriveDownload,
   Home,
+  LayoutGrid,
   ListVideo,
+  Palette,
   Play,
   Settings,
   Sparkles,
@@ -29,6 +31,8 @@ import { CharactersPage } from '../modules/characters/CharactersPage'
 import { LocationsPage } from '../modules/locations/LocationsPage'
 import { EpisodesPage } from '../modules/episodes/EpisodesPage'
 import { PromptLibraryPage } from '../modules/prompts/PromptLibraryPage'
+import { StoryboardPage } from '../modules/storyboard/StoryboardPage'
+import { StyleBiblePage } from '../modules/style/StyleBiblePage'
 import { AIAssistPage } from '../modules/assist/AIAssistPage'
 import { JobsPage } from '../modules/workspace/JobsPage'
 import { BackupsPage } from '../modules/workspace/BackupsPage'
@@ -48,9 +52,11 @@ const APP_NAV: ReadonlyArray<{ view: MainView; label: string; icon: LucideIcon }
 const PROJECT_NAV: ReadonlyArray<{ view: MainView; label: string; icon: LucideIcon }> = [
   { view: 'overview', label: 'Overview', icon: Clapperboard },
   { view: 'bible', label: 'Story Bible', icon: BookOpen },
+  { view: 'style', label: 'Style Bible', icon: Palette },
   { view: 'characters', label: 'Characters', icon: Users },
   { view: 'locations', label: 'Locations', icon: Building2 },
   { view: 'episodes', label: 'Episodes & Scenes', icon: ListVideo },
+  { view: 'storyboard', label: 'Storyboard', icon: LayoutGrid },
   { view: 'prompts', label: 'Prompt Library', icon: Wand2 },
   { view: 'assist', label: 'AI Assist', icon: Sparkles },
 ]
@@ -161,6 +167,8 @@ export function AppShell() {
           {view === 'characters' && <CharactersPage />}
           {view === 'locations' && <LocationsPage />}
           {view === 'episodes' && <EpisodesPage />}
+          {view === 'storyboard' && <StoryboardPage />}
+          {view === 'style' && <StyleBiblePage />}
           {view === 'prompts' && <PromptLibraryPage />}
           {view === 'assist' && <AIAssistPage />}
           {view === 'jobs' && <JobsPage />}

@@ -2,7 +2,7 @@
  * Settings — General, AI (OpenRouter credentials + live model catalog),
  * appearance, shortcuts reference.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { EyeOff, KeyRound, RefreshCw, Save } from 'lucide-react'
 import { MiraiError, type AppSettings } from '@mirai/shared'
 import { Badge, Button, Card, Input, Label, SectionTitle, Select, Spinner } from '../../system/ui'
@@ -128,6 +128,13 @@ function AICard() {
   const clearCredential = useClearCredential()
   const [keyValue, setKeyValue] = useState('')
   const [selectedModel, setSelectedModel] = useState<string>(settings?.ai.defaultModel ?? '')
+
+  // Sync the picker when settings arrive/change externally.
+  useEffect(() => {
+    if (settings?.ai.defaultModel) {
+      setSelectedModel(settings.ai.defaultModel)
+    }
+  }, [settings?.ai.defaultModel])
 
   const openrouter = credentials?.find((c) => c.key === 'openrouter')
 

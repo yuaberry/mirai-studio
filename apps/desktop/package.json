@@ -1,8 +1,8 @@
 {
   "name": "@mirai/desktop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
-  "description": "Mirai Studio — desktop application (Electron + React)",
+  "description": "Mirai Studio \u2014 desktop application (Electron + React)",
   "author": "Mirai Studio Developers",
   "homepage": "https://mirai-studio.app",
   "main": "out/main/index.js",
@@ -12,7 +12,8 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "icons": "bun run scripts/make-icons.ts",
-    "package:linux": "electron-vite build && electron-builder --linux deb AppImage"
+    "package:linux": "electron-vite build && electron-builder --linux deb AppImage",
+    "package:dir": "electron-vite build && electron-builder --linux dir"
   },
   "dependencies": {
     "better-sqlite3": "^11.5.0",

@@ -1,9 +1,11 @@
 {
   "name": "@mirai/core",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
-  "description": "Mirai Studio — domain core (db, projects, jobs, settings, logger). Electron-free.",
-  "exports": { ".": "./src/index.ts" },
+  "description": "Mirai Studio \u2014 domain core (db, projects, jobs, settings, logger). Electron-free.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "ELECTRON_RUN_AS_NODE=1 ../../apps/desktop/node_modules/.bin/electron ../../node_modules/vitest/vitest.mjs run"
