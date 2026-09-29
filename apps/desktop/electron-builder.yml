@@ -1,0 +1,59 @@
+# Mirai Studio — packaging (electron-builder)
+appId: com.miraistudio.app
+productName: Mirai Studio
+executableName: mirai-studio
+copyright: Copyright © 2026 Mirai Studio
+
+directories:
+  output: release
+  buildResources: build
+
+# The app ships only the built bundles + the native runtime dependency.
+# @mirai/* workspace packages are bundled into out/ (devDependencies).
+files:
+  - out/**
+  - package.json
+
+# Native modules must be unpacked from the asar archive to load.
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**
+
+# better-sqlite3 is already compiled against Electron's ABI by
+# `bun run rebuild:native` — skip the builder's own rebuild step.
+npmRebuild: false
+
+compression: normal
+
+linux:
+  icon: build/icons
+  category: Graphics
+  target:
+    - target: deb
+      arch: [x64]
+    - target: AppImage
+      arch: [x64]
+  desktop:
+    Name: Mirai Studio
+    Comment: AI-Native Anime & Animation Production Studio
+    StartupWMClass: mirai-studio
+    GenericName: Production Suite
+
+deb:
+  artifactName: mirai-studio_${version}_${arch}.${ext}
+  maintainer: Mirai Studio Developers <dev@mirai.studio>
+  priority: optional
+  packageCategory: graphics
+
+appImage:
+  artifactName: mirai-studio_${version}_${arch}.AppImage
+
+# Windows installer (build on Windows or with wine; config ready)
+win:
+  icon: build/icon.png
+  target: nsis
+
+nsis:
+  artifactName: mirai-studio_${version}_${arch}-setup.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
