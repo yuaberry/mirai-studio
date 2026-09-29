@@ -1,0 +1,23 @@
+{
+  "name": "@mirai/core",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Mirai Studio — domain core (db, projects, jobs, settings, logger). Electron-free.",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "ELECTRON_RUN_AS_NODE=1 ../../apps/desktop/node_modules/.bin/electron ../../node_modules/vitest/vitest.mjs run"
+  },
+  "dependencies": {
+    "@mirai/shared": "workspace:*",
+    "better-sqlite3": "^11.5.0",
+    "ulid": "^2.0.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^20.17.6",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
+  }
+}

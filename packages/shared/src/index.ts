@@ -1,0 +1,119 @@
+/**
+ * @mirai/shared — single source of truth for types, schemas and IPC contracts.
+ */
+
+// --- ids
+export { type EntityId, ID_PATTERN, isValidEntityId, zEntityId, zIsoDate } from './ids'
+
+// --- errors
+export {
+  MIRAI_ERROR_CODES,
+  type MiraiErrorCode,
+  zMiraiErrorCode,
+  type ErrorPayload,
+  zErrorPayload,
+  MiraiError,
+  toErrorPayload,
+  fromErrorPayload,
+} from './errors'
+
+// --- status enums
+export {
+  JOB_STATUSES,
+  ACTIVE_JOB_STATUSES,
+  PROJECT_STATUSES,
+  ASSET_STATUSES,
+  TASK_STATUSES,
+  LOG_LEVELS,
+  LOG_CATEGORIES,
+  zJobStatus,
+  zProjectStatus,
+  zAssetStatus,
+  zTaskStatus,
+  zLogLevel,
+  zLogCategory,
+} from './status'
+export type {
+  JobStatus,
+  ProjectStatus,
+  AssetStatus,
+  TaskStatus,
+  LogLevel,
+  LogCategory,
+} from './status'
+
+// --- entities
+export {
+  PROJECT_FOLDERS,
+  type ProjectFolder,
+  ASPECT_RATIOS,
+  FPS_OPTIONS,
+  CONTENT_RATINGS,
+  zResolution,
+  ProjectConfig,
+  ProjectManifest,
+  ProjectSummary,
+  OpenedProject,
+  PROJECT_PRESETS,
+  presetById,
+} from './entities/project'
+export type { ProjectPreset } from './entities/project'
+
+export {
+  StoryBible,
+  CHARACTER_ROLES,
+  zCharacterRole,
+  CharacterInput,
+  LocationInput,
+  EpisodeInput,
+  EpisodeRecord,
+  EpisodeWithStats,
+  TIMES_OF_DAY,
+  zTimeOfDay,
+  SceneInput,
+  CharacterRecord,
+  LocationRecord,
+  SceneRecord,
+} from './entities/creative'
+export type { CharacterRole, TimeOfDay } from './entities/creative'
+
+export {
+  PROMPT_CATEGORIES,
+  PROMPT_CATEGORY_LABEL,
+  PromptInput,
+  PromptRecord,
+  promptTags,
+} from './entities/prompt'
+export type { PromptCategory } from './entities/prompt'
+
+export { AppSettings, DEFAULT_APP_SETTINGS, CREDENTIAL_KEYS, zCredentialKey } from './entities/settings'
+export type { CredentialKey } from './entities/settings'
+
+export { BUILTIN_JOB_TYPES, JobRecord, jobIsActive } from './entities/job'
+export type { BuiltinJobType } from './entities/job'
+
+export { LogEntry } from './entities/log'
+export type { LogQuery } from './entities/log'
+
+export {
+  CHAT_ROLES,
+  zChatRole,
+  ChatMessage,
+  AiModelInfo,
+  AiContextScope,
+  DEFAULT_AI_CONTEXT_SCOPE,
+} from './entities/ai'
+export type { ChatRole } from './entities/ai'
+
+// --- ipc
+export { BackupInfo, HealthReport, ipcContracts, IPC_CHANNELS } from './ipc/contracts'
+export type {
+  IpcChannel,
+  IpcRequest,
+  IpcRequestInput,
+  IpcResponse,
+  IpcResult,
+} from './ipc/contracts'
+
+export { ipcEventPayloads, IPC_EVENT_CHANNELS } from './ipc/events'
+export type { IpcEventChannel, IpcEventPayload } from './ipc/events'
