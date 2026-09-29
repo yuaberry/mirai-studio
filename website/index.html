@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mirai Studio — AI-Native Anime & Animation Production Studio</title>
+  <meta name="description" content="Mirai Studio: turn ideas into anime. Local-first, AI-native production suite — Story Bible to Storyboard, with professional manga prompt library, OpenRouter & NVIDIA AI support." />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="sakura" aria-hidden="true"></canvas>
+  <div class="grid-overlay" aria-hidden="true"></div>
+
+  <!-- ------------------------------------------------------------- HERO -->
+  <header class="hero">
+    <nav class="nav">
+      <div class="brand">
+        <svg viewBox="0 0 32 32" class="brand-mark" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="g-mark" x1="0" y1="0" x2="32" y2="32">
+              <stop offset="0" stop-color="#f472b6"/><stop offset=".5" stop-color="#a78bfa"/><stop offset="1" stop-color="#22d3ee"/>
+            </linearGradient>
+          </defs>
+          <path d="M16 1.5 20.2 11.8 30.5 16 20.2 20.2 16 30.5 11.8 20.2 1.5 16 11.8 11.8Z" fill="url(#g-mark)"/>
+          <path d="M16 8.5 18 14l5.5 2-5.5 2-2 5.5-2-5.5L8.5 16 14 14Z" fill="#0a0c10" fill-opacity=".55"/>
+        </svg>
+        <span class="brand-name">MIRAI <em>STUDIO</em></span>
+      </div>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#genres">Genres</a>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#download" class="nav-cta">Download</a>
+      </div>
+    </nav>
+
+    <div class="hero-inner reveal">
+      <div class="hero-badge">v0.2.1 · Linux x64 · Free & Open Source</div>
+      <h1>
+        Turn your ideas<br />
+        into <span class="grad-text">anime.</span>
+      </h1>
+      <p class="hero-sub">
+        A local-first, AI-native production studio — from Story Bible to Storyboard to screen.
+        Bring your own AI: <strong>OpenRouter</strong>, <strong>NVIDIA NIM (GLM)</strong>, or any
+        OpenAI-compatible provider.
+      </p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="#download">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 21h16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Download Mirai Studio
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/yuaberry/mirai-studio" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.1.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.6 1.03 2.69 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" fill="currentColor"/></svg>
+          Star on GitHub
+        </a>
+      </div>
+
+      <div class="hero-stats">
+        <div class="stat"><strong>4</strong><span>phases shipped</span></div>
+        <div class="stat"><strong>89</strong><span>tests green</span></div>
+        <div class="stat"><strong>21</strong><span>E2E smoke steps</span></div>
+        <div class="stat"><strong>100%</strong><span>local-first</span></div>
+      </div>
+    </div>
+    <div class="hero-glow" aria-hidden="true"></div>
+  </header>
+
+  <!-- --------------------------------------------------------- FEATURES -->
+  <section id="features" class="section">
+    <h2 class="section-title reveal">Built like a <span class="grad-text">real studio</span></h2>
+    <p class="section-sub reveal">Every module is functional — no fake buttons, no dead UI.</p>
+    <div class="cards">
+      <article class="card reveal"><div class="card-ico">📖</div>
+        <h3>Story Bible & Style Bible</h3>
+        <p>Premise, themes, narrative rules — plus a full visual identity: lineart, shading, palette, lighting. Your canon, enforced in every AI call.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🎭</div>
+        <h3>Character Studio</h3>
+        <p>Full cast profiles — role, personality, goals, fears, voice — feeding canon-aware AI context and scene casting.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🎬</div>
+        <h3>Episodes, Scenes & Screenplay</h3>
+        <p>Season structure with production status; scenes with cast, location, time of day and screenplay text. AI drafts, you approve.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🗂️</div>
+        <h3>Storyboard Studio</h3>
+        <p>Shots with pro camera metadata — framing, lens, movement, duration — and real frames stored inside your project.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🌸</div>
+        <h3>Manga Prompt Library</h3>
+        <p>12 curated professional prompts: manga panels, character sheets, keyframes, style anchors, negatives. Copy or send to AI Assist.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🤖</div>
+        <h3>Bring Your Own AI</h3>
+        <p>Chat & drafting via OpenRouter or <strong>NVIDIA NIM (GLM 5.3)</strong> — any OpenAI-compatible endpoint. Model discovery with free-tier flags.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">💾</div>
+        <h3>Local-first & Portable</h3>
+        <p>SQLite per project, atomic manifests, ULID identity — move your project folder anywhere. Backups that never destroy your only copy.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🛡️</div>
+        <h3>Consent & Security</h3>
+        <p>Keys encrypted with your OS keychain; only the context you explicitly enable ever leaves the machine — with a clear privacy notice.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">⚡</div>
+        <h3>Crash-proof Jobs</h3>
+        <p>Every heavy operation is a persistent job with retry, cancel, progress — and recovered automatically after a crash.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ----------------------------------------------------------- GENRES -->
+  <section id="genres" class="section section-genres">
+    <h2 class="section-title reveal">Every genre. <span class="grad-text">Your story.</span></h2>
+    <p class="section-sub reveal">From Isekai to Psychological, Ecchi to Slice of Life — tag your production with the full anime taxonomy.</p>
+    <div class="marquee reveal" aria-label="Anime genres">
+      <div class="marquee-track" id="genreTrack"></div>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------- PIPELINE -->
+  <section id="pipeline" class="section">
+    <h2 class="section-title reveal">Idea → <span class="grad-text">Episode</span></h2>
+    <div class="pipeline reveal">
+      <div class="pipe-step"><span>Story Bible</span><i>→</i></div>
+      <div class="pipe-step"><span>Characters</span><i>→</i></div>
+      <div class="pipe-step"><span>Episodes</span><i>→</i></div>
+      <div class="pipe-step"><span>Scenes</span><i>→</i></div>
+      <div class="pipe-step"><span>Screenplay</span><i>→</i></div>
+      <div class="pipe-step"><span>Storyboard</span><i>→</i></div>
+      <div class="pipe-step"><span class="pipe-final">Animation*</span></div>
+    </div>
+    <p class="section-sub small reveal">*Voice, music, timeline & render arrive in Phases 4–6 — check the <a href="https://github.com/yuaberry/mirai-studio/blob/main/docs/roadmap.md" target="_blank" rel="noopener">roadmap</a>.</p>
+  </section>
+
+  <!-- --------------------------------------------------------- DOWNLOAD -->
+  <section id="download" class="section section-download">
+    <h2 class="section-title reveal">Download <span class="grad-text">v0.2.1</span></h2>
+    <p class="section-sub reveal">Linux x64 · signed by tests, boot-tested before shipping.</p>
+    <div class="dl-grid">
+      <a class="dl-card reveal" href="https://github.com/yuaberry/mirai-studio/releases/download/v0.2.1/mirai-studio_0.2.1_amd64.deb" download>
+        <div class="dl-ico">🐧</div>
+        <h3>.deb <span class="dl-tag">recommended</span></h3>
+        <p>Debian · Ubuntu · Mint & friends</p>
+        <code>sudo apt install ./mirai-studio_0.2.1_amd64.deb</code>
+      </a>
+      <a class="dl-card reveal" href="https://github.com/yuaberry/mirai-studio/releases/download/v0.2.1/mirai-studio_0.2.1_x86_64.AppImage" download>
+        <div class="dl-ico">📦</div>
+        <h3>AppImage <span class="dl-tag">portable</span></h3>
+        <p>No install — runs anywhere with FUSE</p>
+        <code>chmod +x mirai-studio*.AppImage && ./mirai-studio*.AppImage</code>
+      </a>
+      <a class="dl-card reveal" href="https://github.com/yuaberry/mirai-studio" target="_blank" rel="noopener">
+        <div class="dl-ico">⌨️</div>
+        <h3>Build from source</h3>
+        <p>Bun ≥ 1.1 · Node ≥ 18 · a display</p>
+        <code>git clone …/mirai-studio && bun install && bun run dev</code>
+      </a>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ FOOTER -->
+  <footer class="footer">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" class="brand-mark sm" fill="none" aria-hidden="true">
+        <path d="M16 1.5 20.2 11.8 30.5 16 20.2 20.2 16 30.5 11.8 20.2 1.5 16 11.8 11.8Z" fill="url(#g-mark)"/>
+      </svg>
+      <span class="brand-name">MIRAI <em>STUDIO</em></span>
+    </div>
+    <p class="footer-tag">From imagination to animation.</p>
+    <nav class="footer-links">
+      <a href="https://github.com/yuaberry/mirai-studio">GitHub</a>
+      <a href="https://github.com/yuaberry/mirai-studio/releases">Releases</a>
+      <a href="https://github.com/yuaberry/mirai-studio/blob/main/docs/roadmap.md">Roadmap</a>
+      <a href="https://github.com/yuaberry/mirai-studio/blob/main/docs/setup.md">Docs</a>
+    </nav>
+    <p class="footer-fine">© 2026 Mirai Studio · Made with 🌸 · Linux build tested end-to-end.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
