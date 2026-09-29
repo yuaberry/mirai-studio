@@ -8,6 +8,7 @@ import { handleIpc } from './router'
 import { toOpenedProject, type Container } from '../bootstrap'
 import { join } from 'node:path'
 import { newEntityId } from '@mirai/core'
+import { RenderService } from '@mirai/core'
 
 export function registerIpcHandlers(c: Container): void {
   // ---------------------------------------------------------------- projects
@@ -333,6 +334,87 @@ export function registerIpcHandlers(c: Container): void {
       { shotId: req.shotId, extraPrompt: req.extraPrompt },
       { priority: 8, maxAttempts: 2 },
     )
+    return { jobId: job.id }
+  })
+
+  // ---- Media Library (Phase 4) -----------------------------------------------
+  handleIpc('media:list', (req) => ({
+    tracks: requireActive(c).media.list(req.kind),
+  }))
+
+  handleIpc('media:import', async (req) => {
+    const ctx = requireActive(c)
+    const win = c.emitter.window
+    const result = await dialog.showOpenDialog(win!, {
+      title: `Import ${String(req.kind).toLowerCase()} file`,
+      properties: ['openFile'],
+      filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'opus', 'weba'] }],
+    })
+    if (result.canceled || result.filePaths.length === 0) throw new MiraiError('CANCELLED', 'Import cancelled.')
+    const track = ctx.media.import(req.kind, result.filePaths[0]!)
+    c.logger.info('MEDIA', `Imported ${String(req.kind)}: "${track.title}"`, { trackId: track.id })
+    return { track }
+  })
+
+  handleIpc('media:update', (req) => ({
+    track: requireActive(c).media.update(req.id, { title: req.title, tags: req.tags }),
+  }))
+
+  handleIpc('media:delete', (req) => {
+    requireActive(c).media.delete(req.id)
+    return { ok: true }
+  })
+
+  handleIpc('media:assignToScene', (req) => {
+    requireActive(c).media.assignToScene(req.sceneId, req.mediaId, req.role, req.volume)
+    return { ok: true }
+  })
+
+  handleIpc('media:removeFromScene', (req) => {
+    requireActive(c).media.removeFromScene(req.sceneId, req.mediaId)
+    return { ok: true }
+  })
+
+  handleIpc('media:listSceneMedia', (req) => ({
+    assignments: requireActive(c).media.listSceneMedia(req.sceneId),
+  }))
+
+  handleIpc('media:reveal', (req) => {
+    const ctx = requireActive(c)
+    const track = ctx.media.get(req.id)
+    const assetPath = ctx.media.assetAbsolutePath(track.assetId)
+    shell.showItemInFolder(assetPath)
+    return { ok: true }
+  })
+
+  // ---- Render Engine (Phase 4) -------------------------------------------------
+  handleIpc('render:status', () => {
+    const detect = RenderService.detect()
+    return { available: detect.available, version: detect.version }
+  })
+
+  handleIpc('render:shot', async (req) => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('render.shot', async (job, jobCtx) => {
+      const payload = (job.payload ?? {}) as { shotId?: string }
+      if (!payload.shotId) throw new MiraiError('VALIDATION_ERROR', 'render.shot payload missing shotId.')
+      const controller = new AbortController()
+      const watcher = setInterval(() => {
+        if (jobCtx.signal.aborted) controller.abort()
+      }, 100)
+      try {
+        const result = await ctx.render.renderShot({
+          shotId: payload.shotId,
+          reportProgress: jobCtx.reportProgress,
+          signal: controller.signal,
+        })
+        c.logger.info('RENDER', `Shot rendered: ${result.outputPath}`, { bytes: result.fileBytes })
+        return result
+      } finally {
+        clearInterval(watcher)
+      }
+    })
+    const job = await ctx.jobs.enqueue('render.shot', { shotId: req.shotId }, { priority: 9, maxAttempts: 2 })
     return { jobId: job.id }
   })
 

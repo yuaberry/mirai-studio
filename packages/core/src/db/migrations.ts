@@ -210,4 +210,30 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0006_media_library',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE media_tracks (
+          id TEXT PRIMARY KEY,
+          kind TEXT NOT NULL,
+          title TEXT NOT NULL,
+          asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+          tags TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_media_kind ON media_tracks (kind, created_at);
+
+        CREATE TABLE scene_media (
+          scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+          media_id TEXT NOT NULL REFERENCES media_tracks(id) ON DELETE CASCADE,
+          role TEXT NOT NULL DEFAULT 'BACKGROUND',
+          volume REAL NOT NULL DEFAULT 1.0,
+          PRIMARY KEY (scene_id, media_id)
+        );
+      `)
+    },
+  },
 ]

@@ -9,6 +9,7 @@ import {
   BookOpen,
   Building2,
   Clapperboard,
+  Disc3,
   HardDriveDownload,
   Home,
   LayoutGrid,
@@ -34,6 +35,7 @@ import { PromptLibraryPage } from '../modules/prompts/PromptLibraryPage'
 import { StoryboardPage } from '../modules/storyboard/StoryboardPage'
 import { StyleBiblePage } from '../modules/style/StyleBiblePage'
 import { AIAssistPage } from '../modules/assist/AIAssistPage'
+import { MediaLibraryPage } from '../modules/media/MediaLibraryPage'
 import { JobsPage } from '../modules/workspace/JobsPage'
 import { BackupsPage } from '../modules/workspace/BackupsPage'
 import { SettingsPage } from '../modules/settings/SettingsPage'
@@ -57,6 +59,7 @@ const PROJECT_NAV: ReadonlyArray<{ view: MainView; label: string; icon: LucideIc
   { view: 'locations', label: 'Locations', icon: Building2 },
   { view: 'episodes', label: 'Episodes & Scenes', icon: ListVideo },
   { view: 'storyboard', label: 'Storyboard', icon: LayoutGrid },
+  { view: 'media', label: 'Media Library', icon: Disc3 },
   { view: 'prompts', label: 'Prompt Library', icon: Wand2 },
   { view: 'assist', label: 'AI Assist', icon: Sparkles },
 ]
@@ -169,6 +172,7 @@ export function AppShell() {
           {view === 'episodes' && <EpisodesPage />}
           {view === 'storyboard' && <StoryboardPage />}
           {view === 'style' && <StyleBiblePage />}
+          {view === 'media' && <MediaLibraryPage />}
           {view === 'prompts' && <PromptLibraryPage />}
           {view === 'assist' && <AIAssistPage />}
           {view === 'jobs' && <JobsPage />}

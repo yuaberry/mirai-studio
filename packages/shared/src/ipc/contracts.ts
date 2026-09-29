@@ -34,6 +34,7 @@ import {
 import { AiContextScope, AiModelInfo, ChatMessage } from '../entities/ai'
 import { PromptInput, PromptRecord } from '../entities/prompt'
 import { AssetRecord, ShotInput, ShotRecord, StyleBible } from '../entities/storyboard'
+import { MediaTrack, SceneMedia, zMediaKind, zMediaRole } from '../entities/media'
 
 const emptyRequest = z.object({}).default({})
 
@@ -383,6 +384,53 @@ export const ipcContracts = {
     response: z.object({ jobId: zEntityId }),
   },
   /** Voice line (Phase 4): native file dialog → real audio attached to a shot. */
+  // ---- Media Library (Phase 4) --------------------------------------------
+  'media:list': {
+    request: z.object({ kind: z.string().optional() }).default({}),
+    response: z.object({ tracks: z.array(MediaTrack) }),
+  },
+  'media:import': {
+    request: z.object({ kind: zMediaKind }),
+    response: z.object({ track: MediaTrack }),
+  },
+  'media:update': {
+    request: z.object({ id: zEntityId, title: z.string().min(1).max(200), tags: z.string().max(200).optional() }),
+    response: z.object({ track: MediaTrack }),
+  },
+  'media:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'media:assignToScene': {
+    request: z.object({ sceneId: zEntityId, mediaId: zEntityId, role: zMediaRole, volume: z.number().min(0).max(2).default(1) }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'media:removeFromScene': {
+    request: z.object({ sceneId: zEntityId, mediaId: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'media:listSceneMedia': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ assignments: z.array(SceneMedia) }),
+  },
+  'media:reveal': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+
+  // ---- Render Engine (Phase 4) --------------------------------------------
+  'render:shot': {
+    request: z.object({ shotId: zEntityId }),
+    response: z.object({ jobId: zEntityId }),
+  },
+  'render:status': {
+    request: emptyRequest,
+    response: z.object({
+      available: z.boolean(),
+      version: z.string().nullable(),
+    }),
+  },
+
   'media:importVoice': {
     request: z.object({ shotId: zEntityId }),
     response: z.object({ asset: AssetRecord }),

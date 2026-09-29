@@ -36,6 +36,12 @@ export { PromptService } from './prompts/promptService'
 // storyboard (Phase 3)
 export { StoryboardService } from './storyboard/storyboardService'
 
+// media (Phase 4)
+export { MediaService } from './media/mediaService'
+
+// render (Phase 4)
+export { RenderService } from './render/renderService'
+
 // settings
 export { SettingsService, CredentialStore } from './settings/settingsService'
 export type { CredentialStatus } from './settings/settingsService'

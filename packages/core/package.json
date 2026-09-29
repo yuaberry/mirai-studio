@@ -1,6 +1,6 @@
 {
   "name": "@mirai/core",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Mirai Studio \u2014 domain core (db, projects, jobs, settings, logger). Electron-free.",
   "exports": {

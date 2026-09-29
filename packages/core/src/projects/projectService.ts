@@ -39,6 +39,8 @@ import { JobQueue, type JobHandler } from '../jobs/jobQueue'
 import { CreativeService } from '../creative/creativeService'
 import { PromptService } from '../prompts/promptService'
 import { StoryboardService } from '../storyboard/storyboardService'
+import { MediaService } from '../media/mediaService'
+import { RenderService } from '../render/renderService'
 import { newEntityId, type AppDirs, type Clock } from '../types'
 import type { LoggerService } from '../logger/logger'
 import { readManifest, writeManifest } from './manifest'
@@ -68,6 +70,10 @@ export interface OpenProjectContext {
   prompts: PromptService
   /** Storyboard core (shots, frames, style bible) for this project. */
   storyboard: StoryboardService
+  /** Media library (music/SFX/ambience) for this project. */
+  media: MediaService
+  /** Render engine (FFmpeg) for this project. */
+  render: RenderService
   /** Jobs recovered as PAUSED after an interrupted session. */
   recoveredCount: number
 }
@@ -558,12 +564,14 @@ export class ProjectService {
     const creative = new CreativeService(db, this.opts.clock)
     const prompts = new PromptService(db, this.opts.clock)
     const storyboard = new StoryboardService(db, this.opts.clock, path)
+    const media = new MediaService(db, this.opts.clock, path)
+    const render = new RenderService(storyboard, media, path)
 
     const now = this.opts.clock.isoNow()
     this.upsertRegistry(manifest, path, now)
 
     const summary = this.summaryById(manifest.id)
-    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, recoveredCount }
+    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, media, render, recoveredCount }
     this.opts.logger.info('PROJECT', `Project opened: "${manifest.name}"`, {
       id: manifest.id,
       recoveredJobs: recoveredCount,

@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  Clapperboard,
   ImagePlus,
   LayoutGrid,
   Mic,
@@ -44,6 +45,8 @@ import {
   useGenerateFrame,
   useVoiceActions,
   useRecordDecision,
+  useRenderStatus,
+  useRenderShot,
   assetUrl,
 } from '../../lib/queries'
 import { toast } from '../../store/appStore'
@@ -363,6 +366,8 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
   const generateFrame = useGenerateFrame()
   const voice = useVoiceActions()
   const recordDecision = useRecordDecision()
+  const { data: renderStatus } = useRenderStatus()
+  const renderShot = useRenderShot()
   const [form, setForm] = useState({
     title: shot.title,
     shotType: shot.shotType,
@@ -524,6 +529,33 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
                 Clear
               </Button>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              loading={renderShot.isPending}
+              disabled={!renderStatus?.available || (!shot.frameAssetId && !shot.voiceAssetId)}
+              title={
+                !renderStatus?.available
+                  ? 'FFmpeg not found on system PATH'
+                  : !shot.frameAssetId && !shot.voiceAssetId
+                    ? 'Shot needs a frame or voice line first'
+                    : 'Render this shot to MP4 with FFmpeg'
+              }
+              onClick={() =>
+                renderShot.mutate(shot.id, {
+                  onSuccess: () =>
+                    toast({
+                      kind: 'info',
+                      title: 'Shot render queued',
+                      description: 'Watch the Jobs panel — the MP4 appears in exports/ when done.',
+                    }),
+                  onError: (err) =>
+                    toast({ kind: 'error', title: 'Render failed to start', description: err.message }),
+                })
+              }
+            >
+              <Clapperboard className="h-3.5 w-3.5" /> Render MP4
+            </Button>
           </div>
           {!ai?.imageConfigured && (
             <p className="mt-1.5 text-[10px] text-mirai-faint">

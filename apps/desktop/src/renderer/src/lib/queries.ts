@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type AppSettings,
   type AssetRecord,
+  type MediaTrack,
   type BackupInfo,
   type CharacterInput,
   type CharacterRecord,
@@ -608,5 +609,69 @@ export function useUpdateStyleBible() {
     mutationFn: (style: StyleBibleType) =>
       invoke('style-bible:update', { style }).then((r) => r.style),
     onSuccess: (style) => queryClient.setQueryData(creativeKeys.styleBible, style),
+  })
+}
+
+// ---------------------------------------------------------------- Media Library
+
+export const mediaKeys = {
+  all: (kind: string) => ['media', kind] as const,
+  renderStatus: ['render', 'status'] as const,
+}
+
+export function useMediaLibrary(kind: string = 'all') {
+  return useQuery({
+    queryKey: mediaKeys.all(kind),
+    queryFn: () => invoke('media:list', { kind }).then((r) => r.tracks as MediaTrack[]),
+  })
+}
+
+export function useMediaMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['media'] })
+  return {
+    import: useMutation({
+      mutationFn: (kind: 'MUSIC' | 'SFX' | 'AMBIENCE') =>
+        invoke('media:import', { kind }).then((r) => r.track),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: (input: { id: string; title: string; tags?: string }) =>
+        invoke('media:update', input).then((r) => r.track),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => invoke('media:delete', { id }).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+    assignToScene: useMutation({
+      mutationFn: (input: { sceneId: string; mediaId: string; role: import('@mirai/shared').MediaRole; volume: number }) =>
+        invoke('media:assignToScene', input).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+    removeFromScene: useMutation({
+      mutationFn: (input: { sceneId: string; mediaId: string }) =>
+        invoke('media:removeFromScene', input).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+    reveal: useMutation({
+      mutationFn: (id: string) => invoke('media:reveal', { id }).then(() => undefined),
+    }),
+  }
+}
+
+export function useRenderStatus() {
+  return useQuery({
+    queryKey: mediaKeys.renderStatus,
+    queryFn: () => invoke('render:status'),
+    staleTime: 60_000,
+  })
+}
+
+export function useRenderShot() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (shotId: string) => invoke('render:shot', { shotId }).then((r) => r.jobId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.jobs }),
   })
 }
