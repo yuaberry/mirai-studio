@@ -13,7 +13,8 @@ import {
 import { Badge, Button, Input, Label, Select, Spinner, Textarea } from '../../system/ui'
 import { EmptyState, ErrorState } from '../../system/EmptyState'
 import { ConfirmModal } from '../../system/Modal'
-import { useCharacters, useCharacterMutations } from '../../lib/queries'
+import { VersionHistoryButton, VersionHistoryModal } from '../production/VersionHistoryModal'
+import { useCharacters, useCharacterMutations, useApprovalTransition } from '../../lib/queries'
 import { toast } from '../../store/appStore'
 
 const ROLE_LABEL: Record<string, string> = {
@@ -131,6 +132,8 @@ export function CharactersPage() {
 
 function CharacterEditor({ character }: { character: CharacterRecord }) {
   const mutations = useCharacterMutations()
+  const approval = useApprovalTransition()
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [form, setForm] = useState({
     name: character.name,
     role: character.role,
@@ -190,8 +193,12 @@ function CharacterEditor({ character }: { character: CharacterRecord }) {
         <div className="flex items-center gap-2">
           <Badge tone={form.status === 'DRAFT' ? 'neutral' : 'accent'}>{form.status}</Badge>
           {dirty && <span className="text-[10px] font-semibold text-mirai-accent">Unsaved changes</span>}
+          {(character.status === 'LOCKED' || character.status === 'FINAL') && (
+            <Badge tone="accent">{character.status} — edits need a revision loop</Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          <VersionHistoryButton onClick={() => setHistoryOpen(true)} />
           <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(true)}>
             <Trash2 className="h-3.5 w-3.5" /> Delete
           </Button>
@@ -230,20 +237,53 @@ function CharacterEditor({ character }: { character: CharacterRecord }) {
           <Field label="Goals" hint="What drives them." value={form.goals} onChange={(v) => set('goals', v)} rows={2} id="ch-goals" />
           <Field label="Fears" hint="What stops them." value={form.fears} onChange={(v) => set('fears', v)} rows={2} id="ch-fears" />
           <div>
-            <Label htmlFor="ch-status">Status</Label>
-            <Select id="ch-status" value={form.status} onChange={(e) => set('status', e.target.value)}>
+            <Label htmlFor="ch-status">Status (governed pipeline)</Label>
+            <Select
+              id="ch-status"
+              value={form.status}
+              onChange={(e) => {
+                const toStatus = e.target.value
+                const from = form.status
+                set('status', toStatus)
+                // Every change goes through the audited approval pipeline.
+                approval.mutate(
+                  {
+                    entityType: 'CHARACTER',
+                    entityId: character.id,
+                    toStatus,
+                    actorName: 'Director',
+                  },
+                  {
+                    onError: (err) => {
+                      set('status', from)
+                      toast({ kind: 'error', title: 'Transition blocked', description: err.message })
+                    },
+                  },
+                )
+              }}
+            >
               {ASSET_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
               ))}
             </Select>
-            <p className="mt-1 text-[10px] text-mirai-faint">LOCKED/FINAL characters warn on edits (Phase 7).</p>
+            <p className="mt-1 text-[10px] text-mirai-faint">
+              Transitions are validated & logged — see Production → Approvals.
+            </p>
           </div>
         </div>
         <Field label="Biography" hint="Their story so far." value={form.bio} onChange={(v) => set('bio', v)} rows={5} id="ch-bio" />
         <Field label="Notes" hint="Anything else — continuity details, trivia." value={form.notes} onChange={(v) => set('notes', v)} rows={3} id="ch-notes" />
       </div>
+
+      <VersionHistoryModal
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        entityType="CHARACTER"
+        entityId={character.id}
+        entityLabel={character.name}
+      />
 
       <ConfirmModal
         open={confirmDelete}

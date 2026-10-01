@@ -769,6 +769,95 @@ async function main(): Promise<void> {
     console.log(`    (real MP4: ${probed.toFixed(2)}s, ${(result.fileBytes / 1024).toFixed(0)} KB)`)
   })
 
+  // ---- Phase 7: Production suite --------------------------------------------
+  await step('TASKS: board CRUD, column moves and crew assignment', () => {
+    const director = tctx!.production.createCrewMember('Yua', 'DIRECTOR')
+    const task = tctx!.production.createTask({
+      title: 'Approve the rooftop scene',
+      priority: 'HIGH',
+      linkType: 'SCENE',
+      linkId: timelineScene,
+      assigneeId: director.id,
+    })
+    if (task.status !== 'TODO' || task.assigneeId !== director.id) throw new Error('task shape broken')
+
+    const moved = tctx!.production.setTaskStatus(task.id, 'IN_PROGRESS')
+    if (moved.status !== 'IN_PROGRESS') throw new Error('column move failed')
+    if (tctx!.production.listTasks('TODO').length !== 0) throw new Error('filter broken')
+
+    // Crew deletion unassigns but keeps the task.
+    tctx!.production.deleteCrewMember(director.id)
+    if (tctx!.production.getTask(task.id).assigneeId !== null) throw new Error('unassign failed')
+    tctx!.production.deleteTask(task.id)
+    if (tctx!.production.listTasks().length !== 0) throw new Error('delete failed')
+  })
+
+  await step('APPROVALS: governed pipeline with audit trail', () => {
+    const character = tctx!.creative.listCharacters()[0]!
+    // DRAFT → REVIEW → APPROVED (forward steps allowed)…
+    tctx!.production.transition('CHARACTER', character.id, 'REVIEW', 'Ready for review', 'Yua')
+    tctx!.production.transition('CHARACTER', character.id, 'APPROVED', 'Design locked')
+    if (tctx!.creative.getCharacter(character.id).status !== 'APPROVED') throw new Error('status not persisted')
+    // …but skipping steps is blocked (APPROVED → FINAL without LOCKED).
+    let blocked = false
+    try {
+      tctx!.production.transition('CHARACTER', character.id, 'FINAL')
+    } catch {
+      blocked = true
+    }
+    if (!blocked) throw new Error('pipeline skip not blocked')
+    // Backward revision loops are free.
+    tctx!.production.transition('CHARACTER', character.id, 'REVISION', 'Change the hair')
+    if (tctx!.creative.getCharacter(character.id).status !== 'REVISION') throw new Error('revision failed')
+    // Scenes use the production pipeline.
+    tctx!.production.transition('SCENE', timelineScene, 'IN_PROGRESS')
+    tctx!.production.transition('SCENE', timelineScene, 'REVIEW')
+    tctx!.production.transition('SCENE', timelineScene, 'APPROVED')
+    if (tctx!.creative.getSceneById(timelineScene).status !== 'APPROVED') throw new Error('scene pipeline broken')
+    // Audit log recorded everything.
+    const log = tctx!.production.listApprovals()
+    if (log.length < 6) throw new Error('audit trail incomplete')
+    if (!log.some((e) => e.note === 'Design locked')) throw new Error('notes lost')
+  })
+
+  await step('VERSIONS: snapshot → edit → diff → restore never loses work', () => {
+    const character = tctx!.creative.listCharacters()[0]!
+    const v1 = tctx!.production.snapshotVersion('CHARACTER', character.id, 'before redesign')
+    if (v1.version !== 1) throw new Error('first version must be 1')
+    tctx!.creative.updateCharacter(character.id, {
+      name: character.name,
+      role: character.role,
+      appearance: 'Redesigned look.',
+    })
+    const v2 = tctx!.production.snapshotVersion('CHARACTER', character.id)
+    const diff = tctx!.production.diffVersions(v1.id, v2.id)
+    if (!diff.some((d) => d.field === 'appearance' && d.to === 'Redesigned look.')) {
+      throw new Error('diff lost the change')
+    }
+    tctx!.production.restoreVersion(v1.id)
+    const restored = tctx!.creative.getCharacter(character.id)
+    if (restored.appearance === 'Redesigned look.') throw new Error('restore did not revert')
+    const versions = tctx!.production.listVersions('CHARACTER', character.id)
+    if (versions.length !== 3) throw new Error('safety snapshot missing')
+    if (versions[0]!.label !== 'auto — before restore') throw new Error('safety label wrong')
+  })
+
+  await step('QC + ANALYTICS: real production intelligence', () => {
+    const report = tctx!.production.runQc()
+    if (report.findings.length === 0) throw new Error('QC found nothing (expected gaps)')
+    if (report.findings.some((f) => f.checkId === 'scene-no-timeline')) {
+      throw new Error('built scene flagged as timeline-less')
+    }
+    const analytics = tctx!.production.overview()
+    if (analytics.episodes.total !== 1) throw new Error('episode count wrong')
+    if (analytics.scenes.total < 1) throw new Error('scene count wrong')
+    if (analytics.shots.total < 2) throw new Error('shot count wrong')
+    if (analytics.shots.withFrame < 2) throw new Error('frames not counted')
+    if (analytics.approvals.events < 6) throw new Error('approval events not counted')
+    if (analytics.versions.total < 3) throw new Error('versions not counted')
+    if (analytics.crew.total !== 0) throw new Error('crew should be empty after cleanup')
+  })
+
   await step('SHORTCUTS: configurable bindings persist and stay valid', () => {
     const settings = new SettingsService(appDb)
     const base = settings.get()

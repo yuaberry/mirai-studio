@@ -594,6 +594,73 @@ export function registerIpcHandlers(c: Container): void {
     return { ok: true }
   })
 
+  // ---- Production suite (Phase 7) ---------------------------------------------
+  handleIpc('tasks:list', (req) => ({ tasks: requireActive(c).production.listTasks(req.status) }))
+
+  handleIpc('tasks:create', (req) => ({ task: requireActive(c).production.createTask(req) }))
+
+  handleIpc('tasks:update', (req) => ({
+    task: requireActive(c).production.updateTask(req.id, req.patch),
+  }))
+
+  handleIpc('tasks:setStatus', (req) => ({
+    task: requireActive(c).production.setTaskStatus(req.id, req.status),
+  }))
+
+  handleIpc('tasks:delete', (req) => {
+    requireActive(c).production.deleteTask(req.id)
+    return { ok: true }
+  })
+
+  handleIpc('crew:list', () => ({ members: requireActive(c).production.listCrew() }))
+
+  handleIpc('crew:create', (req) => ({
+    member: requireActive(c).production.createCrewMember(req.name, req.role),
+  }))
+
+  handleIpc('crew:delete', (req) => {
+    requireActive(c).production.deleteCrewMember(req.id)
+    return { ok: true }
+  })
+
+  handleIpc('approvals:transition', (req) => {
+    const event = requireActive(c).production.transition(
+      req.entityType,
+      req.entityId,
+      req.toStatus,
+      req.note,
+      req.actorName,
+    )
+    c.logger.info('PROJECT', `Approval: ${req.entityType} ${event.fromStatus} → ${event.toStatus}`, {
+      entityId: req.entityId,
+    })
+    return { event }
+  })
+
+  handleIpc('approvals:log', (req) => ({
+    events: requireActive(c).production.listApprovals(req.entityType, req.entityId),
+  }))
+
+  handleIpc('versions:list', (req) => ({
+    versions: requireActive(c).production.listVersions(req.entityType, req.entityId),
+  }))
+
+  handleIpc('versions:snapshot', (req) => ({
+    version: requireActive(c).production.snapshotVersion(req.entityType, req.entityId, req.label),
+  }))
+
+  handleIpc('versions:restore', (req) => ({
+    version: requireActive(c).production.restoreVersion(req.versionId),
+  }))
+
+  handleIpc('versions:diff', (req) => ({
+    entries: requireActive(c).production.diffVersions(req.fromVersionId, req.toVersionId),
+  }))
+
+  handleIpc('qc:run', () => ({ report: requireActive(c).production.runQc() }))
+
+  handleIpc('analytics:overview', () => ({ analytics: requireActive(c).production.overview() }))
+
   // ---- Voice import (Phase 4) -------------------------------------------------
   handleIpc('media:importVoice', async (req) => {
     const ctx = requireActive(c)

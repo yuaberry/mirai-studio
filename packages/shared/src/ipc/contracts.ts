@@ -8,6 +8,7 @@
  */
 import { z } from 'zod'
 import { zEntityId, zIsoDate } from '../ids'
+import { zTaskStatus } from '../status'
 import { type ErrorPayload } from '../errors'
 import { AppSettings, zCredentialKey } from '../entities/settings'
 import { JobRecord } from '../entities/job'
@@ -36,6 +37,21 @@ import { PromptInput, PromptRecord } from '../entities/prompt'
 import { AssetRecord, ShotInput, ShotRecord, StyleBible } from '../entities/storyboard'
 import { MediaTrack, SceneMedia, zMediaKind, zMediaRole } from '../entities/media'
 import { RenderOutput, zRenderQuality, DEFAULT_PRESET_ID } from '../entities/export'
+import {
+  ApprovalEvent,
+  ApprovalTransitionInput,
+  CrewCreateInput,
+  CrewMember,
+  EntityVersion,
+  ProductionAnalytics,
+  QcReport,
+  TaskCreateInput,
+  TaskPatch,
+  TaskRecord,
+  VersionDiffEntry,
+  zApprovalEntityType,
+  zVersionableEntityType,
+} from '../entities/production'
 import {
   ClipCreateInput,
   ClipMoveInput,
@@ -444,6 +460,78 @@ export const ipcContracts = {
       available: z.boolean(),
       version: z.string().nullable(),
     }),
+  },
+
+  // ---- Production suite (Phase 7) -------------------------------------------
+  'tasks:list': {
+    request: z.object({ status: zTaskStatus.optional() }).default({}),
+    response: z.object({ tasks: z.array(TaskRecord) }),
+  },
+  'tasks:create': {
+    request: TaskCreateInput,
+    response: z.object({ task: TaskRecord }),
+  },
+  'tasks:update': {
+    request: z.object({ id: zEntityId, patch: TaskPatch }),
+    response: z.object({ task: TaskRecord }),
+  },
+  'tasks:setStatus': {
+    request: z.object({ id: zEntityId, status: zTaskStatus }),
+    response: z.object({ task: TaskRecord }),
+  },
+  'tasks:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'crew:list': {
+    request: emptyRequest,
+    response: z.object({ members: z.array(CrewMember) }),
+  },
+  'crew:create': {
+    request: CrewCreateInput,
+    response: z.object({ member: CrewMember }),
+  },
+  'crew:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'approvals:transition': {
+    request: ApprovalTransitionInput,
+    response: z.object({ event: ApprovalEvent }),
+  },
+  'approvals:log': {
+    request: z
+      .object({ entityType: zApprovalEntityType.optional(), entityId: zEntityId.optional() })
+      .default({}),
+    response: z.object({ events: z.array(ApprovalEvent) }),
+  },
+  'versions:list': {
+    request: z.object({ entityType: zVersionableEntityType, entityId: zEntityId }),
+    response: z.object({ versions: z.array(EntityVersion) }),
+  },
+  'versions:snapshot': {
+    request: z.object({
+      entityType: zVersionableEntityType,
+      entityId: zEntityId,
+      label: z.string().min(1).max(200).optional(),
+    }),
+    response: z.object({ version: EntityVersion }),
+  },
+  'versions:restore': {
+    request: z.object({ versionId: zEntityId }),
+    response: z.object({ version: EntityVersion }),
+  },
+  'versions:diff': {
+    request: z.object({ fromVersionId: zEntityId, toVersionId: zEntityId }),
+    response: z.object({ entries: z.array(VersionDiffEntry) }),
+  },
+  'qc:run': {
+    request: emptyRequest,
+    response: z.object({ report: QcReport }),
+  },
+  'analytics:overview': {
+    request: emptyRequest,
+    response: z.object({ analytics: ProductionAnalytics }),
   },
 
   // ---- Timeline & Editing (Phase 5) ----------------------------------------

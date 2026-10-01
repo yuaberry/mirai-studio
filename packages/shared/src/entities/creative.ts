@@ -36,6 +36,8 @@ export const zCharacterRole = z.enum(CHARACTER_ROLES)
 export const CharacterInput = z.object({
   name: z.string().min(1, 'Name is required').max(80),
   role: zCharacterRole.default('SUPPORTING'),
+  /** Approval pipeline status (preserved on update when omitted). */
+  status: zAssetStatus.optional(),
   age: z.string().max(40).optional(),
   personality: z.string().max(4_000).optional(),
   appearance: z.string().max(4_000).optional(),
@@ -55,6 +57,7 @@ export const Character = CharacterInput.extend({
 
 export const LocationInput = z.object({
   name: z.string().min(1, 'Name is required').max(120),
+  status: zAssetStatus.optional(),
   description: z.string().max(8_000).optional(),
   climate: z.string().max(2_000).optional(),
   architecture: z.string().max(4_000).optional(),
@@ -73,6 +76,7 @@ export const EpisodeInput = z.object({
   number: z.number().int().min(0).max(10_000),
   title: z.string().min(1, 'Title is required').max(120),
   synopsis: z.string().max(8_000).optional(),
+  status: zTaskStatus.optional(),
 })
 export type EpisodeInput = z.input<typeof EpisodeInput>
 
@@ -106,6 +110,7 @@ export const SceneInput = z.object({
   characterIds: z.array(z.string()).max(50).default([]),
   synopsis: z.string().max(8_000).optional(),
   screenplay: z.string().max(120_000).optional(),
+  status: zTaskStatus.optional(),
 })
 export type SceneInput = z.input<typeof SceneInput>
 

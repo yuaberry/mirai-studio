@@ -80,6 +80,7 @@ export const ShotInput = z.object({
   durationSeconds: z.number().min(0.1).max(600).default(3),
   dialogue: z.string().max(8_000).optional(),
   notes: z.string().max(8_000).optional(),
+  status: zTaskStatus.optional(),
 })
 export type ShotInput = z.input<typeof ShotInput>
 

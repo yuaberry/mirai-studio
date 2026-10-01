@@ -49,6 +49,7 @@ import {
   useRenderShot,
   assetUrl,
 } from '../../lib/queries'
+import { VersionHistoryButton, VersionHistoryModal } from '../production/VersionHistoryModal'
 import { toast } from '../../store/appStore'
 
 export function StoryboardPage() {
@@ -379,6 +380,7 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
     status: shot.status,
   })
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const dirty =
     form.title !== shot.title ||
@@ -466,6 +468,7 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
       <div className="mb-3 flex items-center justify-between">
         <Badge tone="accent">Shot {shot.orderIndex + 1}</Badge>
         <div className="flex items-center gap-1.5">
+          <VersionHistoryButton onClick={() => setHistoryOpen(true)} />
           <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(true)}>
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
@@ -712,6 +715,14 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
           </Select>
         </div>
       </div>
+
+      <VersionHistoryModal
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        entityType="SHOT"
+        entityId={shot.id}
+        entityLabel={shot.title}
+      />
 
       <ConfirmModal
         open={confirmDelete}

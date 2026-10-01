@@ -163,13 +163,13 @@ export class CreativeService {
   }
 
   updateCharacter(id: EntityId, input: z.input<typeof CharacterInput>): CharacterRecord {
-    this.requireCharacter(id)
+    const existing = this.requireCharacter(id)
     const parsed = parseWith(CharacterInput, input, 'character')
     this.db
       .prepare(
         `UPDATE characters SET
            name = ?, role = ?, age = ?, personality = ?, appearance = ?,
-           voice = ?, bio = ?, goals = ?, fears = ?, notes = ?, updated_at = ?
+           voice = ?, bio = ?, goals = ?, fears = ?, notes = ?, status = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -183,6 +183,7 @@ export class CreativeService {
         parsed.goals ?? null,
         parsed.fears ?? null,
         parsed.notes ?? null,
+        parsed.status ?? existing.status,
         this.clock.isoNow(),
         id,
       )
@@ -236,12 +237,12 @@ export class CreativeService {
   }
 
   updateLocation(id: EntityId, input: z.input<typeof LocationInput>): LocationRecord {
-    this.requireLocation(id)
+    const existing = this.requireLocation(id)
     const parsed = parseWith(LocationInput, input, 'location')
     this.db
       .prepare(
         `UPDATE locations SET
-           name = ?, description = ?, climate = ?, architecture = ?, notes = ?, updated_at = ?
+           name = ?, description = ?, climate = ?, architecture = ?, notes = ?, status = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -250,6 +251,7 @@ export class CreativeService {
         parsed.climate ?? null,
         parsed.architecture ?? null,
         parsed.notes ?? null,
+        parsed.status ?? existing.status,
         this.clock.isoNow(),
         id,
       )
@@ -318,12 +320,12 @@ export class CreativeService {
   }
 
   updateEpisode(id: EntityId, input: z.input<typeof EpisodeInput>): EpisodeRecord {
-    this.requireEpisode(id)
+    const existing = this.requireEpisode(id)
     const parsed = parseWith(EpisodeInput, input, 'episode')
     try {
       this.db
         .prepare(
-          `UPDATE episodes SET season = ?, number = ?, title = ?, synopsis = ?, updated_at = ?
+          `UPDATE episodes SET season = ?, number = ?, title = ?, synopsis = ?, status = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(
@@ -331,6 +333,7 @@ export class CreativeService {
           parsed.number,
           parsed.title,
           parsed.synopsis ?? null,
+          parsed.status ?? existing.status,
           this.clock.isoNow(),
           id,
         )
@@ -377,6 +380,16 @@ export class CreativeService {
   /** Look up a single episode (used by the render/export pipeline). */
   getEpisodeById(id: EntityId): EpisodeRecord {
     return this.requireEpisode(id)
+  }
+
+  /** Look up a single character (used by approvals/versioning). */
+  getCharacter(id: EntityId): CharacterRecord {
+    return this.requireCharacter(id)
+  }
+
+  /** Look up a single location (used by approvals/versioning). */
+  getLocation(id: EntityId): LocationRecord {
+    return this.requireLocation(id)
   }
 
   /** Look up a location name (used by AI context building). */
@@ -428,7 +441,7 @@ export class CreativeService {
   }
 
   updateScene(id: EntityId, input: z.input<typeof SceneInput>): SceneRecord {
-    this.requireScene(id)
+    const existing = this.requireScene(id)
     const parsed = parseWith(SceneInput, input, 'scene')
     this.assertLocationExists(parsed.locationId)
     for (const characterId of parsed.characterIds) this.requireCharacter(characterId)
@@ -437,7 +450,7 @@ export class CreativeService {
       this.db
         .prepare(
           `UPDATE scenes SET
-             title = ?, location_id = ?, time_of_day = ?, synopsis = ?, screenplay = ?, updated_at = ?
+             title = ?, location_id = ?, time_of_day = ?, synopsis = ?, screenplay = ?, status = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(
@@ -446,6 +459,7 @@ export class CreativeService {
           parsed.timeOfDay,
           parsed.synopsis ?? null,
           parsed.screenplay ?? null,
+          parsed.status ?? existing.status,
           this.clock.isoNow(),
           id,
         )

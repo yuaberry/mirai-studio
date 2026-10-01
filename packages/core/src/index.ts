@@ -46,6 +46,9 @@ export { RenderService } from './render/renderService'
 export { TimelineService } from './timeline/timelineService'
 export { KeyframeService } from './timeline/keyframeService'
 
+// production (Phase 7)
+export { ProductionService } from './production/productionService'
+
 // settings
 export { SettingsService, CredentialStore } from './settings/settingsService'
 export type { CredentialStatus } from './settings/settingsService'

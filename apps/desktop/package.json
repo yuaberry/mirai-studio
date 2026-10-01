@@ -1,6 +1,6 @@
 {
   "name": "@mirai/desktop",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Mirai Studio \u2014 desktop application (Electron + React)",
   "author": "Mirai Studio Developers",

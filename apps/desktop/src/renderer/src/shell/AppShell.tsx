@@ -7,6 +7,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   Activity,
   AudioWaveform,
+  BarChart3,
   FileVideo,
   BookOpen,
   Building2,
@@ -46,6 +47,7 @@ import { useSettings } from '../lib/queries'
 import { registerShortcutHandler, useShortcutDispatcher } from '../lib/shortcuts'
 import { TimelinePage } from '../modules/timeline/TimelinePage'
 import { RenderPage } from '../modules/render/RenderPage'
+import { ProductionPage } from '../modules/production/ProductionPage'
 import { StatusBar } from './StatusBar'
 import { CommandPalette } from './CommandPalette'
 import { ProjectHeader } from './ProjectHeader'
@@ -67,6 +69,7 @@ const PROJECT_NAV: ReadonlyArray<{ view: MainView; label: string; icon: LucideIc
   { view: 'storyboard', label: 'Storyboard', icon: LayoutGrid },
   { view: 'timeline', label: 'Timeline', icon: AudioWaveform },
   { view: 'render', label: 'Render & Export', icon: FileVideo },
+  { view: 'production', label: 'Production', icon: BarChart3 },
   { view: 'media', label: 'Media Library', icon: Disc3 },
   { view: 'prompts', label: 'Prompt Library', icon: Wand2 },
   { view: 'assist', label: 'AI Assist', icon: Sparkles },
@@ -188,6 +191,7 @@ export function AppShell() {
           {view === 'storyboard' && <StoryboardPage />}
           {view === 'timeline' && <TimelinePage />}
           {view === 'render' && <RenderPage />}
+          {view === 'production' && <ProductionPage />}
           {view === 'style' && <StyleBiblePage />}
           {view === 'media' && <MediaLibraryPage />}
           {view === 'prompts' && <PromptLibraryPage />}

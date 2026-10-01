@@ -848,3 +848,174 @@ export function useKeyframeMutations() {
     }),
   }
 }
+
+// ---------------------------------------------------------------- production (Phase 7)
+
+export const productionKeys = {
+  tasks: (status?: string) => ['tasks', status ?? 'all'] as const,
+  crew: ['crew'] as const,
+  approvals: (entityType?: string, entityId?: string) =>
+    ['approvals', entityType ?? 'all', entityId ?? 'all'] as const,
+  versions: (entityType: string, entityId: string) => ['versions', entityType, entityId] as const,
+  qc: ['qc'] as const,
+  analytics: ['analytics'] as const,
+}
+
+export function useTasks(status?: import('@mirai/shared').TaskStatus) {
+  return useQuery({
+    queryKey: productionKeys.tasks(status),
+    queryFn: () =>
+      invoke('tasks:list', status ? { status } : {}).then(
+        (r) => r.tasks as import('@mirai/shared').TaskRecord[],
+      ),
+  })
+}
+
+export function useTaskMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+    void queryClient.invalidateQueries({ queryKey: productionKeys.analytics })
+  }
+  return {
+    create: useMutation({
+      mutationFn: (input: import('@mirai/shared').TaskCreateInput) =>
+        invoke('tasks:create', input).then((r) => r.task),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: (input: { id: string; patch: import('@mirai/shared').TaskPatch }) =>
+        invoke('tasks:update', input).then((r) => r.task),
+      onSuccess: invalidate,
+    }),
+    setStatus: useMutation({
+      mutationFn: (input: { id: string; status: import('@mirai/shared').TaskStatus }) =>
+        invoke('tasks:setStatus', input).then((r) => r.task),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => invoke('tasks:delete', { id }).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+  }
+}
+
+export function useCrew() {
+  return useQuery({
+    queryKey: productionKeys.crew,
+    queryFn: () =>
+      invoke('crew:list').then((r) => r.members as import('@mirai/shared').CrewMember[]),
+  })
+}
+
+export function useCrewMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: productionKeys.crew })
+    void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+  }
+  return {
+    create: useMutation({
+      mutationFn: (input: { name: string; role: import('@mirai/shared').CrewRole }) =>
+        invoke('crew:create', input).then((r) => r.member),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => invoke('crew:delete', { id }).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+  }
+}
+
+export function useApprovals(entityType?: import('@mirai/shared').ApprovalEntityType, entityId?: string) {
+  return useQuery({
+    queryKey: productionKeys.approvals(entityType, entityId),
+    queryFn: () =>
+      invoke('approvals:log', entityType ? { entityType, entityId } : {}).then(
+        (r) => r.events as import('@mirai/shared').ApprovalEvent[],
+      ),
+  })
+}
+
+export function useApprovalTransition() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      entityType: import('@mirai/shared').ApprovalEntityType
+      entityId: string
+      toStatus: string
+      note?: string
+      actorName?: string
+    }) => invoke('approvals:transition', input).then((r) => r.event),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['approvals'] })
+      void queryClient.invalidateQueries({ queryKey: ['characters'] })
+      void queryClient.invalidateQueries({ queryKey: ['locations'] })
+      void queryClient.invalidateQueries({ queryKey: ['scenes'] })
+      void queryClient.invalidateQueries({ queryKey: ['shots'] })
+      void queryClient.invalidateQueries({ queryKey: ['episodes'] })
+      void queryClient.invalidateQueries({ queryKey: ['timeline'] })
+      void queryClient.invalidateQueries({ queryKey: productionKeys.analytics })
+    },
+  })
+}
+
+export function useVersions(entityType: import('@mirai/shared').VersionableEntityType, entityId: string | undefined) {
+  return useQuery({
+    queryKey: productionKeys.versions(entityType, entityId ?? 'none'),
+    queryFn: () =>
+      invoke('versions:list', { entityType, entityId: entityId! }).then(
+        (r) => r.versions as import('@mirai/shared').EntityVersion[],
+      ),
+    enabled: entityId !== undefined,
+  })
+}
+
+export function useVersionMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['versions'] })
+    void queryClient.invalidateQueries({ queryKey: ['characters'] })
+    void queryClient.invalidateQueries({ queryKey: ['locations'] })
+    void queryClient.invalidateQueries({ queryKey: ['scenes'] })
+    void queryClient.invalidateQueries({ queryKey: ['shots'] })
+    void queryClient.invalidateQueries({ queryKey: ['style-bible'] })
+    void queryClient.invalidateQueries({ queryKey: productionKeys.analytics })
+  }
+  return {
+    snapshot: useMutation({
+      mutationFn: (input: {
+        entityType: import('@mirai/shared').VersionableEntityType
+        entityId: string
+        label?: string
+      }) => invoke('versions:snapshot', input).then((r) => r.version),
+      onSuccess: invalidate,
+    }),
+    restore: useMutation({
+      mutationFn: (versionId: string) => invoke('versions:restore', { versionId }).then((r) => r.version),
+      onSuccess: invalidate,
+    }),
+    diff: useMutation({
+      mutationFn: (input: { fromVersionId: string; toVersionId: string }) =>
+        invoke('versions:diff', input).then(
+          (r) => r.entries as import('@mirai/shared').VersionDiffEntry[],
+        ),
+    }),
+  }
+}
+
+export function useQc() {
+  return useQuery({
+    queryKey: productionKeys.qc,
+    queryFn: () => invoke('qc:run').then((r) => r.report as import('@mirai/shared').QcReport),
+    staleTime: 0,
+  })
+}
+
+export function useAnalytics() {
+  return useQuery({
+    queryKey: productionKeys.analytics,
+    queryFn: () =>
+      invoke('analytics:overview').then((r) => r.analytics as import('@mirai/shared').ProductionAnalytics),
+  })
+}

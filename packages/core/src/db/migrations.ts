@@ -303,4 +303,59 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0008_production',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE tasks (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT,
+          status TEXT NOT NULL DEFAULT 'TODO',
+          priority TEXT NOT NULL DEFAULT 'NORMAL',
+          order_index INTEGER NOT NULL DEFAULT 0,
+          link_type TEXT,
+          link_id TEXT,
+          assignee_id TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_tasks_status ON tasks (status, order_index);
+
+        CREATE TABLE crew_members (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          role TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE approval_events (
+          id TEXT PRIMARY KEY,
+          entity_type TEXT NOT NULL,
+          entity_id TEXT NOT NULL,
+          from_status TEXT NOT NULL,
+          to_status TEXT NOT NULL,
+          note TEXT,
+          actor_name TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_approval_events_entity ON approval_events (entity_type, entity_id, created_at);
+
+        CREATE TABLE entity_versions (
+          id TEXT PRIMARY KEY,
+          entity_type TEXT NOT NULL,
+          entity_id TEXT NOT NULL,
+          version INTEGER NOT NULL,
+          label TEXT,
+          snapshot TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          UNIQUE (entity_type, entity_id, version)
+        );
+
+        CREATE INDEX idx_entity_versions_entity ON entity_versions (entity_type, entity_id, version);
+      `)
+    },
+  },
 ]

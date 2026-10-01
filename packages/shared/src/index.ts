@@ -180,6 +180,53 @@ export type {
 } from './entities/timeline'
 
 export {
+  // tasks
+  TASK_PRIORITIES,
+  PRIORITY_LABEL,
+  TASK_LINK_TYPES,
+  TaskRecord,
+  TaskCreateInput,
+  TaskPatch,
+  zTaskPriority,
+  zTaskLinkType,
+  // crew
+  CREW_ROLES,
+  CREW_ROLE_LABEL,
+  CrewMember,
+  CrewCreateInput,
+  zCrewRole,
+  // approvals
+  APPROVAL_ENTITY_TYPES,
+  APPROVAL_ENTITY_LABEL,
+  APPROVAL_PIPELINES,
+  APPROVAL_TRANSITIONS,
+  isTransitionAllowed,
+  ApprovalEvent,
+  ApprovalTransitionInput,
+  ApprovalPosition,
+  zApprovalEntityType,
+  // versioning
+  VERSIONABLE_ENTITY_TYPES,
+  EntityVersion,
+  VersionDiffEntry,
+  zVersionableEntityType,
+  // qc + analytics
+  QC_SEVERITIES,
+  QcFinding,
+  QcReport,
+  ProductionAnalytics,
+  zQcSeverity,
+} from './entities/production'
+export type {
+  TaskPriority,
+  TaskLinkType,
+  CrewRole,
+  ApprovalEntityType,
+  VersionableEntityType,
+  QcSeverity,
+} from './entities/production'
+
+export {
   RENDER_QUALITIES,
   QUALITY_LABEL,
   EXPORT_PRESETS,

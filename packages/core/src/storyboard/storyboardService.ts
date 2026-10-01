@@ -138,14 +138,14 @@ export class StoryboardService {
   }
 
   updateShot(id: EntityId, input: z.input<typeof ShotInput>): ShotRecord {
-    this.requireShot(id)
+    const existing = this.requireShot(id)
     const parsed = parseShotInput(input)
     const now = this.clock.isoNow()
     this.db
       .prepare(
         `UPDATE shots SET
            title = ?, shot_type = ?, lens = ?, camera_movement = ?,
-           duration_seconds = ?, dialogue = ?, notes = ?, updated_at = ?
+           duration_seconds = ?, dialogue = ?, notes = ?, status = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -156,6 +156,7 @@ export class StoryboardService {
         parsed.durationSeconds,
         parsed.dialogue ?? null,
         parsed.notes ?? null,
+        parsed.status ?? existing.status,
         now,
         id,
       )
