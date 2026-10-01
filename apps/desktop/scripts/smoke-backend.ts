@@ -34,7 +34,16 @@ import {
   buildSystemPrompt,
   buildImagePrompt,
 } from '@mirai/ai'
-import { ProjectConfig, PROJECT_PRESETS, type FetchResponse } from '@mirai/shared'
+import {
+  ProjectConfig,
+  PROJECT_PRESETS,
+  effectiveShortcuts,
+  normalizeCombo,
+  prettyCombo,
+  sampleCamera,
+  sampleCurve,
+  type FetchResponse,
+} from '@mirai/shared'
 
 const steps: Array<{ name: string; ok: boolean; detail?: string }> = []
 let current = ''
@@ -496,6 +505,158 @@ async function main(): Promise<void> {
     projects.removeFromList(summary.id)
     if (projects.list().some((p) => p.id === summary.id)) throw new Error('still listed')
     if (!existsSync(summary.path)) throw new Error('files were deleted — forbidden!')
+  })
+
+  // ---- Phase 5: Timeline & Editing ------------------------------------------
+  // The ARCHIVE step closed the project — reopen it for the editing checks.
+  let tctx: Awaited<ReturnType<typeof projects.open>> | null = null
+  let timelineScene = ''
+  let timelineMusicId = ''
+  await step('TIMELINE: build assembles real tracks/clips from scene content', async () => {
+    tctx = await projects.open(summary.path)
+    const episode = tctx.creative.listEpisodes()[0]!
+    const scene = tctx.creative.listScenes(episode.id)[0]!
+    timelineScene = scene.id
+    // Real music for the scene assignment.
+    const mp3 = join(root, 'smoke-bgm.mp3')
+    writeFileSync(mp3, Buffer.alloc(1024, 0x33))
+    const music = tctx.media.import('MUSIC', mp3, 'Smoke BGM')
+    tctx.media.assignToScene(scene.id, music.id, 'BACKGROUND', 1)
+    timelineMusicId = music.id
+
+    const bundle = tctx.timeline.buildFromScene(scene.id, true)
+    const kinds = bundle.tracks.map((t) => t.kind)
+    if (!kinds.includes('VIDEO') || !kinds.includes('VOICE') || !kinds.includes('MUSIC')) {
+      throw new Error(`expected VIDEO/VOICE/MUSIC tracks, got ${kinds.join(',')}`)
+    }
+    const shots = tctx.storyboard.listShots(scene.id)
+    const videoTrack = bundle.tracks.find((t) => t.kind === 'VIDEO')!
+    const videoClips = bundle.clips.filter((c) => c.trackId === videoTrack.id)
+    if (videoClips.length !== shots.length) throw new Error('one clip per shot expected')
+    // Sequential placement: 0, d1, d1+d2…
+    let cursor = 0
+    for (const clip of videoClips) {
+      if (Math.abs(clip.startSec - cursor) > 1e-6) throw new Error('clips not sequential')
+      cursor += clip.durationSec
+    }
+    const musicClip = bundle.clips.find((c) => c.sourceId === timelineMusicId)
+    if (!musicClip || musicClip.startSec !== 0) throw new Error('music clip missing')
+    const shotSource = bundle.sources[shots[0]!.id]
+    if (!shotSource || shotSource.type !== 'SHOT') throw new Error('source not resolved')
+  })
+
+  await step('TIMELINE: move/split obey collision + in-point rules', () => {
+    const bundle = tctx.timeline.getTimeline(timelineScene)
+    const videoTrack = bundle.tracks.find((t) => t.kind === 'VIDEO')!
+    const clips = bundle.clips.filter((c) => c.trackId === videoTrack.id)
+    const first = clips[0]!
+
+    // Move to a free span then block an overlapping move.
+    const moved = tctx.timeline.moveClip(first.id, undefined, 100)
+    if (moved.startSec !== 100) throw new Error('move failed')
+    let blocked = false
+    try {
+      tctx.timeline.moveClip(first.id, undefined, clips[1]!.startSec + 0.5)
+    } catch {
+      blocked = true
+    }
+    if (!blocked) throw new Error('overlap not rejected')
+
+    // Split preserves the in-point.
+    const splitAt = 100.5
+    const { left, right } = tctx.timeline.splitClip(first.id, splitAt)
+    if (right.inOffsetSec !== left.inOffsetSec + left.durationSec) {
+      throw new Error('split in-point math broken')
+    }
+
+    // Ripple delete pulls everything after the deleted clip's end to the left.
+    const before = tctx.timeline.getTimeline(timelineScene)
+    const second = before.clips.find((c) => c.trackId === videoTrack.id && c.startSec > 0 && c.startSec < 100)!
+    const rightBefore = before.clips.find((c) => c.id === right.id)!
+    tctx.timeline.deleteClip(second.id, true)
+    const after = tctx.timeline.getTimeline(timelineScene)
+    const rightAfter = after.clips.find((c) => c.id === right.id)!
+    if (Math.abs(rightAfter.startSec - (rightBefore.startSec - second.durationSec)) > 1e-6) {
+      throw new Error('ripple did not shift the timeline')
+    }
+  })
+
+  await step('TIMELINE: markers + cross-track kind rules are enforced', () => {
+    const marker = tctx.timeline.createMarker(timelineScene, 3.25, 'beat')
+    if (tctx.timeline.listMarkers(timelineScene).every((m) => m.id !== marker.id)) throw new Error('marker lost')
+    tctx.timeline.deleteMarker(marker.id)
+
+    const musicTrack = tctx.timeline.getTimeline(timelineScene).tracks.find((t) => t.kind === 'MUSIC')!
+    let rejected = false
+    try {
+      tctx.timeline.createClip({
+        trackId: musicTrack.id,
+        sourceType: 'SHOT',
+        sourceId: '01HZZZZZZZZZZZZZZZZZZZZZZZZ' as never,
+        startSec: 0,
+        durationSec: 1,
+      })
+    } catch {
+      rejected = true
+    }
+    if (!rejected) throw new Error('shot-on-music-track not rejected')
+
+    const track = tctx.timeline.createTrack(timelineScene, 'SFX', 'Impact FX')
+    const patched = tctx.timeline.updateTrack(track.id, { muted: true, volume: 0.4, pan: -0.5 })
+    if (!patched.muted || patched.pan !== -0.5) throw new Error('track patch broken')
+    tctx.timeline.moveTrack(track.id, 0)
+    if (tctx.timeline.getTimeline(timelineScene).tracks[0]!.id !== track.id) throw new Error('track move broken')
+    tctx.timeline.deleteTrack(track.id)
+  })
+
+  await step('KEYFRAMES: camera + automation curves with every easing', () => {
+    const episode = tctx.creative.listEpisodes()[0]!
+    const scene = tctx.creative.listScenes(episode.id)[0]!
+    const shot = tctx.storyboard.listShots(scene.id)[0]!
+    const kf = tctx.timeline.keyframes
+    kf.upsert({ targetType: 'CAMERA', targetId: shot.id, param: 'scale', atSec: 0, value: 1 })
+    kf.upsert({ targetType: 'CAMERA', targetId: shot.id, param: 'scale', atSec: 4, value: 2, easing: 'bezier', bezier: [0.1, 0, 0.9, 1] })
+    const sameSlot = kf.upsert({ targetType: 'CAMERA', targetId: shot.id, param: 'scale', atSec: 4, value: 2.5 })
+    if (kf.list('CAMERA', shot.id, 'scale').length !== 2) throw new Error('upsert did not replace')
+    if (sameSlot.value !== 2.5) throw new Error('replaced keyframe lost its value')
+
+    const camera = sampleCamera(
+      new Map([['scale', kf.list('CAMERA', shot.id, 'scale')]]),
+      2,
+    )
+    if (camera.scale <= 1 || camera.scale >= 2.5) throw new Error('camera interpolation broken')
+    if (camera.rotation !== 0 || camera.opacity !== 1) throw new Error('camera defaults broken')
+
+    // Clip fade automation + scene-wide keyframe resolution.
+    const bundle = tctx.timeline.getTimeline(scene.id)
+    const voiceTrack = bundle.tracks.find((t) => t.kind === 'VOICE')!
+    const voiceClip = bundle.clips.find((c) => c.trackId === voiceTrack.id)
+    if (voiceClip) {
+      kf.upsert({ targetType: 'CLIP', targetId: voiceClip.id, param: 'volume', atSec: 0, value: 0 })
+      kf.upsert({ targetType: 'CLIP', targetId: voiceClip.id, param: 'volume', atSec: 1, value: 1 })
+      const at = sampleCurve(kf.list('CLIP', voiceClip.id, 'volume'), 0.5)
+      if (at === null || at < 0.3 || at > 0.7) throw new Error('fade curve broken')
+    }
+    const sceneKfs = tctx.timeline.keyframesForScene(scene.id)
+    if (sceneKfs.length === 0) throw new Error('scene keyframes empty')
+  })
+
+  await step('SHORTCUTS: configurable bindings persist and stay valid', () => {
+    const settings = new SettingsService(appDb)
+    const base = settings.get()
+    const effective = effectiveShortcuts(base.shortcuts)
+    if (effective['timeline.togglePlay'] !== 'space') throw new Error('defaults missing')
+    // Rebind split to X and confirm persistence + effective map.
+    settings.update({
+      ...base,
+      shortcuts: { ...base.shortcuts, 'timeline.split': 'x' },
+    })
+    const reloaded = new SettingsService(appDb).get()
+    const next = effectiveShortcuts(reloaded.shortcuts)
+    if (next['timeline.split'] !== 'x') throw new Error('rebind lost')
+    if (next['timeline.togglePlay'] !== 'space') throw new Error('defaults clobbered')
+    if (normalizeCombo('Ctrl + SHIFT + S') !== 'ctrl+shift+s') throw new Error('normalization broken')
+    if (prettyCombo('ctrl+k') !== 'Ctrl+K') throw new Error('display formatting broken')
   })
 
   await step('SETTINGS persist across restart', () => {

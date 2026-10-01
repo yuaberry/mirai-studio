@@ -675,3 +675,141 @@ export function useRenderShot() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.jobs }),
   })
 }
+
+// ---------------------------------------------------------------- timeline (Phase 5)
+
+export const timelineKeys = {
+  timeline: (sceneId: string) => ['timeline', sceneId] as const,
+  keyframes: (targetType: string, targetId: string, param?: string) =>
+    ['keyframes', targetType, targetId, param ?? 'all'] as const,
+}
+
+export function useTimeline(sceneId: string | undefined) {
+  return useQuery({
+    queryKey: timelineKeys.timeline(sceneId ?? 'none'),
+    queryFn: () =>
+      invoke('timeline:get', { sceneId: sceneId! }).then(
+        (r) => r.timeline as import('@mirai/shared').TimelineBundle,
+      ),
+    enabled: sceneId !== undefined,
+  })
+}
+
+export function useTimelineMutations(sceneId: string | undefined) {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['timeline'] })
+    void queryClient.invalidateQueries({ queryKey: ['keyframes'] })
+  }
+  return {
+    build: useMutation({
+      mutationFn: (reset: boolean) =>
+        invoke('timeline:build', { sceneId: sceneId!, reset }).then((r) => r.timeline),
+      onSuccess: invalidate,
+    }),
+    reset: useMutation({
+      mutationFn: () => invoke('timeline:reset', { sceneId: sceneId! }).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+    trackCreate: useMutation({
+      mutationFn: (input: { kind: import('@mirai/shared').TrackKind; name?: string }) =>
+        invoke('timeline:trackCreate', { sceneId: sceneId!, ...input }).then((r) => r.track),
+      onSuccess: invalidate,
+    }),
+    trackUpdate: useMutation({
+      mutationFn: (input: { id: string; patch: import('@mirai/shared').TrackPatch }) =>
+        invoke('timeline:trackUpdate', input).then((r) => r.track),
+      onSuccess: invalidate,
+    }),
+    trackDelete: useMutation({
+      mutationFn: (id: string) => invoke('timeline:trackDelete', { id }).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+    trackMove: useMutation({
+      mutationFn: (input: { id: string; toIndex: number }) =>
+        invoke('timeline:trackMove', input).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+    clipCreate: useMutation({
+      mutationFn: (input: import('@mirai/shared').ClipCreateInput) =>
+        invoke('timeline:clipCreate', input).then((r) => r.clip),
+      onSuccess: invalidate,
+    }),
+    clipUpdate: useMutation({
+      mutationFn: (input: { id: string; patch: import('@mirai/shared').ClipPatch }) =>
+        invoke('timeline:clipUpdate', input).then((r) => r.clip),
+      onSuccess: invalidate,
+    }),
+    clipMove: useMutation({
+      mutationFn: (input: { id: string; toTrackId?: string; startSec: number }) =>
+        invoke('timeline:clipMove', input).then((r) => r.clip),
+      onSuccess: invalidate,
+    }),
+    clipSplit: useMutation({
+      mutationFn: (input: { id: string; atSec: number }) =>
+        invoke('timeline:clipSplit', input).then((r) => ({ left: r.left, right: r.right })),
+      onSuccess: invalidate,
+    }),
+    clipDelete: useMutation({
+      mutationFn: (input: { id: string; ripple: boolean }) =>
+        invoke('timeline:clipDelete', input).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+    markerCreate: useMutation({
+      mutationFn: (input: { atSec: number; label: string }) =>
+        invoke('timeline:markerCreate', { sceneId: sceneId!, ...input }).then((r) => r.marker),
+      onSuccess: invalidate,
+    }),
+    markerDelete: useMutation({
+      mutationFn: (id: string) => invoke('timeline:markerDelete', { id }).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+  }
+}
+
+export function useKeyframes(
+  targetType: import('@mirai/shared').KeyframeTarget,
+  targetId: string | undefined,
+  param?: string,
+) {
+  return useQuery({
+    queryKey: timelineKeys.keyframes(targetType, targetId ?? 'none', param),
+    queryFn: () =>
+      invoke('timeline:keyframeList', {
+        targetType,
+        targetId: targetId!,
+        param,
+      }).then((r) => r.keyframes as import('@mirai/shared').KeyframeRecord[]),
+    enabled: targetId !== undefined,
+  })
+}
+
+export function useSceneKeyframes(sceneId: string | undefined) {
+  return useQuery({
+    queryKey: ['keyframes', 'scene', sceneId ?? 'none'],
+    queryFn: () =>
+      invoke('timeline:keyframesForScene', { sceneId: sceneId! }).then(
+        (r) => r.keyframes as import('@mirai/shared').KeyframeRecord[],
+      ),
+    enabled: sceneId !== undefined,
+  })
+}
+
+export function useKeyframeMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['keyframes'] })
+    void queryClient.invalidateQueries({ queryKey: ['timeline'] })
+  }
+  return {
+    upsert: useMutation({
+      mutationFn: (keyframe: import('@mirai/shared').KeyframeInput) =>
+        invoke('timeline:keyframeUpsert', { keyframe }).then((r) => r.keyframe),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => invoke('timeline:keyframeDelete', { id }).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+  }
+}

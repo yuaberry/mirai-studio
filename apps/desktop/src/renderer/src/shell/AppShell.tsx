@@ -6,6 +6,7 @@ import { useEffect } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   Activity,
+  AudioWaveform,
   BookOpen,
   Building2,
   Clapperboard,
@@ -40,6 +41,9 @@ import { JobsPage } from '../modules/workspace/JobsPage'
 import { BackupsPage } from '../modules/workspace/BackupsPage'
 import { SettingsPage } from '../modules/settings/SettingsPage'
 import { DiagnosticsPage } from '../modules/diagnostics/DiagnosticsPage'
+import { useSettings } from '../lib/queries'
+import { registerShortcutHandler, useShortcutDispatcher } from '../lib/shortcuts'
+import { TimelinePage } from '../modules/timeline/TimelinePage'
 import { StatusBar } from './StatusBar'
 import { CommandPalette } from './CommandPalette'
 import { ProjectHeader } from './ProjectHeader'
@@ -59,6 +63,7 @@ const PROJECT_NAV: ReadonlyArray<{ view: MainView; label: string; icon: LucideIc
   { view: 'locations', label: 'Locations', icon: Building2 },
   { view: 'episodes', label: 'Episodes & Scenes', icon: ListVideo },
   { view: 'storyboard', label: 'Storyboard', icon: LayoutGrid },
+  { view: 'timeline', label: 'Timeline', icon: AudioWaveform },
   { view: 'media', label: 'Media Library', icon: Disc3 },
   { view: 'prompts', label: 'Prompt Library', icon: Wand2 },
   { view: 'assist', label: 'AI Assist', icon: Sparkles },
@@ -113,20 +118,27 @@ export function AppShell() {
   const setView = useAppStore((s) => s.setView)
   const setPaletteOpen = useAppStore((s) => s.setPaletteOpen)
   const { data: current } = useCurrentProject()
+  const { data: settings } = useSettings()
+
+  // The FULL configurable shortcut system (Phase 5): defaults ⊕ user overrides.
+  useShortcutDispatcher(settings)
 
   useEffect(() => {
+    const cleanups = [
+      registerShortcutHandler('app.palette', () => setPaletteOpen(true)),
+    ]
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
-      if (mod && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        setPaletteOpen(true)
-      } else if (mod && e.key === ',') {
+      if (mod && e.key === ',') {
         e.preventDefault()
         setView('settings')
       }
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      cleanups.forEach((fn) => fn())
+    }
   }, [setPaletteOpen, setView])
 
   // Opening a project navigates to its overview; closing returns to the hub.
@@ -171,6 +183,7 @@ export function AppShell() {
           {view === 'locations' && <LocationsPage />}
           {view === 'episodes' && <EpisodesPage />}
           {view === 'storyboard' && <StoryboardPage />}
+          {view === 'timeline' && <TimelinePage />}
           {view === 'style' && <StyleBiblePage />}
           {view === 'media' && <MediaLibraryPage />}
           {view === 'prompts' && <PromptLibraryPage />}

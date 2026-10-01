@@ -137,7 +137,6 @@ export function MediaLibraryPage() {
                 <p className="truncate text-xs font-semibold text-mirai-text">{track.title}</p>
                 {track.tags && <p className="mt-0.5 truncate text-[10px] text-mirai-faint">{track.tags}</p>}
               </div>
-              {/* eslint-disable-next-line */}
               <audio controls preload="metadata" src={assetUrl(track.assetId)} className="h-8 w-56" />
               <div className="flex shrink-0 items-center gap-1">
                 <Button size="sm" variant="ghost" onClick={() => mutations.reveal.mutate(track.id)}>

@@ -15,6 +15,7 @@ export type ProjectView =
   | 'locations'
   | 'episodes'
   | 'storyboard'
+  | 'timeline'
   | 'media'
   | 'prompts'
   | 'assist'
@@ -31,6 +32,7 @@ export const PROJECT_VIEWS: readonly ProjectView[] = [
   'locations',
   'episodes',
   'storyboard',
+  'timeline',
   'media',
   'prompts',
   'assist',

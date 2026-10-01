@@ -18,7 +18,7 @@
     "typecheck": "bun run --filter '@mirai/shared' typecheck && bun run --filter '@mirai/core' typecheck && bun run --filter '@mirai/ai' typecheck && bun run --filter '@mirai/desktop' typecheck",
     "test": "bun run --filter '@mirai/shared' test && bun run --filter '@mirai/ai' test",
     "test:core": "bun run --filter '@mirai/core' test",
-    "rebuild:native": "@electron/rebuild -f -w better-sqlite3",
+    "rebuild:native": "cd apps/desktop && bunx @electron/rebuild -f -w better-sqlite3",
     "lint": "eslint .",
     "format": "prettier --write \"apps/*/src/**/*.{ts,tsx,css}\" \"packages/*/src/**/*.ts\"",
     "package:linux": "bun run --filter '@mirai/desktop' package:linux",

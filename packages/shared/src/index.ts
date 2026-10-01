@@ -120,6 +120,76 @@ export { ANIME_GENRES, HOT_GENRES } from './entities/genres'
 export type { AnimeGenre } from './entities/genres'
 export type { CredentialKey } from './entities/settings'
 
+export {
+  // kinds & enums
+  TRACK_KINDS,
+  TRACK_KIND_LABEL,
+  AUDIO_TRACK_KINDS,
+  CLIP_SOURCE_TYPES,
+  BLEND_MODES,
+  KEYFRAME_TARGETS,
+  KEYFRAME_EASINGS,
+  EASING_LABEL,
+  DEFAULT_BEZIER,
+  CAMERA_PARAMS,
+  CAMERA_PARAM_RANGE,
+  CAMERA_PARAM_LABEL,
+  DEFAULT_CAMERA,
+  zTrackKind,
+  zClipSourceType,
+  zBlendMode,
+  zKeyframeTarget,
+  zKeyframeEasing,
+  zCameraParam,
+  // entities
+  TimelineTrack,
+  TrackInput,
+  TrackPatch,
+  ClipEffects,
+  DEFAULT_CLIP_EFFECTS,
+  TimelineClip,
+  ClipCreateInput,
+  ClipPatch,
+  ClipMoveInput,
+  TimelineMarker,
+  KeyframeRecord,
+  KeyframeInput,
+  ClipSource,
+  TimelineBundle,
+  // sampling helpers
+  easeProgress,
+  sampleCurve,
+  sampleCamera,
+  formatTimelineTime,
+} from './entities/timeline'
+export type {
+  TrackKind,
+  ClipSourceType,
+  BlendMode,
+  KeyframeTarget,
+  KeyframeEasing,
+  CameraParam,
+  CameraState,
+  TimelineTrack as TimelineTrackType,
+  TimelineClip as TimelineClipType,
+  TimelineMarker as TimelineMarkerType,
+  KeyframeRecord as KeyframeRecordType,
+  ClipEffects as ClipEffectsType,
+  ClipSource as ClipSourceModel,
+  TimelineBundle as TimelineBundleType,
+} from './entities/timeline'
+
+export {
+  SHORTCUT_ACTIONS,
+  DEFAULT_SHORTCUTS,
+  effectiveShortcuts,
+  normalizeCombo,
+  isValidCombo,
+  prettyCombo,
+  actionsBoundTo,
+} from './entities/shortcuts'
+export type { ShortcutAction } from './entities/shortcuts'
+
 export { BUILTIN_JOB_TYPES, JobRecord, jobIsActive } from './entities/job'
 export type { BuiltinJobType } from './entities/job'
 

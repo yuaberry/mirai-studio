@@ -3,8 +3,18 @@
  * appearance, shortcuts reference.
  */
 import { useEffect, useState } from 'react'
-import { RefreshCw, Save } from 'lucide-react'
+import { RefreshCw, Save, Search } from 'lucide-react'
 import { MiraiError, type AppSettings } from '@mirai/shared'
+import {
+  DEFAULT_SHORTCUTS,
+  SHORTCUT_ACTIONS,
+  actionsBoundTo,
+  effectiveShortcuts,
+  isValidCombo,
+  prettyCombo,
+} from '@mirai/shared'
+import { comboFromEvent } from '../../lib/shortcuts'
+import { cn } from '../../lib/utils'
 import { Badge, Button, Card, Input, Label, SectionTitle, Select, Spinner } from '../../system/ui'
 import { ErrorState } from '../../system/EmptyState'
 import { Kbd } from '../../system/ui'
@@ -472,28 +482,116 @@ function ProvidersCard() {
 }
 
 function ShortcutsCard() {
-  const rows: Array<[string, string]> = [
-    ['Ctrl / ⌘ + K', 'Command palette'],
-    ['Ctrl / ⌘ + ,', 'Open settings'],
-    ['Ctrl + Enter', 'Send message in AI Assist'],
-    ['Esc', 'Close dialogs and palette'],
-  ]
+  const { data: settings } = useSettings()
+  const updateSettings = useUpdateSettings()
+  const [capturing, setCapturing] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+
+  const effective = effectiveShortcuts(settings?.shortcuts ?? {})
+  const groups = ['Timeline', 'Application'] as const
+
+  const saveOverride = (actionId: string, combo: string | null) => {
+    if (!settings) return
+    const overrides: Record<string, string> = { ...settings.shortcuts }
+    if (combo === null || combo === DEFAULT_SHORTCUTS[actionId]) delete overrides[actionId]
+    else overrides[actionId] = combo
+    void updateSettings.mutateAsync({ ...settings, shortcuts: overrides })
+  }
+
+  const onCaptureKey = (e: KeyboardEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.key === 'Escape') {
+      setCapturing(null)
+      return
+    }
+    const combo = comboFromEvent(e)
+    if (!isValidCombo(combo)) return
+    if (capturing) saveOverride(capturing, combo)
+    setCapturing(null)
+  }
+
+  useEffect(() => {
+    if (!capturing) return
+    window.addEventListener('keydown', onCaptureKey, true)
+    return () => window.removeEventListener('keydown', onCaptureKey, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capturing, settings])
+
+  const visible = SHORTCUT_ACTIONS.filter((a) =>
+    a.label.toLowerCase().includes(search.trim().toLowerCase()),
+  )
+
   return (
     <Card className="p-5">
-      <SectionTitle right={<span className="text-[10px] text-mirai-faint">Custom shortcuts arrive with Phase 5 editors</span>}>
+      <SectionTitle right={<span className="text-[10px] text-mirai-faint">Click Rebind, then press keys — Esc cancels</span>}>
         Keyboard shortcuts
       </SectionTitle>
-      <div className="space-y-2">
-        {rows.map(([keys, action]) => (
-          <div key={keys} className="flex items-center justify-between text-xs text-mirai-dim">
-            <span>{action}</span>
-            <span className="flex gap-1">
-              {keys.split('+').map((k) => (
-                <Kbd key={k}>{k.trim()}</Kbd>
-              ))}
-            </span>
-          </div>
-        ))}
+      <div className="relative mb-3 w-64">
+        <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-mirai-faint" />
+        <Input
+          className="h-8 pl-8 text-xs"
+          placeholder="Search actions…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+      <div className="space-y-4">
+        {groups.map((group) => {
+          const actions = visible.filter((a) => a.group === group)
+          if (actions.length === 0) return null
+          return (
+            <div key={group}>
+              <p className="mb-1 text-[10px] font-bold tracking-[0.16em] text-mirai-faint uppercase">
+                {group}
+              </p>
+              <div className="space-y-1.5">
+                {actions.map((action) => {
+                  const combo = effective[action.id] ?? action.defaultCombo
+                  const isDefault = combo === action.defaultCombo
+                  const conflicts = actionsBoundTo(combo, effective).filter((id) => id !== action.id)
+                  return (
+                    <div key={action.id} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-mirai-dim">{action.label}</span>
+                      <span className="flex items-center gap-2">
+                        {conflicts.length > 0 && (
+                          <span className="text-[10px] text-amber-400" title={`Also bound to: ${conflicts.length} other action(s)`}>
+                            ⚠ conflict
+                          </span>
+                        )}
+                        {capturing === action.id ? (
+                          <span className="flex h-7 items-center rounded-md border border-mirai-pink bg-mirai-pink/10 px-2 text-[11px] text-mirai-pink">
+                            Press keys…
+                          </span>
+                        ) : (
+                          <span className={cn('flex gap-1', !isDefault && 'text-mirai-pink')}>
+                            {prettyCombo(combo).split('+').map((part, i) => (
+                              <Kbd key={i}>{part}</Kbd>
+                            ))}
+                          </span>
+                        )}
+                        <button
+                          className="text-[10px] font-semibold text-mirai-faint transition-colors hover:text-mirai-text"
+                          onClick={() => setCapturing(action.id)}
+                        >
+                          Rebind
+                        </button>
+                        {!isDefault && (
+                          <button
+                            className="text-[10px] font-semibold text-mirai-faint transition-colors hover:text-mirai-pink"
+                            onClick={() => saveOverride(action.id, null)}
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </Card>
   )

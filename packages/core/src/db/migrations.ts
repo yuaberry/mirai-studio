@@ -236,4 +236,71 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0007_timeline_editing',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE timeline_tracks (
+          id TEXT PRIMARY KEY,
+          scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL,
+          name TEXT NOT NULL,
+          order_index INTEGER NOT NULL DEFAULT 0,
+          muted INTEGER NOT NULL DEFAULT 0,
+          solo INTEGER NOT NULL DEFAULT 0,
+          volume REAL NOT NULL DEFAULT 1.0,
+          pan REAL NOT NULL DEFAULT 0.0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_timeline_tracks_scene ON timeline_tracks (scene_id, order_index);
+
+        CREATE TABLE timeline_clips (
+          id TEXT PRIMARY KEY,
+          track_id TEXT NOT NULL REFERENCES timeline_tracks(id) ON DELETE CASCADE,
+          source_type TEXT NOT NULL,
+          source_id TEXT NOT NULL,
+          label TEXT NOT NULL,
+          start_sec REAL NOT NULL,
+          duration_sec REAL NOT NULL,
+          in_offset_sec REAL NOT NULL DEFAULT 0,
+          volume REAL NOT NULL DEFAULT 1.0,
+          opacity REAL NOT NULL DEFAULT 1.0,
+          blend TEXT NOT NULL DEFAULT 'normal',
+          effects TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_timeline_clips_track ON timeline_clips (track_id, start_sec);
+
+        CREATE TABLE timeline_markers (
+          id TEXT PRIMARY KEY,
+          scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+          at_sec REAL NOT NULL,
+          label TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_timeline_markers_scene ON timeline_markers (scene_id, at_sec);
+
+        CREATE TABLE keyframes (
+          id TEXT PRIMARY KEY,
+          target_type TEXT NOT NULL,
+          target_id TEXT NOT NULL,
+          param TEXT NOT NULL,
+          at_sec REAL NOT NULL,
+          value REAL NOT NULL,
+          easing TEXT NOT NULL DEFAULT 'linear',
+          bezier TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE (target_type, target_id, param, at_sec)
+        );
+
+        CREATE INDEX idx_keyframes_target ON keyframes (target_type, target_id, param);
+      `)
+    },
+  },
 ]

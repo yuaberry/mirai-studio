@@ -35,6 +35,20 @@ import { AiContextScope, AiModelInfo, ChatMessage } from '../entities/ai'
 import { PromptInput, PromptRecord } from '../entities/prompt'
 import { AssetRecord, ShotInput, ShotRecord, StyleBible } from '../entities/storyboard'
 import { MediaTrack, SceneMedia, zMediaKind, zMediaRole } from '../entities/media'
+import {
+  ClipCreateInput,
+  ClipMoveInput,
+  ClipPatch,
+  KeyframeInput,
+  KeyframeRecord,
+  KEYFRAME_TARGETS,
+  TimelineBundle,
+  TimelineClip,
+  TimelineMarker,
+  TimelineTrack,
+  TrackInput,
+  TrackPatch,
+} from '../entities/timeline'
 
 const emptyRequest = z.object({}).default({})
 
@@ -429,6 +443,90 @@ export const ipcContracts = {
       available: z.boolean(),
       version: z.string().nullable(),
     }),
+  },
+
+  // ---- Timeline & Editing (Phase 5) ----------------------------------------
+  'timeline:get': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ timeline: TimelineBundle }),
+  },
+  /** Auto-assemble a scene's timeline from its shots, voice and media. */
+  'timeline:build': {
+    request: z.object({ sceneId: zEntityId, reset: z.boolean().default(true) }),
+    response: z.object({ timeline: TimelineBundle }),
+  },
+  'timeline:reset': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'timeline:trackCreate': {
+    request: TrackInput,
+    response: z.object({ track: TimelineTrack }),
+  },
+  'timeline:trackUpdate': {
+    request: z.object({ id: zEntityId, patch: TrackPatch }),
+    response: z.object({ track: TimelineTrack }),
+  },
+  'timeline:trackDelete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'timeline:trackMove': {
+    request: z.object({ id: zEntityId, toIndex: z.number().int().min(0) }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'timeline:clipCreate': {
+    request: ClipCreateInput,
+    response: z.object({ clip: TimelineClip }),
+  },
+  'timeline:clipUpdate': {
+    request: z.object({ id: zEntityId, patch: ClipPatch }),
+    response: z.object({ clip: TimelineClip }),
+  },
+  'timeline:clipMove': {
+    request: ClipMoveInput,
+    response: z.object({ clip: TimelineClip }),
+  },
+  'timeline:clipSplit': {
+    request: z.object({ id: zEntityId, atSec: z.number().min(0) }),
+    response: z.object({ left: TimelineClip, right: TimelineClip }),
+  },
+  'timeline:clipDelete': {
+    request: z.object({ id: zEntityId, ripple: z.boolean().default(false) }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'timeline:markerCreate': {
+    request: z.object({
+      sceneId: zEntityId,
+      atSec: z.number().min(0),
+      label: z.string().min(1).max(200).default('Marker'),
+    }),
+    response: z.object({ marker: TimelineMarker }),
+  },
+  'timeline:markerDelete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** All keyframes relevant to a scene (camera of its shots, clip automation, mixer automation). */
+  'timeline:keyframesForScene': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ keyframes: z.array(KeyframeRecord) }),
+  },
+  'timeline:keyframeList': {
+    request: z.object({
+      targetType: z.enum(KEYFRAME_TARGETS),
+      targetId: zEntityId,
+      param: z.string().min(1).max(40).optional(),
+    }),
+    response: z.object({ keyframes: z.array(KeyframeRecord) }),
+  },
+  'timeline:keyframeUpsert': {
+    request: z.object({ keyframe: KeyframeInput }),
+    response: z.object({ keyframe: KeyframeRecord }),
+  },
+  'timeline:keyframeDelete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
   },
 
   'media:importVoice': {

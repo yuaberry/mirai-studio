@@ -51,6 +51,22 @@ export const AppSettings = z.object({
       density: z.enum(['comfortable', 'compact']).default('comfortable'),
     })
     .default({}),
+  editing: z
+    .object({
+      /** Master fader of the playback mixer (0 = silent, 1 = unity). */
+      masterVolume: z.number().min(0).max(1.5).default(1),
+      /** Magnetic snapping on the timeline. */
+      snapping: z.boolean().default(true),
+      /** Loop playback at the end of the timeline. */
+      loop: z.boolean().default(false),
+      /** Dock sizes (px) persisted between sessions — key → px/fraction. */
+      layout: z.record(z.string(), z.number()).default({}),
+      /** Dock panels hidden by the user (panel ids). */
+      hiddenPanels: z.array(z.string()).default([]),
+    })
+    .default({}),
+  /** User shortcut overrides: actionId → combo (missing = default). */
+  shortcuts: z.record(z.string(), z.string()).default({}),
 })
 export type AppSettings = z.infer<typeof AppSettings>
 

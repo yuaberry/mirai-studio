@@ -41,6 +41,7 @@ import { PromptService } from '../prompts/promptService'
 import { StoryboardService } from '../storyboard/storyboardService'
 import { MediaService } from '../media/mediaService'
 import { RenderService } from '../render/renderService'
+import { TimelineService } from '../timeline/timelineService'
 import { newEntityId, type AppDirs, type Clock } from '../types'
 import type { LoggerService } from '../logger/logger'
 import { readManifest, writeManifest } from './manifest'
@@ -74,6 +75,8 @@ export interface OpenProjectContext {
   media: MediaService
   /** Render engine (FFmpeg) for this project. */
   render: RenderService
+  /** Editing timeline + keyframes (Phase 5). */
+  timeline: TimelineService
   /** Jobs recovered as PAUSED after an interrupted session. */
   recoveredCount: number
 }
@@ -566,12 +569,13 @@ export class ProjectService {
     const storyboard = new StoryboardService(db, this.opts.clock, path)
     const media = new MediaService(db, this.opts.clock, path)
     const render = new RenderService(storyboard, media, path)
+    const timeline = new TimelineService(db, this.opts.clock)
 
     const now = this.opts.clock.isoNow()
     this.upsertRegistry(manifest, path, now)
 
     const summary = this.summaryById(manifest.id)
-    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, media, render, recoveredCount }
+    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, media, render, timeline, recoveredCount }
     this.opts.logger.info('PROJECT', `Project opened: "${manifest.name}"`, {
       id: manifest.id,
       recoveredJobs: recoveredCount,

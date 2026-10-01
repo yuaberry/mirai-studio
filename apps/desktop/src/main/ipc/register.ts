@@ -211,7 +211,10 @@ export function registerIpcHandlers(c: Container): void {
   }))
 
   handleIpc('shots:delete', (req) => {
-    requireActive(c).storyboard.deleteShot(req.id)
+    const ctx = requireActive(c)
+    ctx.storyboard.deleteShot(req.id)
+    // Orphaned camera keyframes must not linger (orchestration lives here by design).
+    ctx.timeline.keyframes.deleteAll('CAMERA', req.id)
     return { ok: true }
   })
 
@@ -361,7 +364,16 @@ export function registerIpcHandlers(c: Container): void {
   }))
 
   handleIpc('media:delete', (req) => {
-    requireActive(c).media.delete(req.id)
+    const ctx = requireActive(c)
+    // Clips referencing this media become dangling — remove them first.
+    const db = ctx.db
+    const orphans = db
+      .prepare(`SELECT tc.id FROM timeline_clips tc WHERE tc.source_type = 'MEDIA' AND tc.source_id = ?`)
+      .all(req.id) as Array<{ id: string }>
+    for (const clip of orphans) {
+      ctx.timeline.deleteClip(clip.id, false)
+    }
+    ctx.media.delete(req.id)
     return { ok: true }
   })
 
@@ -416,6 +428,81 @@ export function registerIpcHandlers(c: Container): void {
     })
     const job = await ctx.jobs.enqueue('render.shot', { shotId: req.shotId }, { priority: 9, maxAttempts: 2 })
     return { jobId: job.id }
+  })
+
+  // ---- Timeline & Editing (Phase 5) -------------------------------------------
+  handleIpc('timeline:get', (req) => ({
+    timeline: requireActive(c).timeline.getTimeline(req.sceneId),
+  }))
+
+  handleIpc('timeline:build', (req) => ({
+    timeline: requireActive(c).timeline.buildFromScene(req.sceneId, req.reset),
+  }))
+
+  handleIpc('timeline:reset', (req) => {
+    requireActive(c).timeline.resetScene(req.sceneId)
+    return { ok: true }
+  })
+
+  handleIpc('timeline:trackCreate', (req) => ({
+    track: requireActive(c).timeline.createTrack(req.sceneId, req.kind, req.name),
+  }))
+
+  handleIpc('timeline:trackUpdate', (req) => ({
+    track: requireActive(c).timeline.updateTrack(req.id, req.patch),
+  }))
+
+  handleIpc('timeline:trackDelete', (req) => {
+    requireActive(c).timeline.deleteTrack(req.id)
+    return { ok: true }
+  })
+
+  handleIpc('timeline:trackMove', (req) => {
+    requireActive(c).timeline.moveTrack(req.id, req.toIndex)
+    return { ok: true }
+  })
+
+  handleIpc('timeline:clipCreate', (req) => ({ clip: requireActive(c).timeline.createClip(req) }))
+
+  handleIpc('timeline:clipUpdate', (req) => ({
+    clip: requireActive(c).timeline.updateClip(req.id, req.patch),
+  }))
+
+  handleIpc('timeline:clipMove', (req) => ({
+    clip: requireActive(c).timeline.moveClip(req.id, req.toTrackId, req.startSec),
+  }))
+
+  handleIpc('timeline:clipSplit', (req) => requireActive(c).timeline.splitClip(req.id, req.atSec))
+
+  handleIpc('timeline:clipDelete', (req) => {
+    requireActive(c).timeline.deleteClip(req.id, req.ripple)
+    return { ok: true }
+  })
+
+  handleIpc('timeline:markerCreate', (req) => ({
+    marker: requireActive(c).timeline.createMarker(req.sceneId, req.atSec, req.label),
+  }))
+
+  handleIpc('timeline:markerDelete', (req) => {
+    requireActive(c).timeline.deleteMarker(req.id)
+    return { ok: true }
+  })
+
+  handleIpc('timeline:keyframesForScene', (req) => ({
+    keyframes: requireActive(c).timeline.keyframesForScene(req.sceneId),
+  }))
+
+  handleIpc('timeline:keyframeList', (req) => ({
+    keyframes: requireActive(c).timeline.keyframes.list(req.targetType, req.targetId, req.param),
+  }))
+
+  handleIpc('timeline:keyframeUpsert', (req) => ({
+    keyframe: requireActive(c).timeline.keyframes.upsert(req.keyframe),
+  }))
+
+  handleIpc('timeline:keyframeDelete', (req) => {
+    requireActive(c).timeline.keyframes.delete(req.id)
+    return { ok: true }
   })
 
   // ---- Voice import (Phase 4) -------------------------------------------------
