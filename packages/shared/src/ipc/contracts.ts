@@ -35,6 +35,7 @@ import { AiContextScope, AiModelInfo, ChatMessage } from '../entities/ai'
 import { PromptInput, PromptRecord } from '../entities/prompt'
 import { AssetRecord, ShotInput, ShotRecord, StyleBible } from '../entities/storyboard'
 import { MediaTrack, SceneMedia, zMediaKind, zMediaRole } from '../entities/media'
+import { RenderOutput, zRenderQuality, DEFAULT_PRESET_ID } from '../entities/export'
 import {
   ClipCreateInput,
   ClipMoveInput,
@@ -529,6 +530,35 @@ export const ipcContracts = {
     response: z.object({ ok: z.boolean() }),
   },
 
+  // ---- Render & Export Center (Phase 6) -------------------------------------
+  'render:scene': {
+    request: z.object({
+      sceneId: zEntityId,
+      presetId: z.string().min(1).default(DEFAULT_PRESET_ID),
+      quality: zRenderQuality.default('MASTER'),
+    }),
+    response: z.object({ jobId: zEntityId }),
+  },
+  'render:episode': {
+    request: z.object({
+      episodeId: zEntityId,
+      presetId: z.string().min(1).default(DEFAULT_PRESET_ID),
+      quality: zRenderQuality.default('MASTER'),
+    }),
+    response: z.object({ jobId: zEntityId }),
+  },
+  'render:outputs': {
+    request: emptyRequest,
+    response: z.object({ outputs: z.array(RenderOutput) }),
+  },
+  'render:revealOutput': {
+    request: z.object({ path: z.string().min(1) }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'render:deleteOutput': {
+    request: z.object({ path: z.string().min(1) }),
+    response: z.object({ ok: z.boolean() }),
+  },
   'media:importVoice': {
     request: z.object({ shotId: zEntityId }),
     response: z.object({ asset: AssetRecord }),

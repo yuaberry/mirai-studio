@@ -28,6 +28,7 @@ import {
   PanelBottom,
   PanelLeft,
   Plus,
+  Rocket,
   RotateCcw,
   Scissors,
   SlidersHorizontal,
@@ -36,6 +37,8 @@ import {
 } from 'lucide-react'
 import {
   useEpisodes,
+  useJobs,
+  useRenderMutations,
   useScenes,
   useSettings,
   useUpdateSettings,
@@ -93,6 +96,11 @@ export function TimelinePage() {
 
   const { data: bundle, isLoading, isError, error } = useTimeline(sceneId ?? undefined)
   const mutations = useTimelineMutations(sceneId ?? undefined)
+  const renderMutations = useRenderMutations()
+  const { data: jobs } = useJobs()
+  const sceneRenderJob = (jobs ?? []).find(
+    (j) => j.type === 'render.scene' && j.status === 'RUNNING',
+  )
 
   // ---------------------------------------------------------------- view state
   const [playheadSec, setPlayheadSec] = useState(0)
@@ -535,6 +543,39 @@ export function TimelinePage() {
         >
           <Wand2 className="h-3.5 w-3.5" /> Build Timeline
         </Button>
+
+        {bundle && bundle.clips.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className={cn('border-mirai-pink/40 text-mirai-pink', sceneRenderJob && 'animate-pulse')}
+            disabled={!!sceneRenderJob}
+            title={
+              sceneRenderJob
+                ? `Rendering — ${sceneRenderJob.progress ?? 0}%`
+                : 'Render this scene to a real MP4 (FFmpeg bakes camera, effects and the audio mix)'
+            }
+            onClick={() => {
+              if (!sceneId) return
+              renderMutations.renderScene.mutate(
+                { sceneId, quality: 'MASTER' },
+                {
+                  onSuccess: () =>
+                    toast({
+                      kind: 'success',
+                      title: 'Scene render queued',
+                      description: 'Follow it in Render & Export — the MP4 lands in exports/.',
+                    }),
+                  onError: (err) =>
+                    toast({ kind: 'error', title: 'Render failed', description: err.message }),
+                },
+              )
+            }}
+          >
+            <Rocket className="h-3.5 w-3.5" />
+            {sceneRenderJob ? `Rendering ${sceneRenderJob.progress ?? 0}%` : 'Render Scene'}
+          </Button>
+        )}
       </div>
 
       {/* ------------------------------------------------ body */}

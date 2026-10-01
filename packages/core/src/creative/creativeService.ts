@@ -374,6 +374,11 @@ export class CreativeService {
     return this.requireScene(id)
   }
 
+  /** Look up a single episode (used by the render/export pipeline). */
+  getEpisodeById(id: EntityId): EpisodeRecord {
+    return this.requireEpisode(id)
+  }
+
   /** Look up a location name (used by AI context building). */
   locationName(id: string | undefined): string | undefined {
     if (!id) return undefined

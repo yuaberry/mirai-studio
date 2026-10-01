@@ -180,6 +180,18 @@ export type {
 } from './entities/timeline'
 
 export {
+  RENDER_QUALITIES,
+  QUALITY_LABEL,
+  EXPORT_PRESETS,
+  DEFAULT_PRESET_ID,
+  exportPresetById,
+  RenderOutput,
+  SceneRenderResult,
+  zRenderQuality,
+} from './entities/export'
+export type { ExportPreset, RenderQuality } from './entities/export'
+
+export {
   SHORTCUT_ACTIONS,
   DEFAULT_SHORTCUTS,
   effectiveShortcuts,

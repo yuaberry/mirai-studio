@@ -14,6 +14,7 @@
  */
 import { mkdtempSync, mkdirSync, existsSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { deflateSync } from 'node:zlib'
 import { join } from 'node:path'
 import {
   APP_DB_MIGRATIONS,
@@ -21,6 +22,7 @@ import {
   CredentialStore,
   LoggerService,
   ProjectService,
+  RenderService,
   SettingsService,
   openDatabase,
   runMigrations,
@@ -44,6 +46,76 @@ import {
   sampleCurve,
   type FetchResponse,
 } from '@mirai/shared'
+
+// ---------------------------------------------------------------------------
+// Real media fixtures for the render step (FFmpeg decodes these for real).
+// ---------------------------------------------------------------------------
+function crc32(buf: Buffer): number {
+  let c: number
+  let crc = 0xffffffff
+  for (let i = 0; i < buf.length; i++) {
+    c = (crc ^ buf[i]!) & 0xff
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    crc = (crc >>> 8) ^ c
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const len = Buffer.alloc(4)
+  len.writeUInt32BE(data.length)
+  const typeBuf = Buffer.from(type, 'ascii')
+  const crc = Buffer.alloc(4)
+  crc.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])))
+  return Buffer.concat([len, typeBuf, data, crc])
+}
+
+function makeRealPng(w: number, h: number, rgb: [number, number, number]): Buffer {
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(w, 0)
+  ihdr.writeUInt32BE(h, 4)
+  ihdr[8] = 8
+  ihdr[9] = 2
+  const raw = Buffer.alloc(h * (1 + w * 3))
+  for (let y = 0; y < h; y++) {
+    const row = y * (1 + w * 3)
+    raw[row] = 0
+    for (let x = 0; x < w; x++) {
+      raw[row + 1 + x * 3] = rgb[0]
+      raw[row + 2 + x * 3] = rgb[1]
+      raw[row + 3 + x * 3] = rgb[2]
+    }
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', deflateSync(raw)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ])
+}
+
+function makeRealWav(seconds: number, sampleRate = 8000): Buffer {
+  const samples = Math.floor(seconds * sampleRate)
+  const dataBytes = samples * 2
+  const buf = Buffer.alloc(44 + dataBytes)
+  buf.write('RIFF', 0)
+  buf.writeUInt32LE(36 + dataBytes, 4)
+  buf.write('WAVE', 8)
+  buf.write('fmt ', 12)
+  buf.writeUInt32LE(16, 16)
+  buf.writeUInt16LE(1, 20)
+  buf.writeUInt16LE(1, 22)
+  buf.writeUInt32LE(sampleRate, 24)
+  buf.writeUInt32LE(sampleRate * 2, 28)
+  buf.writeUInt16LE(2, 32)
+  buf.writeUInt16LE(16, 34)
+  buf.write('data', 36)
+  buf.writeUInt32LE(dataBytes, 40)
+  for (let i = 0; i < samples; i++) {
+    buf.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / sampleRate) * 6000), 44 + i * 2)
+  }
+  return buf
+}
 
 const steps: Array<{ name: string; ok: boolean; detail?: string }> = []
 let current = ''
@@ -639,6 +711,62 @@ async function main(): Promise<void> {
     }
     const sceneKfs = tctx.timeline.keyframesForScene(scene.id)
     if (sceneKfs.length === 0) throw new Error('scene keyframes empty')
+  })
+
+  await step('RENDER: scene timeline bakes into a REAL playable MP4 (FFmpeg)', async () => {
+    const detect = RenderService.detect()
+    if (!detect.available) {
+      console.log('    (skipped — FFmpeg not installed on this machine)')
+      return
+    }
+    const episode = tctx!.creative.listEpisodes()[0]!
+    const scene = tctx!.creative.listScenes(episode.id)[0]!
+    const shots = tctx!.storyboard.listShots(scene.id)
+
+    // Replace the fake-bytes fixtures with REAL media so FFmpeg decodes them.
+    const frameFile = join(root, 'real-frame.png')
+    writeFileSync(frameFile, makeRealPng(32, 32, [240, 130, 200]))
+    const voiceFile = join(root, 'real-line.wav')
+    writeFileSync(voiceFile, makeRealWav(2))
+    for (const shot of shots) {
+      tctx!.storyboard.importFrame(shot.id, frameFile)
+      tctx!.storyboard.importVoice(shot.id, voiceFile)
+    }
+    // The music track imported in the build step used fake bytes — swap the
+    // scene assignment to a REAL wav before rebuilding the timeline.
+    if (timelineMusicId) {
+      const realMusicFile = join(root, 'real-music.wav')
+      writeFileSync(realMusicFile, makeRealWav(10))
+      const realMusic = tctx!.media.import('MUSIC', realMusicFile, 'Real BGM')
+      tctx!.media.removeFromScene(scene.id, timelineMusicId)
+      tctx!.media.assignToScene(scene.id, realMusic.id, 'BACKGROUND', 1)
+    }
+
+    // Fresh timeline + a real camera move on the first shot.
+    const bundle = tctx!.timeline.buildFromScene(scene.id, true)
+    if (bundle.clips.length < shots.length) throw new Error('timeline build incomplete')
+    const kf = tctx!.timeline.keyframes
+    kf.upsert({ targetType: 'CAMERA', targetId: shots[0]!.id, param: 'scale', atSec: 0, value: 1 })
+    kf.upsert({ targetType: 'CAMERA', targetId: shots[0]!.id, param: 'scale', atSec: shots[0]!.durationSeconds, value: 1.5, easing: 'easeInOut' })
+    kf.upsert({ targetType: 'MIXER', targetId: bundle.tracks.find((t) => t.kind === 'VOICE')!.id, param: 'volume', atSec: 0, value: 0.2 })
+
+    const result = await tctx!.render.renderScene({
+      sceneId: scene.id,
+      presetId: 'youtube-1080',
+      quality: 'PREVIEW',
+      reportProgress: () => undefined,
+      signal: { aborted: false },
+    })
+    if (!existsSync(result.outputPath)) throw new Error('render produced no file')
+    const probed = tctx!.render.probeDuration(result.outputPath)
+    if (probed === null) throw new Error('ffprobe could not read the output')
+    if (Math.abs(probed - bundle.durationSec) > 0.75) {
+      throw new Error(`duration mismatch: expected ~${bundle.durationSec.toFixed(2)}s, got ${probed.toFixed(2)}s`)
+    }
+    if (tctx!.render.probeResolution(result.outputPath) !== '1920x1080') throw new Error('resolution wrong')
+    const outputs = tctx!.render.listOutputs()
+    if (!outputs.some((o) => o.path === result.outputPath && o.kind === 'SCENE')) throw new Error('output not listed')
+    console.log(`    (real MP4: ${probed.toFixed(2)}s, ${(result.fileBytes / 1024).toFixed(0)} KB)`)
   })
 
   await step('SHORTCUTS: configurable bindings persist and stay valid', () => {

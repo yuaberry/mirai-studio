@@ -430,6 +430,95 @@ export function registerIpcHandlers(c: Container): void {
     return { jobId: job.id }
   })
 
+  // ---- Scene & episode renders (Phase 6) -------------------------------------
+  handleIpc('render:scene', async (req) => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('render.scene', async (job, jobCtx) => {
+      const payload = (job.payload ?? {}) as {
+        sceneId?: string
+        presetId?: string
+        quality?: 'PREVIEW' | 'MASTER'
+      }
+      if (!payload.sceneId) throw new MiraiError('VALIDATION_ERROR', 'render.scene payload missing sceneId.')
+      const controller = new AbortController()
+      const watcher = setInterval(() => {
+        if (jobCtx.signal.aborted) controller.abort()
+      }, 100)
+      try {
+        const result = await ctx.render.renderScene({
+          sceneId: payload.sceneId,
+          presetId: payload.presetId ?? 'youtube-1080',
+          quality: payload.quality ?? 'MASTER',
+          reportProgress: jobCtx.reportProgress,
+          signal: controller.signal,
+        })
+        c.logger.info('RENDER', `Scene rendered: ${result.outputPath}`, { bytes: result.fileBytes })
+        return result
+      } finally {
+        clearInterval(watcher)
+      }
+    })
+    const job = await ctx.jobs.enqueue(
+      'render.scene',
+      { sceneId: req.sceneId, presetId: req.presetId, quality: req.quality },
+      { priority: 9, maxAttempts: 2 },
+    )
+    return { jobId: job.id }
+  })
+
+  handleIpc('render:episode', async (req) => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('render.episode', async (job, jobCtx) => {
+      const payload = (job.payload ?? {}) as {
+        episodeId?: string
+        presetId?: string
+        quality?: 'PREVIEW' | 'MASTER'
+      }
+      if (!payload.episodeId) throw new MiraiError('VALIDATION_ERROR', 'render.episode payload missing episodeId.')
+      const controller = new AbortController()
+      const watcher = setInterval(() => {
+        if (jobCtx.signal.aborted) controller.abort()
+      }, 100)
+      try {
+        const result = await ctx.render.renderEpisode({
+          episodeId: payload.episodeId,
+          presetId: payload.presetId ?? 'youtube-1080',
+          quality: payload.quality ?? 'MASTER',
+          reportProgress: jobCtx.reportProgress,
+          signal: controller.signal,
+        })
+        c.logger.info('RENDER', `Episode rendered: ${result.outputPath}`, { bytes: result.fileBytes })
+        return result
+      } finally {
+        clearInterval(watcher)
+      }
+    })
+    const job = await ctx.jobs.enqueue(
+      'render.episode',
+      { episodeId: req.episodeId, presetId: req.presetId, quality: req.quality },
+      { priority: 9, maxAttempts: 2 },
+    )
+    return { jobId: job.id }
+  })
+
+  // ---- Export Center (Phase 6) ------------------------------------------------
+  handleIpc('render:outputs', () => ({ outputs: requireActive(c).render.listOutputs() }))
+
+  handleIpc('render:revealOutput', (req) => {
+    const ctx = requireActive(c)
+    // Path validation happens in the service — the handler only reveals.
+    const outputs = ctx.render.listOutputs()
+    const match = outputs.find((o) => o.path === req.path)
+    if (!match) throw new MiraiError('NOT_FOUND', 'Output not found in exports/.')
+    shell.showItemInFolder(match.path)
+    return { ok: true }
+  })
+
+  handleIpc('render:deleteOutput', (req) => {
+    requireActive(c).render.deleteOutput(req.path)
+    return { ok: true }
+  })
+
   // ---- Timeline & Editing (Phase 5) -------------------------------------------
   handleIpc('timeline:get', (req) => ({
     timeline: requireActive(c).timeline.getTimeline(req.sceneId),

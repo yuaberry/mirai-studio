@@ -568,8 +568,8 @@ export class ProjectService {
     const prompts = new PromptService(db, this.opts.clock)
     const storyboard = new StoryboardService(db, this.opts.clock, path)
     const media = new MediaService(db, this.opts.clock, path)
-    const render = new RenderService(storyboard, media, path)
     const timeline = new TimelineService(db, this.opts.clock)
+    const render = new RenderService(storyboard, media, path, creative, timeline)
 
     const now = this.opts.clock.isoNow()
     this.upsertRegistry(manifest, path, now)

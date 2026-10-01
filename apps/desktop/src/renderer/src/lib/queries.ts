@@ -660,6 +660,41 @@ export function useMediaMutations() {
   }
 }
 
+export function useRenderOutputs() {
+  return useQuery({
+    queryKey: ['render', 'outputs'],
+    queryFn: () =>
+      invoke('render:outputs').then((r) => r.outputs as import('@mirai/shared').RenderOutput[]),
+  })
+}
+
+export function useRenderMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['render', 'outputs'] })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.jobs })
+  }
+  return {
+    renderScene: useMutation({
+      mutationFn: (input: { sceneId: string; presetId?: string; quality?: 'PREVIEW' | 'MASTER' }) =>
+        invoke('render:scene', input).then((r) => r.jobId),
+      onSuccess: invalidate,
+    }),
+    renderEpisode: useMutation({
+      mutationFn: (input: { episodeId: string; presetId?: string; quality?: 'PREVIEW' | 'MASTER' }) =>
+        invoke('render:episode', input).then((r) => r.jobId),
+      onSuccess: invalidate,
+    }),
+    revealOutput: useMutation({
+      mutationFn: (path: string) => invoke('render:revealOutput', { path }).then(() => undefined),
+    }),
+    deleteOutput: useMutation({
+      mutationFn: (path: string) => invoke('render:deleteOutput', { path }).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+  }
+}
+
 export function useRenderStatus() {
   return useQuery({
     queryKey: mediaKeys.renderStatus,
