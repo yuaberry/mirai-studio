@@ -130,6 +130,7 @@ mirai-studio/
 | 0005_voice_tracks | `shots.audio_asset_id` (ALTER) |
 | 0006_media_library | `media_tracks`, `scene_media` |
 | 0007_timeline_editing | `timeline_tracks`, `timeline_clips`, `timeline_markers`, `keyframes` |
+| 0008_production | `tasks`, `crew_members`, `approval_events`, `entity_versions` |
 
 **Key design decisions**:
 - IDs are ULIDs (26 chars Crockford base32) — never autoincrement
@@ -140,7 +141,7 @@ mirai-studio/
 
 ---
 
-## 5. IPC CONTRACTS (112 channels)
+## 5. IPC CONTRACTS (129 channels)
 
 All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests AND responses.
 
@@ -155,6 +156,7 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - **render:** 2 channels (shot, status)
 - **timeline (Phase 5):** 18 channels — get, build, reset, trackCreate/Update/Delete/Move, clipCreate/Update/Move/Split/Delete(+ripple), markerCreate/Delete, keyframesForScene, keyframeList/Upsert/Delete
 - **render/export (Phase 6):** 5 channels — render:scene, render:episode, render:outputs, render:revealOutput, render:deleteOutput
+- **production (Phase 7):** 17 channels — tasks:list/create/update/setStatus/delete, crew:list/create/delete, approvals:transition/log, versions:list/snapshot/restore/diff, qc:run, analytics:overview
 - **jobs:** 5 channels (list, retry, cancel, resumeInterrupted, discardInterrupted)
 - **settings/credentials:** 5 channels
 - **logs:** 3 channels
@@ -208,6 +210,16 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - **Orphan pruning**: replacing/clearing a frame deletes the old file if unreferenced
 - **Style Bible**: art direction, lineart, shading, palette, lighting, proportions, eyes & hair, backgrounds, camera language — autosave
 - **Voice lines**: real audio import per shot (wav/mp3/ogg/m4a/flac/aac/opus), inline audio player
+
+### ✅ Phase 7 — Production Suite (COMPLETE, v0.7.0)
+- **Task Board** (kanban): 5 columns (TODO/IN_PROGRESS/REVIEW/APPROVED/FINAL), drag between columns, priorities (LOW/NORMAL/HIGH/CRITICAL), entity links (SCENE/SHOT/EPISODE/CHARACTER/LOCATION/MEDIA), crew assignment
+- **Crew roster**: 10 studio roles (Director, Producer, Writer, Character Designer, Background Artist, Animator, Editor, Sound Designer, Voice Actor, Reviewer); deleting a member unassigns tasks, never deletes them
+- **Governed approval pipeline**: APPROVAL_PIPELINES with forward maps — REVIEW approves OR sends back to REVISION (side state, not mandatory); backwards always free; characters/locations use ASSET statuses, episodes/scenes/shots use TASK statuses; `approvals:transition` validates + persists + logs (actor + note); Character editor status select goes through the pipeline live; LOCKED/FINAL edit-warning badges
+- **Audit log**: every governed transition recorded (from/to/note/actor) — Production → Approvals tab
+- **Entity versioning**: snapshot/restore/diff for CHARACTER, LOCATION, SCENE (screenplay), SHOT, STYLE_BIBLE; restore auto-snapshots current state first ('auto — before restore'); field-level diffs; History modal embedded in Character + Shot editors
+- **Quality Control**: 10 automated checks (scene-no-shots, shot-no-frame, shot-dialogue-no-voice, scene-no-screenplay, scene-no-timeline, episode-no-scenes, shot-frame-missing-file, media-missing-file, character-no-appearance) with ERROR/WARNING/INFO severities + fix hints
+- **Production analytics**: real aggregates (episodes/scenes/shots by status, frame/voice/timeline/screenplay coverage, assets, media, tasks, approval events, crew, versions) + Dashboard progress bars
+- **Status persistence fix**: creative/storyboard update paths now persist `status` (preserving current status when the input omits it — no more silent resets)
 
 ### ✅ Phase 6 — Render & Export (COMPLETE, v0.6.0) — MASTER FLOW CLOSED END-TO-END
 - **sceneRenderBuilder** (pure, fully unit-tested): timeline bundle + keyframes → FFmpeg `filter_complex`
@@ -274,13 +286,15 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - [ ] Bundled FFmpeg (LGPL build licensing decision) — currently requires system FFmpeg with clear guidance
 - [x] **GATE: master flow END-TO-END** — PASSED (smoke step 31 renders a real 7s MP4)
 
-### Phase 7 — Production
-- [ ] Task board (TODO → IN_PROGRESS → REVIEW → APPROVED → FINAL)
-- [ ] Approval pipeline (DRAFT → REVIEW → REVISION → APPROVED → LOCKED → FINAL)
-- [ ] Entity versioning (character v1/v2/v3, compare, restore, branch)
-- [ ] Production analytics dashboard (Episodes: 4/12, Scenes: 83/240, Assets: 1284, Approved: 71%)
-- [ ] Quality Control: automated QA checks (missing files, resolution mismatches, broken assets)
-- [ ] Team & Permissions (Owner, Director, Writer, Artist, Animator, Editor, Sound Designer, Reviewer, Viewer)
+### Phase 7 — Production (DONE in v0.7.0 — remaining polish)
+- [x] Task board — DONE (kanban, drag, priorities, links, crew)
+- [x] Approval pipeline with audit — DONE (governed transitions + log)
+- [x] Entity versioning — DONE (snapshot/restore/diff, safety snapshots)
+- [x] QC automated checks — DONE (10 checks with fix hints)
+- [x] Production analytics dashboard — DONE
+- [x] Team roster — DONE (crew + assignment + audit actors)
+- [ ] Permission ENFORCEMENT per role (needs multi-user/cloud — Phase 9)
+- [ ] Task due dates + calendar view (future polish)
 
 ### Phase 8 — Advanced AI
 - [ ] AI Director: analyzes narrative, composition, rhythm, emotion, camera — suggests changes
@@ -336,6 +350,9 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 14. **Appending code to a class file**: `cat >>` lands AFTER the class-closing `}` — methods end up outside the class. Always re-check the brace balance.
 15. **Real-media smoke fixtures**: FFmpeg only decodes REAL files. The smoke now carries minimal in-script encoders (PNG via deflate+CRC32, WAV via RIFF headers) — reuse them for any future media step; never feed `Buffer.alloc` fakes into render tests.
 16. **Rendered smoke state**: scene media assigned in earlier smoke steps persists in the timeline — before rendering in a test, swap fake-byte media assignments for real files (removeFromScene + assign real WAV).
+17. **Never lint-fix imports blindly**: removing an "unused" import that a zod object references at module scope compiles away in the bundler as a runtime ReferenceError (`zTaskStatus is not defined`) before typecheck catches it in a stale run. Always re-run typecheck immediately after every lint change.
+18. **Zod input defaults clobber**: `updateX(input)` with `.default()` fields OVERWRITES omitted fields (role → SUPPORTING). Updates must preserve current values (`parsed.status ?? existing.status`) — never blind-default on update paths.
+19. **Linear pipelines are wrong for approvals**: REVISION is a side state (REVIEW approves forward or returns to REVISION), not a mandatory step. Model pipelines as forward-transition MAPS, not ordered arrays.
 
 ---
 
@@ -390,6 +407,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.4.0 | Phase 4 | Media Library (Music/SFX/Ambience + scene assignment), Render Engine (FFmpeg shot → MP4 H.264 animation-tuned) |
 | v0.5.0 | Phase 5 | Master Timeline (canvas, real waveforms/thumbnails), clip editing (snap/trim/split/ripple), REAL Web Audio mixer + automation, Camera System + Keyframe Editor (linear/ease/bézier), preview compositing (blend/effects/vignette), configurable shortcuts + rebind UI, custom dockable panels |
 | v0.6.0 | Phase 6 | Timeline → REAL MP4 (sceneRenderBuilder: zoompan camera, eq/hue/gblur effects, amix audio mixdown with automation), episode lossless stitching, Export Center (7 presets, PREVIEW/MASTER), outputs browser, master flow CLOSED end-to-end |
+| v0.7.0 | Phase 7 | Production suite: kanban Task Board + crew, governed approval pipeline with audit log, entity versioning (snapshot/restore/diff with safety snapshots), QC (10 checks), production analytics dashboard |
 
 ---
 
@@ -398,24 +416,24 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 - **Repo**: https://github.com/yuaberry/mirai-studio (public, main branch)
 - **Website**: https://yuaberry.github.io/mirai-studio (v0.4.0)
 - **Latest release**: v0.4.0 (GitHub Releases: .deb + AppImage)
-- **All tests**: 127 passing (15 shared + 23 AI + 89 core — incl. 18 timeline + 9 render tests with REAL-FFmpeg integration)
-- **Smoke**: 31/31 steps passing (step 31 = REAL 7s MP4 render)
+- **All tests**: 138 passing (15 shared + 23 AI + 100 core — incl. 18 timeline + 9 render + 11 production tests)
+- **Smoke**: 35/35 steps passing (steps 31-35 = real MP4 render + tasks/approvals/versions/QC+analytics)
 - **Lint**: 0 errors, 0 warnings
 - **Typecheck**: 0 errors (4 workspaces)
-- **IPC channels**: 112 contracts, 113 handlers
-- **Migrations**: 0001-0007 (App + Project)
-- **Latest release**: v0.6.0 (.deb + AppImage, boot-tested) — MASTER FLOW CLOSED
-- **Website**: https://yuaberry.github.io/mirai-studio (v0.6.0)
-- **Backup**: `/home/llinux/mirai-studio-backup-v0.6.0.tar.gz`
+- **IPC channels**: 129 contracts, 130 handlers
+- **Migrations**: 0001-0008 (App + Project)
+- **Latest release**: v0.7.0 (.deb + AppImage, boot-tested)
+- **Website**: https://yuaberry.github.io/mirai-studio (v0.7.0)
+- **Backup**: `/home/llinux/mirai-studio-backup-v0.7.0.tar.gz`
 
 ---
 
 ## 13. NEXT IMMEDIATE ACTIONS
 
-1. **Phase 7 — Production**: task board (TODO → IN_PROGRESS → REVIEW → APPROVED → FINAL), approval pipeline (DRAFT → REVIEW → REVISION → APPROVED → LOCKED → FINAL), entity versioning (character v1/v2/v3, compare, restore), QC checks (missing frames, resolution mismatches, broken assets), production analytics dashboard.
-2. **Phase 4 remaining**: Subtitle Studio (SRT/VTT/ASS) — also unlocks subtitle burn-in for render.
-3. **Phase 8 — Advanced AI**: AI Director, Continuity Engine, multi-agent orchestration, visual workflow builder, screenplay analyzer.
-4. **Render polish**: animated camera opacity, blend modes in render, bundled FFmpeg licensing.
+1. **Phase 4 wrap-up**: Subtitle Studio (SRT/VTT/ASS import+export) — unlocks subtitle burn-in in render; video generation provider contract; music assignment UI on scene editor.
+2. **Phase 8 — Advanced AI**: AI Director (analyzes narrative/composition/rhythm), Continuity Engine (detects costume/location/temporal inconsistencies), multi-agent orchestration, visual workflow builder, screenplay analyzer.
+3. **Render polish**: animated camera opacity, blend modes in render, bundled FFmpeg licensing.
+4. **Phase 9 — Extensibility**: plugin API + provider SDK + marketplace; permission enforcement (needs multi-user).
 
 ---
 
@@ -438,6 +456,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.6.0 — Phase 6 (Render & Export) complete. MASTER FLOW CLOSED END-TO-END. Ready for Phase 7 (Production).*
+*Last updated: v0.7.0 — Phase 7 (Production Suite) complete. Phases 0-7 all delivered. Ready for Phase 4 wrap-up (Subtitles) and Phase 8 (Advanced AI).*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
