@@ -4,7 +4,7 @@
  * The master flow: frame image + audio → FFmpeg → exports/<project>/<shot>.mp4
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   MiraiError,
@@ -21,6 +21,7 @@ import type { StoryboardService } from '../storyboard/storyboardService'
 import type { MediaService } from '../media/mediaService'
 import type { TimelineService } from '../timeline/timelineService'
 import type { CreativeService } from '../creative/creativeService'
+import type { SubtitleService } from '../subtitles/subtitleService'
 import { buildSceneRenderSpec } from './sceneRenderBuilder'
 
 export interface RenderOptions {
@@ -50,6 +51,7 @@ export class RenderService {
     private readonly projectRoot: string,
     private readonly creative: CreativeService,
     private readonly timeline: TimelineService,
+    private readonly subtitles: SubtitleService,
   ) {}
 
   /** Detects FFmpeg availability and version (one-time, sync is fine). */
@@ -258,6 +260,17 @@ export class RenderService {
     const preset = exportPresetById(presetId)
     const scene = this.creative.getSceneById(sceneId)
 
+    // Subtitles: burn them in when the scene has cues (real .srt → filter).
+    const cues = this.subtitles.cuesForScene(sceneId)
+    const partsDir = join(this.ensureExportsDir(), `.srt-${Date.now()}`)
+    let subtitlePath: string | undefined
+    if (cues.length > 0) {
+      mkdirSync(partsDir, { recursive: true })
+      subtitlePath = join(partsDir, 'burn.srt')
+      const { writeSrt } = await import('@mirai/shared')
+      writeFileSync(subtitlePath, writeSrt(cues), 'utf8')
+    }
+
     // Resolve asset placeholders → absolute paths inside the project.
     const camera = new Map<string, Map<string, KeyframeRecord[]>>()
     const automation = new Map<string, KeyframeRecord[]>()
@@ -279,7 +292,7 @@ export class RenderService {
       }
     }
 
-    const spec = buildSceneRenderSpec(bundle, camera, automation, { preset, quality })
+    const spec = buildSceneRenderSpec(bundle, camera, automation, { preset, quality, subtitlePath })
     const args = spec.args.map((a) => this.resolveAssetArg(a, bundle))
 
     const exportsDir = this.ensureExportsDir()
@@ -289,7 +302,17 @@ export class RenderService {
     const fullArgs = [...args, outputPath]
 
     reportProgress(10)
-    await this.runFFmpeg(fullArgs, spec.totalSec, 10, 90, reportProgress, signal, `Scene "${scene.title}"`)
+    try {
+      await this.runFFmpeg(fullArgs, spec.totalSec, 10, 90, reportProgress, signal, `Scene "${scene.title}"`)
+    } finally {
+      if (subtitlePath) {
+        try {
+          rmSync(partsDir, { recursive: true, force: true })
+        } catch {
+          // best-effort temp cleanup
+        }
+      }
+    }
     const stats = statSync(outputPath)
 
     return {

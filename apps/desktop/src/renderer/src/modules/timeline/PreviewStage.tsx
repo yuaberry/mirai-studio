@@ -8,10 +8,12 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  cueAt,
   formatTimelineTime,
   sampleCamera,
   type CameraState,
   type KeyframeRecord,
+  type SubtitleRecord,
   type TimelineBundle,
   type TimelineClip,
 } from '@mirai/shared'
@@ -25,6 +27,8 @@ export interface PreviewStageProps {
   playing: boolean
   loop: boolean
   cameraKeyframes: KeyframeRecord[]
+  subtitles: SubtitleRecord[]
+  videoElementFor: (clipId: string) => HTMLVideoElement | null
   onTogglePlay: () => void
   onStop: () => void
   onStep: (deltaSec: number) => void
@@ -78,7 +82,7 @@ export function PreviewStage(props: PreviewStageProps) {
   // Active video layers at the playhead (track order = stacking; lower index first).
   const layers = useMemo(() => {
     const videoTracks = bundle.tracks.filter((t) => t.kind === 'VIDEO')
-    const out: Array<{ clip: TimelineClip; camera: CameraState; z: number }> = []
+    const out: Array<{ clip: TimelineClip; camera: CameraState; z: number; hasVideo: boolean }> = []
     for (const track of videoTracks) {
       const clip = bundle.clips.find(
         (c) =>
@@ -92,7 +96,9 @@ export function PreviewStage(props: PreviewStageProps) {
       const camera: CameraState = byParam
         ? sampleCamera(byParam, local)
         : { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }
-      out.push({ clip, camera, z: track.orderIndex })
+      const src = bundle.sources[clip.sourceId]
+      const hasVideo = src?.type === 'SHOT' ? src.videoAssetId !== null : false
+      out.push({ clip, camera, z: track.orderIndex, hasVideo })
     }
     return out.sort((a, b) => a.z - b.z)
   }, [bundle, playheadSec, cameraByShot])
@@ -119,12 +125,20 @@ export function PreviewStage(props: PreviewStageProps) {
 
   const activeTitle = layers.length > 0 ? layers[layers.length - 1]!.clip.label : null
   void preloaded
+  const activeCue = useMemo(
+    () =>
+      cueAt(
+        (props.subtitles ?? []).map((c) => ({ startSec: c.startSec, endSec: c.endSec, text: c.text })),
+        playheadSec,
+      ),
+    [props.subtitles, playheadSec],
+  )
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       {/* stage */}
       <div className="relative aspect-video w-full flex-none overflow-hidden rounded-lg border border-mirai-line bg-black">
-        {layers.map(({ clip, camera }) => {
+        {layers.map(({ clip, camera, hasVideo }) => {
           const src = bundle.sources[clip.sourceId]
           const frameAssetId = src?.type === 'SHOT' ? src.frameAssetId : null
           return (
@@ -138,7 +152,9 @@ export function PreviewStage(props: PreviewStageProps) {
               }}
             >
               <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
-                {frameAssetId ? (
+                {hasVideo ? (
+                  <VideoMount clipId={clip.id} resolver={props.videoElementFor} camera={camera} effects={clip.effects} />
+                ) : frameAssetId ? (
                   <img
                     src={assetUrl(frameAssetId)}
                     alt={clip.label}
@@ -177,6 +193,18 @@ export function PreviewStage(props: PreviewStageProps) {
             <p className="text-xs text-mirai-faint">No video clip at the playhead</p>
           </div>
         )}
+        {/* live subtitle cue */}
+        {activeCue && (
+          <p className="absolute right-[8%] bottom-[8%] left-[8%] text-center font-medium text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]"
+             style={{ fontSize: 'clamp(14px, 2.6cqw, 34px)', textShadow: '0 0 6px rgba(0,0,0,0.8)' }}>
+            {activeCue.text.split('\n').map((line, i) => (
+              <span key={i} className="block">
+                {line}
+              </span>
+            ))}
+          </p>
+        )}
+
         {/* HUD */}
         <div className="pointer-events-none absolute top-2 left-2 flex gap-2">
           <span className="rounded bg-black/60 px-2 py-0.5 font-mono text-[11px] text-mirai-pink">
@@ -232,5 +260,50 @@ export function PreviewStage(props: PreviewStageProps) {
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * Mounts the engine-owned <video> element (generated video) into the preview
+ * without re-mounting it across renders — moves the existing DOM node in.
+ * Camera transforms apply; video keeps its own motion.
+ */
+function VideoMount({
+  clipId,
+  resolver,
+  camera,
+  effects,
+}: {
+  clipId: string
+  resolver: (clipId: string) => HTMLVideoElement | null
+  camera: CameraState
+  effects: { brightness: number; contrast: number; saturate: number; hue: number; blur: number; grayscale: number }
+}) {
+  const hostRef = useRef<HTMLDivElement | null>(null)
+  const applied = useRef<HTMLVideoElement | null>(null)
+
+  useEffect(() => {
+    const host = hostRef.current
+    const el = resolver(clipId)
+    if (!host || !el) return
+    if (applied.current !== el) {
+      host.appendChild(el)
+      applied.current = el
+    }
+    return () => {
+      if (el.parentElement === host) host.removeChild(el)
+    }
+  }, [clipId, resolver])
+
+  return (
+    <div
+      ref={hostRef}
+      className="flex h-full w-full items-center justify-center"
+      style={{
+        transform: `translate(${camera.x}%, ${camera.y}%) rotate(${camera.rotation}deg) scale(${camera.scale})`,
+        opacity: camera.opacity,
+        filter: clipFilter(effects),
+      }}
+    />
   )
 }

@@ -358,4 +358,24 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0009_subtitles_video',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE subtitles (
+          id TEXT PRIMARY KEY,
+          scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+          start_sec REAL NOT NULL,
+          end_sec REAL NOT NULL,
+          text TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_subtitles_scene ON subtitles (scene_id, start_sec);
+
+        ALTER TABLE shots ADD COLUMN video_asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL;
+      `)
+    },
+  },
 ]

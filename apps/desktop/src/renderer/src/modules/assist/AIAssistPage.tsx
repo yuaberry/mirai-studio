@@ -23,6 +23,7 @@ import {
 } from '../../lib/queries'
 import { useAppStore, toast } from '../../store/appStore'
 import { MiniMarkdown } from './MiniMarkdown'
+import { PERSONA_PRESETS, type PersonaId } from './personas'
 
 interface UIMessage extends ChatMessage {
   id: string
@@ -40,6 +41,7 @@ export function AIAssistPage() {
   const setView = useAppStore((s) => s.setView)
 
   const [messages, setMessages] = useState<UIMessage[]>([])
+  const [persona, setPersona] = useState<PersonaId | ''>('')
   const [input, setInput] = useState('')
   const [requestId, setRequestId] = useState<string | null>(null)
   const streaming = requestId !== null
@@ -113,8 +115,17 @@ export function AIAssistPage() {
     try {
       // Invoke first — it returns instantly with the real requestId, so the
       // streaming placeholder is born with the correct key (no re-key race).
+      const personaPrefix = persona ? PERSONA_PRESETS.find((p) => p.id === persona) : null
+      const personaLine: ChatMessage | null = personaPrefix
+        ? { role: 'user', content: `[PERSONA] You are answering as the ${personaPrefix.label} of this production. ${personaPrefix.instruction}` }
+        : null
+      const outgoing: ChatMessage[] = [
+        ...(personaLine ? [personaLine] : []),
+        ...history,
+        { role: 'user', content },
+      ]
       const result = await invoke('ai:chat', {
-        messages: [...history, { role: 'user', content }],
+        messages: outgoing,
         context: {
           includeBible,
           includeCharacters,
@@ -309,6 +320,21 @@ export function AIAssistPage() {
             </p>
           )}
           <div className="panel focus-within:border-mirai-accent/40 p-2">
+            <div className="mb-1 flex items-center gap-2 px-2">
+              <span className="text-[9px] font-bold tracking-[0.14em] text-mirai-faint uppercase">Agent</span>
+              <Select
+                className="h-6 w-44 px-1 text-[11px]"
+                value={persona}
+                onChange={(e) => setPersona(e.target.value as PersonaId | '')}
+              >
+                <option value="">Assistant (neutral)</option>
+                {PERSONA_PRESETS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
             <textarea
               ref={inputRef}
               rows={3}

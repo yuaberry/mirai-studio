@@ -33,6 +33,11 @@ interface TrackWire {
   clips: Map<string, ClipWire>
 }
 
+/** Visual wires for generated videos (muted — audio comes from the mix). */
+interface VideoWire {
+  element: HTMLVideoElement
+}
+
 export interface EngineOptions {
   /** Absolute asset URL resolver (mirai-asset://). */
   assetUrl: (assetId: string) => string
@@ -45,6 +50,7 @@ export class PlaybackEngine {
   private ctx: AudioContext | null = null
   private master: GainNode | null = null
   private wires = new Map<string, TrackWire>() // trackId → wire
+  private videoWires = new Map<string, VideoWire>() // clipId → wire
   private bundle: TimelineBundle | null = null
   private keyframes = new Map<string, KeyframeRecord[]>() // `${target}:${id}` → curve list
   private playing = false
@@ -89,6 +95,11 @@ export class PlaybackEngine {
 
   get isPlaying(): boolean {
     return this.playing
+  }
+
+  /** The generated-video element for a clip (the preview mounts it visually). */
+  videoElementFor(clipId: string): HTMLVideoElement | null {
+    return this.videoWires.get(clipId)?.element ?? null
   }
 
   // ----------------------------------------------------------- transport
@@ -148,6 +159,11 @@ export class PlaybackEngine {
       }
     }
     this.wires.clear()
+    for (const wire of this.videoWires.values()) {
+      wire.element.pause()
+      wire.element.src = ''
+    }
+    this.videoWires.clear()
     void this.ctx?.close()
     this.ctx = null
   }
@@ -316,6 +332,35 @@ export class PlaybackEngine {
         } else if (!wireClip.element.paused) {
           wireClip.element.pause()
         }
+      }
+    }
+
+    // Generated videos: start/stop at clip boundaries, drift-corrected.
+    for (const clip of bundle.clips) {
+      const wire = this.videoWires.get(clip.id)
+      const track = bundle.tracks.find((t) => t.id === clip.trackId)
+      if (!wire || !track || track.muted) continue
+      const inClip =
+        this.playheadSec >= clip.startSec && this.playheadSec < clip.startSec + clip.durationSec
+      if (inClip && !track.muted) {
+        const expected = clip.inOffsetSec + (this.playheadSec - clip.startSec)
+        const el = wire.element
+        if (el.paused) {
+          try {
+            el.currentTime = Math.max(0, expected)
+            void el.play()
+          } catch {
+            // autoplay guard — retried next tick
+          }
+        } else if (Math.abs(el.currentTime - expected) > DRIFT_SEC) {
+          try {
+            el.currentTime = Math.max(0, expected)
+          } catch {
+            // seek not ready
+          }
+        }
+      } else if (!wire.element.paused) {
+        wire.element.pause()
       }
     }
   }

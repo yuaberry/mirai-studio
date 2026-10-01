@@ -103,6 +103,11 @@ export type { PromptCategory } from './entities/prompt'
 
 export { AppSettings, DEFAULT_APP_SETTINGS, CREDENTIAL_KEYS, zCredentialKey } from './entities/settings'
 export {
+  VideoGenResult,
+  ScreenplayAnalysis,
+  DirectorNotes,
+  ContinuityFinding,
+  ProductionReview,
   MEDIA_KINDS,
   MEDIA_KIND_LABEL,
   MEDIA_ROLES,
@@ -116,6 +121,20 @@ export {
   zVideoGenStyle,
 } from './entities/media'
 export type { MediaKind, MediaRole, VideoGenStyle } from './entities/media'
+export {
+  SubtitleRecord,
+  SubtitleInput,
+  SubtitlePatch,
+  parseSrt,
+  parseVtt,
+  writeSrt,
+  writeVtt,
+  parseTimecode,
+  formatSrtTime,
+  formatVttTime,
+  cueAt,
+} from './entities/subtitle'
+export type { SubtitleCue } from './entities/subtitle'
 export { ANIME_GENRES, HOT_GENRES } from './entities/genres'
 export type { AnimeGenre } from './entities/genres'
 export type { CredentialKey } from './entities/settings'

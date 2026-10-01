@@ -39,6 +39,7 @@ import {
   useEpisodes,
   useJobs,
   useRenderMutations,
+  useSubtitles,
   useScenes,
   useSettings,
   useUpdateSettings,
@@ -97,6 +98,7 @@ export function TimelinePage() {
   const { data: bundle, isLoading, isError, error } = useTimeline(sceneId ?? undefined)
   const mutations = useTimelineMutations(sceneId ?? undefined)
   const renderMutations = useRenderMutations()
+  const { data: subtitles } = useSubtitles(sceneId ?? undefined)
   const { data: jobs } = useJobs()
   const sceneRenderJob = (jobs ?? []).find(
     (j) => j.type === 'render.scene' && j.status === 'RUNNING',
@@ -630,6 +632,8 @@ export function TimelinePage() {
                   playing={playing}
                   loop={loop}
                   cameraKeyframes={sceneKeyframes ?? []}
+                  subtitles={subtitles ?? []}
+                  videoElementFor={(clipId) => engineRef.current?.videoElementFor(clipId) ?? null}
                   onTogglePlay={togglePlay}
                   onStop={() => engineRef.current?.stop()}
                   onStep={onStep}

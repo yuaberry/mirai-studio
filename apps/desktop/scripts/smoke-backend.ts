@@ -18,6 +18,7 @@ import { deflateSync } from 'node:zlib'
 import { join } from 'node:path'
 import {
   APP_DB_MIGRATIONS,
+  buildSceneRenderSpec,
   CreativeService,
   CredentialStore,
   LoggerService,
@@ -33,12 +34,18 @@ import {
 import {
   OpenRouterProvider,
   OpenAIImagesProvider,
+  OpenAIVideoProvider,
   buildSystemPrompt,
   buildImagePrompt,
 } from '@mirai/ai'
 import {
   ProjectConfig,
   PROJECT_PRESETS,
+  ScreenplayAnalysis,
+  DirectorNotes,
+  ContinuityFinding,
+  parseSrt,
+  exportPresetById,
   effectiveShortcuts,
   normalizeCombo,
   prettyCombo,
@@ -856,6 +863,130 @@ async function main(): Promise<void> {
     if (analytics.approvals.events < 6) throw new Error('approval events not counted')
     if (analytics.versions.total < 3) throw new Error('versions not counted')
     if (analytics.crew.total !== 0) throw new Error('crew should be empty after cleanup')
+  })
+
+  // ---- v0.8: Subtitles, video-gen, Phase 8 AI --------------------------------
+  await step('SUBTITLES: real SRT import → cue list → delivery export', () => {
+    const scene = tctx!.creative.listScenes(tctx!.creative.listEpisodes()[0]!.id)[0]!
+    const srtFile = join(root, 'subs.srt')
+    writeFileSync(
+      srtFile,
+      '1\n00:00:00,500 --> 00:00:02,000\nYuna, look at the sky!\n\n2\n00:00:02,500 --> 00:00:04,000\nIt is falling UP.\n',
+      'utf8',
+    )
+    const imported = tctx!.subtitles.importFile(scene.id, srtFile)
+    if (imported !== 2) throw new Error('expected 2 imported cues')
+    const list = tctx!.subtitles.list(scene.id)
+    if (list.length !== 2 || list[0]!.text !== 'Yuna, look at the sky!') throw new Error('cue list wrong')
+    if (Math.abs(list[0]!.startSec - 0.5) > 1e-6) throw new Error('SRT timecode parse wrong')
+    const out = tctx!.subtitles.exportFile(scene.id, 'srt')
+    if (!existsSync(out.path) || out.count !== 2) throw new Error('export broken')
+    const reparsed = parseSrt(readFileSync(out.path, 'utf8'))
+    if (reparsed.length !== 2 || reparsed[1]!.text !== 'It is falling UP.') throw new Error('SRT round-trip broken')
+  })
+
+  await step('VIDEO GEN: provider contract handles sync + polling shapes', async () => {
+    const videoBytes = Buffer.from('real-generated-mp4-bytes')
+    // Sync b64 shape.
+    const sync = new OpenAIVideoProvider({
+      apiKey: 'k', baseUrl: 'https://v.test/v1',
+      fetchFn: async (): Promise<FetchResponse> => ({
+        ok: true, status: 200, body: null,
+        text: async () => JSON.stringify({ data: [{ b64_json: videoBytes.toString('base64') }] }),
+      }),
+      timeoutMs: 0,
+    })
+    const r1 = await sync.generate({ model: 'v/m', prompt: 'sky', seconds: 4, size: '1344x768' })
+    if (Buffer.compare(r1.bytes, videoBytes) !== 0) throw new Error('sync shape broken')
+
+    // Async job + polling shape.
+    let polls = 0
+    const async = new OpenAIVideoProvider({
+      apiKey: 'k', baseUrl: 'https://v.test/v1',
+      fetchFn: async (url: string): Promise<FetchResponse> => {
+        if (url.endsWith('/videos/generations')) {
+          return { ok: true, status: 200, body: null, text: async () => JSON.stringify({ id: 'j1', status: 'queued' }) }
+        }
+        polls++
+        return {
+          ok: true, status: 200, body: null,
+          text: async () =>
+            polls < 2
+              ? JSON.stringify({ status: 'processing' })
+              : JSON.stringify({ status: 'completed', data: [{ b64_json: videoBytes.toString('base64') }] }),
+        }
+      },
+      timeoutMs: 0,
+      pollIntervalMs: 1,
+    })
+    const r2 = await async.generate({ model: 'v/m', prompt: 'sky', seconds: 2, size: '1344x768' })
+    if (Buffer.compare(r2.bytes, videoBytes) !== 0 || polls < 2) throw new Error('polling shape broken')
+  })
+
+  await step('AI ANALYSIS: structured Phase-8 payloads validate (mocked transport)', async () => {
+    const analysisPayload = {
+      pacingScore: 7.5, dialogueQuality: 8,
+      strengths: ['clean turning point'], issues: ['beat repeats'],
+      suggestions: ['trim the cold open'], repetitionFlags: ['two identical goodbyes'],
+      voiceNotes: ['Yuna consistent'],
+    }
+    const mockChat = async (): Promise<FetchResponse> => ({
+      ok: true, status: 200, body: null,
+      text: async () => JSON.stringify({
+        id: 'x', object: 'chat.completion', created: 1, model: 'test/model',
+        choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(analysisPayload) } }],
+        usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+      }),
+    })
+    const provider = new OpenRouterProvider({
+      apiKey: 'k', baseUrl: 'https://chat.test/v1', fetchFn: mockChat, timeoutMs: 0,
+    })
+    const result = await provider.chat({ model: 'test/model', temperature: 0.3, maxTokens: 512, messages: [{ role: 'user', content: 'analyze' }] })
+    const parsed = ScreenplayAnalysis.safeParse(JSON.parse(result.content.trim()))
+    if (!parsed.success) throw new Error('ScreenplayAnalysis schema mismatch')
+    if (parsed.data.pacingScore !== 7.5) throw new Error('payload values lost')
+
+    const director = DirectorNotes.safeParse({
+      narrative: ['a'], composition: ['b'], rhythm: ['c'], emotion: ['d'], camera: ['e'],
+      perShot: [{ shotTitle: 'Wide', suggestion: 'hold longer' }],
+    })
+    if (!director.success) throw new Error('DirectorNotes schema mismatch')
+    const finding = ContinuityFinding.safeParse({ severity: 'WARNING', title: 't', detail: 'd' })
+    if (!finding.success) throw new Error('ContinuityFinding schema mismatch')
+  })
+
+  await step('GENERATED VIDEO: real bytes land in the project and attach to the shot', () => {
+    const scene = tctx!.creative.listScenes(tctx!.creative.listEpisodes()[0]!.id)[0]!
+    const shot = tctx!.storyboard.listShots(scene.id)[0]!
+    const mp4 = join(root, 'gen.mp4')
+    writeFileSync(mp4, Buffer.alloc(4096, 0x66))
+    // registerGeneratedVideo takes provider bytes directly.
+    const asset = tctx!.storyboard.registerGeneratedVideo(shot.id, readFileSync(mp4), 'video/mp4')
+    if (asset.kind !== 'VIDEO') throw new Error('asset kind wrong')
+    if (!existsSync(join(summary.path, asset.relativePath))) throw new Error('video not on disk')
+    if (tctx!.storyboard.getShotById(shot.id).videoAssetId !== asset.id) throw new Error('video not attached')
+    // Replacing prunes the orphaned file (security parity with frames).
+    const second = tctx!.storyboard.registerGeneratedVideo(shot.id, readFileSync(mp4), 'video/mp4')
+    if (second.id === asset.id) throw new Error('replace must create a new asset')
+    if (existsSync(join(summary.path, asset.relativePath))) throw new Error('orphan video not pruned')
+  })
+
+  await step('TIMELINE: video-asset clips render from the REAL file (builder)', () => {
+    const scene = tctx!.creative.listScenes(tctx!.creative.listEpisodes()[0]!.id)[0]!
+    const shot = tctx!.storyboard.listShots(scene.id)[0]!
+    tctx!.timeline.buildFromScene(scene.id, true)
+    const bundle = tctx!.timeline.getTimeline(scene.id)
+    const videoTrack = bundle.tracks.find((t) => t.kind === 'VIDEO')!
+    const clip = bundle.clips.find((c) => c.trackId === videoTrack.id && c.sourceId === shot.id)!
+    const source = bundle.sources[shot.id]!
+    if (source.type !== 'SHOT' || !source.videoAssetId) throw new Error('video source missing from bundle')
+    const preset = exportPresetById('youtube-1080')
+    const spec = buildSceneRenderSpec(bundle, new Map(), new Map(), { preset, quality: 'PREVIEW' })
+    const flat = spec.args.join(' ')
+    const graph = spec.args[spec.args.indexOf('-filter_complex') + 1]!
+    if (!flat.includes(`{{ASSET:${source.videoAssetId}}}`)) throw new Error('video file not an input')
+    if (!graph.includes(`trim=start=${clip.inOffsetSec}`)) throw new Error('video clip trim missing')
+    void clip
   })
 
   await step('SHORTCUTS: configurable bindings persist and stay valid', () => {

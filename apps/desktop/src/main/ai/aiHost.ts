@@ -9,6 +9,9 @@
 import {
   MiraiError,
   toErrorPayload,
+  ScreenplayAnalysis,
+  DirectorNotes,
+  ContinuityFinding,
   type AiContextScope,
   type ChatMessage,
   type EntityId,
@@ -17,6 +20,7 @@ import {
   ModelRegistry,
   OpenRouterProvider,
   OpenAIImagesProvider,
+  OpenAIVideoProvider,
   buildSystemPrompt,
   buildImagePrompt,
   draftScreenplayInstruction,
@@ -122,6 +126,278 @@ export class AiHost {
       provider: credKey,
       imageConfigured: this.resolveImageProvider() !== null,
     }
+  }
+
+  /** Video provider (OpenAI-videos-compatible) — null when not configured. */
+  resolveVideoProvider(): { apiKey: string; baseUrl: string; model: string; size: string } | null {
+    const settings = this.deps.settings.get()
+    const apiKey = this.deps.credentials.get('videogen')
+    const baseUrl = settings.ai.video?.baseUrl
+    const model = settings.ai.video?.model
+    if (!apiKey || !baseUrl || !model) return null
+    return { apiKey, baseUrl, model, size: settings.ai.video.size || '1344x768' }
+  }
+
+  /**
+   * Generates a REAL video for a shot via the configured video provider,
+   * with the same studio-consistency prompt discipline as image generation
+   * (Style Bible + camera metadata + scene/cast baked in) plus motion
+   * direction. The bytes are stored in the project and attached to the shot.
+   */
+  async generateVideo(
+    shotId: string,
+    extraPrompt: string | undefined,
+    seconds: number,
+    signal: AbortSignal,
+    progress: (pct: number) => void,
+  ): Promise<{ assetId: string; prompt: string }> {
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+    const videoProvider = this.resolveVideoProvider()
+    if (!videoProvider) {
+      throw new MiraiError(
+        'CREDENTIALS_UNAVAILABLE',
+        'No video provider configured — set baseUrl, model and key in Settings → Providers.',
+      )
+    }
+    const shot = ctx.storyboard.getShotById(shotId)
+    const scene = ctx.creative.getSceneById(shot.sceneId)
+    const characters = ctx.creative
+      .listCharacters()
+      .filter((c) => scene.characterIds.includes(c.id))
+      .map((c) => ({ name: c.name }))
+    const prompt = [
+      buildImagePrompt({
+        styleBible: ctx.storyboard.getStyleBible(),
+        scene: {
+          title: scene.title,
+          timeOfDay: scene.timeOfDay,
+          synopsis: scene.synopsis,
+          locationName: ctx.creative.locationName(scene.locationId),
+          castNames: characters.map((c) => c.name),
+        },
+        shot: {
+          title: shot.title,
+          shotType: shot.shotType,
+          lens: shot.lens,
+          cameraMovement: shot.cameraMovement,
+          durationSeconds: shot.durationSeconds,
+          notes: shot.notes,
+        },
+        characters,
+        extraPrompt,
+      }),
+      'MOTION: animate with the camera movement above, subtle natural motion, stable character design across all frames, 24fps, no text overlays, no scene cuts.',
+    ].join('\n\n')
+    progress(10)
+    const provider = new OpenAIVideoProvider({
+      apiKey: videoProvider.apiKey,
+      baseUrl: videoProvider.baseUrl,
+      fetchFn: globalFetch(),
+      timeoutMs: 300_000,
+    })
+    const result = await provider.generate({
+      model: videoProvider.model,
+      prompt,
+      seconds,
+      size: videoProvider.size,
+      signal,
+    })
+    progress(80)
+    const asset = ctx.storyboard.registerGeneratedVideo(shotId, result.bytes, result.mimeType)
+    this.deps.logger.log('info', 'AI', 'Video generated and attached', {
+      shotId,
+      assetId: asset.id,
+      bytes: result.bytes.length,
+    })
+    return { assetId: asset.id, prompt }
+  }
+
+  // ------------------------------------------------------------------- phase 8 analysis
+
+  /** Shared JSON-mode chat call with zod validation of the provider output. */
+  private async chatJson<T>(
+    instruction: string,
+    schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false; error: { issues: Array<{ message: string; path: (string | number)[] }> } } },
+    temperature: number,
+  ): Promise<T> {
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+    const providerConfig = this.resolveChatProvider()
+    const settings = this.deps.settings.get()
+    const provider = new OpenRouterProvider({
+      apiKey: providerConfig.apiKey,
+      baseUrl: providerConfig.baseUrl,
+      fetchFn: globalFetch(),
+      appName: 'Mirai Studio',
+      appUrl: 'https://mirai-studio.app',
+      timeoutMs: settings.ai.requestTimeoutMs,
+    })
+    const result = await provider.chat({
+      model: providerConfig.model,
+      temperature,
+      maxTokens: Math.max(settings.ai.maxTokens, 2_048),
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a professional anime production analysis engine. Respond ONLY with a single valid JSON object matching the requested shape — no markdown fences, no commentary.',
+        },
+        { role: 'user', content: instruction },
+      ],
+    })
+    const raw = result.content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      throw new MiraiError('AI_PROVIDER_ERROR', 'The model returned invalid JSON — try again.', {
+        retryable: true,
+      })
+    }
+    const validated = schema.safeParse(parsed)
+    if (!validated.success) {
+      throw new MiraiError('AI_PROVIDER_ERROR', 'The model response did not match the expected shape.', {
+        retryable: true,
+        details: validated.error.issues.slice(0, 5).map((i) => ({ path: i.path.join('.'), message: i.message })),
+      })
+    }
+    return validated.data
+  }
+
+  private sceneContext(sceneId: string) {
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+    const scene = ctx.creative.getSceneById(sceneId)
+    const characters = ctx.creative.listCharacters()
+    const cast = characters.filter((c) => scene.characterIds.includes(c.id))
+    const shots = ctx.storyboard.listShots(sceneId)
+    return {
+      ctx,
+      scene,
+      cast,
+      shots,
+      describe(): string {
+        const lines = [
+          `SCENE: ${scene.title}`,
+          `TIME OF DAY: ${scene.timeOfDay}`,
+          `LOCATION: ${ctx.creative.locationName(scene.locationId) ?? 'unspecified'}`,
+          `SYNOPSIS: ${scene.synopsis ?? '—'}`,
+          `CAST: ${cast.map((c) => c.name).join(', ') || '—'}`,
+        ]
+        if (scene.screenplay) lines.push(`SCREENPLAY:\n${scene.screenplay}`)
+        if (shots.length > 0) {
+          lines.push(
+            `SHOTS:\n${shots
+              .map(
+                (s, i) =>
+                  `${i + 1}. "${s.title}" — ${s.shotType}, ${s.lens}, ${s.cameraMovement}, ${s.durationSeconds}s${s.dialogue ? `, dialogue: ${s.dialogue.replace(/\n/g, ' ')}` : ''}`,
+              )
+              .join('\n')}`,
+          )
+        }
+        if (cast.length > 0) {
+          lines.push(
+            `CHARACTER SHEETS:\n${cast
+              .map((c) => `- ${c.name} (${c.role}): appearance ${c.appearance ?? '—'}`)
+              .join('\n')}`,
+          )
+        }
+        return lines.join('\n\n')
+      },
+    }
+  }
+
+  /** Phase 8 — structured screenplay analysis (pacing, dialogue, repetition). */
+  async analyzeScreenplay(sceneId: string): Promise<import('@mirai/shared').ScreenplayAnalysis> {
+    const { scene, describe } = this.sceneContext(sceneId)
+    if (!scene.screenplay || scene.screenplay.trim().length === 0) {
+      throw new MiraiError('VALIDATION_ERROR', 'This scene has no screenplay to analyze yet.')
+    }
+    return this.chatJson(
+      `Analyze this anime scene's screenplay like a head writer.\n\n${describe()}\n\nReturn JSON: { pacingScore: 0-10, dialogueQuality: 0-10, strengths: string[], issues: string[], suggestions: string[], repetitionFlags: string[], voiceNotes: string[] } — max 4 items per array, each item one concrete sentence.`,
+      ScreenplayAnalysis,
+      0.3,
+    )
+  }
+
+  /** Phase 8 — AI Director notes (narrative, composition, rhythm, emotion, camera). */
+  async directorNotes(sceneId: string): Promise<import('@mirai/shared').DirectorNotes> {
+    const { describe } = this.sceneContext(sceneId)
+    return this.chatJson(
+      `You are the series director of a professional anime studio. Give production notes for this scene.\n\n${describe()}\n\nReturn JSON: { narrative: string[], composition: string[], rhythm: string[], emotion: string[], camera: string[], perShot: [{ shotTitle: string, suggestion: string }] } — narrative/composition/rhythm/emotion/camera: max 3 concrete sentences each; perShot: one suggestion per listed shot (use its exact title).`,
+      DirectorNotes,
+      0.5,
+    )
+  }
+
+  /** Phase 8 — Continuity Engine (AI-assisted, structured findings). */
+  async continuityCheck(
+    sceneId: string,
+    progress?: (pct: number) => void,
+  ): Promise<Array<import('@mirai/shared').ContinuityFinding>> {
+    const { ctx, scene, cast, describe } = this.sceneContext(sceneId)
+    // Rule-based pre-pass (fast, deterministic, real):
+    const findings: Array<{ severity: 'ERROR' | 'WARNING' | 'INFO'; title: string; detail: string }> = []
+    if (scene.screenplay) {
+      const speakers = [
+        ...new Set(
+          scene.screenplay
+            .split('\n')
+            .map((l) => l.trim())
+            .filter((l) => /^[A-Z][A-Z0-9_ -]{1,40}$/.test(l))
+            .map((l) => l.toUpperCase()),
+        ),
+      ]
+      for (const speaker of speakers) {
+        const match = cast.find((c) => c.name.toUpperCase().replace(/\s+/g, ' ') === speaker)
+        if (!match) {
+          findings.push({
+            severity: 'WARNING',
+            title: `Dialogue speaker "${speaker}" is not in the scene cast`,
+            detail: 'Either add the character to the scene cast or fix the speaker tag — the AI context and voice pipeline use the cast.',
+          })
+        }
+      }
+    }
+    progress?.(40)
+    const aiFindings = await this.chatJson(
+      `You are the continuity supervisor of an anime production. Check this scene for continuity issues: costume/appearance contradictions, impossible locations, temporal inconsistencies, character behavior conflicts.\n\n${describe()}\n\nReturn JSON: { findings: [{ severity: "ERROR"|"WARNING"|"INFO", title: string, detail: string }] } — only report REAL issues, max 8; if the scene is consistent return an empty list.`,
+      { safeParse: (v: unknown) => ContinuityFinding.array().max(30).safeParse(v) },
+      0.2,
+    )
+    void ctx
+    // Merge, dedupe by title.
+    const byTitle = new Map<string, { severity: 'ERROR' | 'WARNING' | 'INFO'; title: string; detail: string }>()
+    for (const f of [...findings, ...aiFindings]) byTitle.set(f.title, f)
+    return [...byTitle.values()]
+  }
+
+  /** Phase 8 — orchestrated production review of one scene (3 steps). */
+  async productionReview(
+    sceneId: string,
+    progress: (pct: number) => void,
+    signal: { readonly aborted: boolean },
+  ): Promise<import('@mirai/shared').ProductionReview> {
+    const { scene } = this.sceneContext(sceneId)
+    progress(5)
+    const analysis = await this.analyzeScreenplay(sceneId)
+    if (signal.aborted) throw new MiraiError('CANCELLED', 'Review cancelled.')
+    progress(40)
+    const director = await this.directorNotes(sceneId)
+    if (signal.aborted) throw new MiraiError('CANCELLED', 'Review cancelled.')
+    progress(75)
+    const continuity = await this.continuityCheck(sceneId, (p) => progress(60 + p * 0.15))
+    progress(95)
+    const review = { sceneTitle: scene.title, analysis, director, continuity }
+    const ctx = this.deps.projects.current()
+    ctx?.storyboard.addDecision({
+      kind: 'production-review',
+      summary: `Production review of "${scene.title}" — pacing ${analysis.pacingScore}/10, dialogue ${analysis.dialogueQuality}/10, ${continuity.length} continuity finding(s).`,
+      sceneId,
+    })
+    progress(100)
+    return review
   }
 
   // ------------------------------------------------------------------- models

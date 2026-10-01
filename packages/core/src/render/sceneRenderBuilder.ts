@@ -40,6 +40,8 @@ export interface SceneRenderSpec {
 export interface BuilderOptions {
   preset: ExportPreset
   quality: RenderQuality
+  /** Absolute path of a burned-in .srt file (optional). */
+  subtitlePath?: string
 }
 
 /** Camera curves per shot, pre-fetched by the caller. */
@@ -218,8 +220,12 @@ export function buildSceneRenderSpec(
   for (const track of videoTracks) {
     for (const clip of bundle.clips.filter((c) => c.trackId === track.id).sort((a, b) => a.startSec - b.startSec)) {
       const src = bundle.sources[clip.sourceId]
+      const videoAssetId = src?.type === 'SHOT' ? src.videoAssetId : null
       const frameAssetId = src?.type === 'SHOT' ? src.frameAssetId : null
-      if (frameAssetId) {
+      if (videoAssetId) {
+        // Generated video: the REAL file is the clip source (no camera zoompan).
+        args.push('-i', `{{ASSET:${videoAssetId}}}`)
+      } else if (frameAssetId) {
         args.push('-loop', '1', '-t', String(round3(clip.durationSec)), '-r', String(fps), '-i', `{{ASSET:${frameAssetId}}}`)
       } else {
         // Shot without a frame renders as black — same semantic as the preview placeholder.
@@ -264,30 +270,59 @@ export function buildSceneRenderSpec(
         const inputIdx = videoInputByClip.get(clip.id)!
         const frames = Math.max(1, Math.round(clip.durationSec * fps))
         const chain: string[] = []
+        const src = bundle.sources[clip.sourceId]
+        const videoAssetId = src?.type === 'SHOT' ? src.videoAssetId : null
 
-        // Effects first (match preview: filters apply to the source image).
+        // Effects first (match preview: filters apply to the source).
         chain.push(...clipEffectsFilters(clip))
 
-        // Camera: zoompan handles zoom + x/y pan.
-        const camPoints = bakedCameraPoints(clip, camera)
-        const zoomExpr = piecewiseExpr('on', fps, camPoints.get('scale') ?? [], DEFAULT_CAMERA.scale)
-        const xExpr = piecewiseExpr('on', fps, camPoints.get('x') ?? [], DEFAULT_CAMERA.x)
-        const yExpr = piecewiseExpr('on', fps, camPoints.get('y') ?? [], DEFAULT_CAMERA.y)
-        const rotPoints = camPoints.get('rotation') ?? []
-        const rotExpr = piecewiseExpr('t', null, rotPoints, DEFAULT_CAMERA.rotation)
+        if (videoAssetId) {
+          // REAL video source: trim to the clip window, normalize fps/size.
+          chain.push(
+            `trim=start=${round3(clip.inOffsetSec)}:duration=${round3(clip.durationSec)}`,
+            'setpts=PTS-STARTPTS',
+            `fps=${fps}`,
+            `scale=${preset.width}:${preset.height}:force_original_aspect_ratio=decrease`,
+            `pad=${preset.width}:${preset.height}:(ow-iw)/2:(oh-ih)/2`,
+            'setsar=1',
+          )
+        } else {
+          // Camera: zoompan handles zoom + x/y pan.
+          const camPoints = bakedCameraPoints(clip, camera)
+          const zoomExpr = piecewiseExpr('on', fps, camPoints.get('scale') ?? [], DEFAULT_CAMERA.scale)
+          const xExpr = piecewiseExpr('on', fps, camPoints.get('x') ?? [], DEFAULT_CAMERA.x)
+          const yExpr = piecewiseExpr('on', fps, camPoints.get('y') ?? [], DEFAULT_CAMERA.y)
+          const rotPoints = camPoints.get('rotation') ?? []
+          const rotExpr = piecewiseExpr('t', null, rotPoints, DEFAULT_CAMERA.rotation)
+          const opPoints = camPoints.get('opacity') ?? []
 
-        // Upscale 2x headroom so zoompan never runs out of pixels.
-        chain.push(`scale=${preset.width * 2}:${preset.height * 2}:force_original_aspect_ratio=increase`)
-        const zxCenter = 'iw/2-(iw/zoom/2)'
-        const zyCenter = 'ih/2-(ih/zoom/2)'
-        chain.push(
-          `zoompan=z='${zoomExpr ?? 1}':x='${xExpr ?? zxCenter}':y='${yExpr ?? zyCenter}'` +
-            `:d=${frames}:s=${preset.width}x${preset.height}:fps=${fps}`,
-        )
-        if (rotExpr) {
-          chain.push(`rotate=a='PI/180*(${rotExpr})':ow=iw:oh=ih:c=black`)
+          // Upscale 2x headroom so zoompan never runs out of pixels.
+          chain.push(`scale=${preset.width * 2}:${preset.height * 2}:force_original_aspect_ratio=increase`)
+          const zxCenter = 'iw/2-(iw/zoom/2)'
+          const zyCenter = 'ih/2-(ih/zoom/2)'
+          chain.push(
+            `zoompan=z='${zoomExpr ?? 1}':x='${xExpr ?? zxCenter}':y='${yExpr ?? zyCenter}'` +
+              `:d=${frames}:s=${preset.width}x${preset.height}:fps=${fps}`,
+          )
+          if (rotExpr) {
+            chain.push(`rotate=a='PI/180*(${rotExpr})':ow=iw:oh=ih:c=black`)
+          }
+          chain.push('setsar=1')
+
+          // Animated camera opacity: bake the curve into a geq alpha expression
+          // (real per-frame alpha — matches the preview compositing).
+          const opExpr = piecewiseExpr('T', null, opPoints, DEFAULT_CAMERA.opacity)
+          if (opExpr) {
+            // geq: p(X,Y) reads the current (alpha) plane; T is elapsed time.
+            chain.push(
+              `format=yuva420p`,
+              // lum passthrough satisfies geq's mandatory luma expression;
+              // alpha(X,Y) reads the original alpha; T is elapsed time.
+              `geq=lum='lum(X,Y)':a='alpha(X,Y)*(${opExpr})'`,
+              'format=yuv420p',
+            )
+          }
         }
-        chain.push('setsar=1')
 
         // Compositing alpha for overlays.
         if (videoTracks.length > 1 && track !== videoTracks[0]) {
@@ -314,15 +349,42 @@ export function buildSceneRenderSpec(
     }
   }
 
-  // Composite: first track = base; others overlay (track order = z).
+  // Composite: first track = base; others overlay/blend (track order = z).
+  const BLEND_MAP: Record<string, string> = {
+    multiply: 'multiply',
+    screen: 'screen',
+    overlay: 'overlay',
+    'soft-light': 'softlight',
+    'hard-light': 'hardlight',
+    'color-dodge': 'dodge',
+    difference: 'difference',
+  }
   let videoLabel: string | null = null
   if (videoOutLabels.length > 0) {
     videoLabel = videoOutLabels[0]!
+    // Pad the base to the full timeline so blend inputs always match lengths.
+    const paddedBase = `vbase_padded`
+    filterParts.push(`[${videoLabel}]tpad=stop_mode=add:color=black:stop_duration=${round3(Math.max(0, total - 0.001))}[${paddedBase}]`)
+    videoLabel = paddedBase
     for (let i = 1; i < videoOutLabels.length; i++) {
+      const trackClips = bundle.clips.filter((c) => c.trackId === videoTracks[i]!.id)
+      const blendMode = trackClips.find((c) => c.blend !== 'normal')?.blend
+      const topLabel = videoOutLabels[i]!
       const out = `vcomp${i}`
-      filterParts.push(`[${videoLabel}][${videoOutLabels[i]!}]overlay=0:0:format=auto[${out}]`)
+      if (blendMode && BLEND_MAP[blendMode]) {
+        // Real blend-mode compositing (same shape as the preview's mix-blend-mode).
+        const paddedTop = `vtop_padded${i}`
+        filterParts.push(`[${topLabel}]tpad=stop_mode=add:color=black:stop_duration=${round3(Math.max(0, total - 0.001))}[${paddedTop}]`)
+        filterParts.push(`[${videoLabel}][${paddedTop}]blend=all_mode=${BLEND_MAP[blendMode]}:shortest=0[${out}]`)
+      } else {
+        filterParts.push(`[${videoLabel}][${topLabel}]overlay=0:0:format=auto:shortest=0[${out}]`)
+      }
       videoLabel = out
     }
+    // Trim the composite back to the exact total (padding safety).
+    const trimmed = `vcomp_final`
+    filterParts.push(`[${videoLabel}]trim=0:${round3(total)},setpts=PTS-STARTPTS[${trimmed}]`)
+    videoLabel = trimmed
   }
 
   // ------------------------------------------------------------- audio graph
@@ -372,6 +434,20 @@ export function buildSceneRenderSpec(
     videoLabel = `basev`
     filterParts.push(`[${inputIndex}:v]null[${videoLabel}]`)
     inputIndex++
+  }
+
+  // Subtitle burn-in: a REAL .srt file burned over the composited video.
+  if (opts.subtitlePath) {
+    // Escape for ffmpeg filter args: backslashes, colons and quotes.
+    const escaped = opts.subtitlePath
+      .split('\\')
+      .join('/')
+      .split("'")
+      .join("\\'")
+      .split(':')
+      .join('\\:')
+    filterParts.push(`[${videoLabel}]subtitles='${escaped}'[vsubbed]`)
+    videoLabel = 'vsubbed'
   }
   if (!audioLabel) {
     args.push('-f', 'lavfi', '-t', String(round3(total)), '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000')

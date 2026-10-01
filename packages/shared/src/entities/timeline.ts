@@ -360,6 +360,7 @@ export const ClipSource = z.discriminatedUnion('type', [
     title: z.string(),
     frameAssetId: zEntityId.nullable(),
     audioAssetId: zEntityId.nullable(),
+    videoAssetId: zEntityId.nullable().default(null),
     durationSec: z.number(),
     shotType: z.string(),
     cameraMovement: z.string(),

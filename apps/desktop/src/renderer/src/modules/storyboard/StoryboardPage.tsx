@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Clock,
   Clapperboard,
+  Film,
   ImagePlus,
   LayoutGrid,
   Mic,
@@ -43,6 +44,7 @@ import {
   useShotMutations,
   useAiStatus,
   useGenerateFrame,
+  useGenerateVideo,
   useVoiceActions,
   useRecordDecision,
   useRenderStatus,
@@ -365,6 +367,7 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
   const mutations = useShotMutations()
   const { data: ai } = useAiStatus()
   const generateFrame = useGenerateFrame()
+  const generateVideo = useGenerateVideo()
   const voice = useVoiceActions()
   const recordDecision = useRecordDecision()
   const { data: renderStatus } = useRenderStatus()
@@ -452,6 +455,28 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
     )
   }
 
+  const generateShotVideo = () => {
+    generateVideo.mutate(
+      { shotId: shot.id, seconds: Math.min(20, Math.max(1, Math.round(shot.durationSeconds))) },
+      {
+        onSuccess: () => {
+          recordDecision.mutate({
+            kind: 'video',
+            summary: `Queued AI video generation for shot "${shot.title}" (${shot.durationSeconds}s).`,
+            shotId: shot.id,
+          })
+          toast({
+            kind: 'info',
+            title: 'Video generation queued',
+            description: 'The real video file attaches to the shot — preview & render use it automatically.',
+          })
+        },
+        onError: (err) =>
+          toast({ kind: 'error', title: 'Video generation failed to start', description: err.message }),
+      },
+    )
+  }
+
   const importVoice = () => {
     voice.importVoice.mutate(shot.id, {
       onSuccess: (asset) =>
@@ -517,6 +542,21 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
               onClick={generateWithAi}
             >
               <Sparkles className="h-3.5 w-3.5" /> Generate (AI)
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-mirai-violet/40 text-mirai-violet"
+              loading={generateVideo.isPending}
+              disabled={!ai?.configured}
+              title={
+                ai?.configured
+                  ? 'Generate a real video clip for this shot (video provider — Settings → Providers)'
+                  : 'Configure the chat + video provider in Settings → Providers first'
+              }
+              onClick={generateShotVideo}
+            >
+              <Film className="h-3.5 w-3.5" /> {shot.videoAssetId ? 'Regenerate' : 'Generate'} Video
             </Button>
             {shot.frameAssetId && (
               <Button

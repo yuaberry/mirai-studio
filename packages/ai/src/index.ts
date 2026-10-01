@@ -45,3 +45,7 @@ export { OpenAIImagesProvider } from './images'
 export type { ImageOptions, ImageResult } from './images'
 export { buildImagePrompt, draftScreenplayInstruction } from './consistency'
 export type { ConsistencyData, ConsistencyScene, ConsistencyShot } from './consistency'
+
+// ------------------------------------------------------- video generation
+export { OpenAIVideoProvider } from './video'
+export type { VideoOptions, VideoResult } from './video'

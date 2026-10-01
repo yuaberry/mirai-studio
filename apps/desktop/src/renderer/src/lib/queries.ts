@@ -478,12 +478,8 @@ export function useDecisions(limit = 50) {
 export function useRecordDecision() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: {
-      kind: 'screenplay' | 'image' | 'other'
-      summary: string
-      sceneId?: string
-      shotId?: string
-    }) => invoke('ai:recordDecision', input).then(() => undefined),
+    mutationFn: (input: import('@mirai/shared').IpcRequestInput<'ai:recordDecision'>) =>
+      invoke('ai:recordDecision', input).then(() => undefined),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ai', 'decisions'] }),
   })
 }
@@ -1017,5 +1013,100 @@ export function useAnalytics() {
     queryKey: productionKeys.analytics,
     queryFn: () =>
       invoke('analytics:overview').then((r) => r.analytics as import('@mirai/shared').ProductionAnalytics),
+  })
+}
+
+// ---------------------------------------------------------------- subtitles & Phase 8 AI (v0.8)
+
+export const subtitleKeys = {
+  list: (sceneId: string) => ['subtitles', sceneId] as const,
+}
+
+export function useSubtitles(sceneId: string | undefined) {
+  return useQuery({
+    queryKey: subtitleKeys.list(sceneId ?? 'none'),
+    queryFn: () =>
+      invoke('subtitles:list', { sceneId: sceneId! }).then(
+        (r) => r.subtitles as import('@mirai/shared').SubtitleRecord[],
+      ),
+    enabled: sceneId !== undefined,
+  })
+}
+
+export function useSubtitleMutations(sceneId: string | undefined) {
+  const queryClient = useQueryClient()
+  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['subtitles'] })
+  return {
+    create: useMutation({
+      mutationFn: (input: { startSec: number; endSec: number; text: string }) =>
+        invoke('subtitles:create', { sceneId: sceneId!, ...input }).then((r) => r.subtitle),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: (input: {
+        id: string
+        patch: { startSec?: number; endSec?: number; text?: string }
+      }) => invoke('subtitles:update', input).then((r) => r.subtitle),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => invoke('subtitles:delete', { id }).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+    importFile: useMutation({
+      mutationFn: () =>
+        invoke('subtitles:importFile', { sceneId: sceneId! }).then((r) => r.imported),
+      onSuccess: invalidate,
+    }),
+    exportFile: useMutation({
+      mutationFn: (format: 'srt' | 'vtt') =>
+        invoke('subtitles:exportFile', { sceneId: sceneId!, format }).then((r) => r.path),
+      onSuccess: invalidate,
+    }),
+  }
+}
+
+export function useAnalyzeScreenplay() {
+  return useMutation({
+    mutationFn: (sceneId: string) =>
+      invoke('ai:analyzeScreenplay', { sceneId }).then((r) => r.analysis),
+  })
+}
+
+export function useDirectorNotes() {
+  return useMutation({
+    mutationFn: (sceneId: string) => invoke('ai:directorNotes', { sceneId }).then((r) => r.notes),
+  })
+}
+
+export function useContinuityCheck() {
+  return useMutation({
+    mutationFn: (sceneId: string) =>
+      invoke('ai:continuityCheck', { sceneId }).then((r) => r.findings),
+  })
+}
+
+export function useProductionReview() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sceneId: string) =>
+      invoke('ai:productionReview', { sceneId }).then((r) => r.jobId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs })
+      void queryClient.invalidateQueries({ queryKey: ['ai', 'decisions'] })
+    },
+  })
+}
+
+export function useGenerateVideo() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { shotId: string; extraPrompt?: string; seconds?: number }) =>
+      invoke('ai:generateVideo', input).then((r) => r.jobId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs })
+      void queryClient.invalidateQueries({ queryKey: ['shots'] })
+      void queryClient.invalidateQueries({ queryKey: ['timeline'] })
+    },
   })
 }

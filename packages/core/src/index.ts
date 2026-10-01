@@ -41,6 +41,7 @@ export { MediaService } from './media/mediaService'
 
 // render (Phase 4)
 export { RenderService } from './render/renderService'
+export { buildSceneRenderSpec } from './render/sceneRenderBuilder'
 
 // timeline (Phase 5)
 export { TimelineService } from './timeline/timelineService'
@@ -48,6 +49,9 @@ export { KeyframeService } from './timeline/keyframeService'
 
 // production (Phase 7)
 export { ProductionService } from './production/productionService'
+
+// subtitles (Phase 4 wrap-up)
+export { SubtitleService } from './subtitles/subtitleService'
 
 // settings
 export { SettingsService, CredentialStore } from './settings/settingsService'

@@ -65,6 +65,8 @@ export interface FetchResponse {
   status: number
   /** Response body as text (non-streaming calls). */
   text(): Promise<string>
+  /** Binary body (video downloads). Present on real fetch Responses. */
+  arrayBuffer?(): Promise<ArrayBuffer>
   /** SSE body for streaming calls. */
   body?: ReadableStream<Uint8Array> | null
 }

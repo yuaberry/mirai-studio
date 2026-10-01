@@ -23,6 +23,7 @@ import { RenderService } from '../src/render/renderService'
 import { buildSceneRenderSpec } from '../src/render/sceneRenderBuilder'
 import { StoryboardService } from '../src/storyboard/storyboardService'
 import { TimelineService } from '../src/timeline/timelineService'
+import { SubtitleService } from '../src/subtitles/subtitleService'
 import { openDatabase } from '../src/db/connection'
 import { runMigrations } from '../src/db/migrator'
 import { PROJECT_DB_MIGRATIONS } from '../src/db/migrations'
@@ -114,7 +115,7 @@ function makeEnv(name: string) {
   const storyboard = new StoryboardService(db, clock, dir)
   const media = new MediaService(db, clock, dir)
   const timeline = new TimelineService(db, clock)
-  const render = new RenderService(storyboard, media, dir, creative, timeline)
+  const render = new RenderService(storyboard, media, dir, creative, timeline, new SubtitleService(db, clock, dir))
   const episode = creative.createEpisode({ season: 1, number: 1, title: 'Episode One' })
   const scene = creative.createScene(episode.id, { title: 'Rooftop dawn' })
   return { dir, db, clock, creative, storyboard, media, timeline, render, scene }
@@ -150,8 +151,8 @@ function plainBundleFixture(): TimelineBundle {
     ],
     markers: [],
     sources: {
-      [shotA]: { type: 'SHOT', shotId: shotA, title: 'Wide', frameAssetId: '01HZZZASSETA00000000000000', audioAssetId: null, durationSec: 4, shotType: 'WIDE', cameraMovement: 'STATIC', dialogue: null },
-      [shotB]: { type: 'SHOT', shotId: shotB, title: 'Close', frameAssetId: null, audioAssetId: null, durationSec: 6, shotType: 'CLOSE_UP', cameraMovement: 'STATIC', dialogue: null },
+      [shotA]: { type: 'SHOT', shotId: shotA, title: 'Wide', frameAssetId: '01HZZZASSETA00000000000000', audioAssetId: null, videoAssetId: null, durationSec: 4, shotType: 'WIDE', cameraMovement: 'STATIC', dialogue: null },
+      [shotB]: { type: 'SHOT', shotId: shotB, title: 'Close', frameAssetId: null, audioAssetId: null, videoAssetId: null, durationSec: 6, shotType: 'CLOSE_UP', cameraMovement: 'STATIC', dialogue: null },
     },
   }
 }
@@ -358,6 +359,61 @@ describe('RenderService scene/episode renders (REAL FFmpeg)', () => {
     env.render.deleteOutput(result.outputPath)
     expect(existsSync(result.outputPath)).toBe(false)
   }, 120_000)
+
+  it.skipIf(!ffmpeg.available)('burns subtitles, blend modes and animated opacity into a real MP4', async () => {
+    const env = makeEnv('burn')
+    const frameFile = join(env.dir, 'frame.png')
+    writeFileSync(frameFile, makePng(32, 32, [120, 180, 255]))
+    const shot = env.storyboard.createShot(env.scene.id, { title: 'Subtitle shot', durationSeconds: 2 })
+    env.storyboard.importFrame(shot.id, frameFile)
+    // Animated camera opacity (fade-in curve) + a second blended track.
+    env.timeline.keyframes.upsert({
+      targetType: 'CAMERA', targetId: shot.id, param: 'opacity', atSec: 0, value: 0,
+    })
+    env.timeline.keyframes.upsert({
+      targetType: 'CAMERA', targetId: shot.id, param: 'opacity', atSec: 2, value: 1, easing: 'easeInOut',
+    })
+    const bundle = env.timeline.buildFromScene(env.scene.id)
+    const overlayTrack = env.timeline.createTrack(env.scene.id, 'VIDEO', 'Overlay')
+    void overlayTrack
+    const overlayClip = env.timeline.createClip({
+      trackId: overlayTrack.id,
+      sourceType: 'SHOT',
+      sourceId: shot.id,
+      startSec: 0,
+      durationSec: 1,
+    })
+    env.timeline.updateClip(overlayClip.id, { blend: 'screen' })
+    // Real subtitles for the burn-in.
+    env.timeline.getTimeline(env.scene.id)
+    for (const [start, end, text] of [
+      [0, 1, 'The sky is falling up'],
+      [1, 2, 'Yuna!'],
+    ] as Array<[number, number, string]>) {
+      env.db
+        .prepare('INSERT INTO subtitles (id, scene_id, start_sec, end_sec, text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(`sub-test-${start}`, env.scene.id, start, end, text, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+    }
+    const cueCount = env.db
+      .prepare('SELECT COUNT(*) AS n FROM subtitles WHERE scene_id = ?')
+      .get(env.scene.id) as { n: number }
+    expect(cueCount.n).toBe(2)
+    void bundle
+
+    const result = await env.render.renderScene({
+      sceneId: env.scene.id,
+      presetId: DEFAULT_PRESET_ID,
+      quality: 'PREVIEW',
+      reportProgress: noProgress,
+      signal: noAbort,
+    })
+    expect(existsSync(result.outputPath)).toBe(true)
+    const probed = env.render.probeDuration(result.outputPath)
+    expect(probed).not.toBeNull()
+    expect(probed!).toBeGreaterThan(1.4)
+    expect(probed!).toBeLessThan(2.6)
+    expect(statSync(result.outputPath).size).toBeGreaterThan(1_000)
+  }, 180_000)
 
   it.skipIf(!ffmpeg.available)('refuses to render scenes/episodes without timelines', async () => {
     const env = makeEnv('guards')

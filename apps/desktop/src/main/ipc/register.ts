@@ -594,6 +594,110 @@ export function registerIpcHandlers(c: Container): void {
     return { ok: true }
   })
 
+  // ---- Subtitle Studio (Phase 4 wrap-up) ---------------------------------------
+  handleIpc('subtitles:list', (req) => ({
+    subtitles: requireActive(c).subtitles.list(req.sceneId),
+  }))
+
+  handleIpc('subtitles:create', (req) => ({
+    subtitle: requireActive(c).subtitles.create(req),
+  }))
+
+  handleIpc('subtitles:update', (req) => ({
+    subtitle: requireActive(c).subtitles.update(req.id, req.patch),
+  }))
+
+  handleIpc('subtitles:delete', (req) => {
+    requireActive(c).subtitles.delete(req.id)
+    return { ok: true }
+  })
+
+  handleIpc('subtitles:importFile', async (req) => {
+    const ctx = requireActive(c)
+    const win = c.emitter.window
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Import subtitles (.srt / .vtt)',
+      properties: ['openFile'],
+      filters: [{ name: 'Subtitles', extensions: ['srt', 'vtt'] }],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      throw new MiraiError('CANCELLED', 'Subtitle import cancelled.')
+    }
+    const imported = ctx.subtitles.importFile(req.sceneId, result.filePaths[0]!)
+    c.logger.info('MEDIA', `Subtitles imported: ${imported} cues`, { sceneId: req.sceneId })
+    return { imported }
+  })
+
+  handleIpc('subtitles:exportFile', (req) => {
+    const out = requireActive(c).subtitles.exportFile(req.sceneId, req.format)
+    c.logger.info('MEDIA', `Subtitles exported: ${out.path}`, { count: out.count })
+    return out
+  })
+
+  // ---- Advanced AI (Phase 8) ----------------------------------------------------
+  handleIpc('ai:analyzeScreenplay', async (req) => {
+    const analysis = await c.ai.analyzeScreenplay(req.sceneId)
+    return { analysis }
+  })
+
+  handleIpc('ai:directorNotes', async (req) => {
+    const notes = await c.ai.directorNotes(req.sceneId)
+    return { notes }
+  })
+
+  handleIpc('ai:continuityCheck', async (req) => {
+    const findings = await c.ai.continuityCheck(req.sceneId)
+    return { findings }
+  })
+
+  handleIpc('ai:productionReview', async (req) => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('ai.productionReview', async (job, jobCtx) => {
+      const payload = (job.payload ?? {}) as { sceneId?: string }
+      if (!payload.sceneId) throw new MiraiError('VALIDATION_ERROR', 'review payload missing sceneId.')
+      const controller = new AbortController()
+      const watcher = setInterval(() => {
+        if (jobCtx.signal.aborted) controller.abort()
+      }, 100)
+      try {
+        return await c.ai.productionReview(payload.sceneId, jobCtx.reportProgress, controller.signal)
+      } finally {
+        clearInterval(watcher)
+      }
+    })
+    const job = await ctx.jobs.enqueue('ai.productionReview', { sceneId: req.sceneId }, { priority: 7, maxAttempts: 2 })
+    return { jobId: job.id }
+  })
+
+  handleIpc('ai:generateVideo', async (req) => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('ai.generateVideo', async (job, jobCtx) => {
+      const payload = (job.payload ?? {}) as { shotId?: string; extraPrompt?: string; seconds?: number }
+      if (!payload.shotId) throw new MiraiError('VALIDATION_ERROR', 'generateVideo payload missing shotId.')
+      const controller = new AbortController()
+      const watcher = setInterval(() => {
+        if (jobCtx.signal.aborted) controller.abort()
+      }, 100)
+      try {
+        return await c.ai.generateVideo(
+          payload.shotId,
+          payload.extraPrompt,
+          payload.seconds ?? 4,
+          controller.signal,
+          jobCtx.reportProgress,
+        )
+      } finally {
+        clearInterval(watcher)
+      }
+    })
+    const job = await ctx.jobs.enqueue(
+      'ai.generateVideo',
+      { shotId: req.shotId, extraPrompt: req.extraPrompt, seconds: req.seconds },
+      { priority: 8, maxAttempts: 2 },
+    )
+    return { jobId: job.id }
+  })
+
   // ---- Production suite (Phase 7) ---------------------------------------------
   handleIpc('tasks:list', (req) => ({ tasks: requireActive(c).production.listTasks(req.status) }))
 

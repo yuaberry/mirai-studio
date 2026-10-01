@@ -78,6 +78,7 @@ interface ShotSourceRow {
   title: string
   frame_asset_id: string | null
   audio_asset_id: string | null
+  video_asset_id: string | null
   duration_seconds: number
   shot_type: string
   camera_movement: string
@@ -136,7 +137,7 @@ export class TimelineService {
     for (const shotId of shotIds) {
       const row = this.db
         .prepare(
-          `SELECT id, title, frame_asset_id, audio_asset_id, duration_seconds,
+          `SELECT id, title, frame_asset_id, audio_asset_id, video_asset_id, duration_seconds,
                   shot_type, camera_movement, dialogue
            FROM shots WHERE id = ?`,
         )
@@ -148,6 +149,7 @@ export class TimelineService {
         title: row.title,
         frameAssetId: row.frame_asset_id,
         audioAssetId: row.audio_asset_id,
+        videoAssetId: row.video_asset_id,
         durationSec: row.duration_seconds,
         shotType: row.shot_type,
         cameraMovement: row.camera_movement,
@@ -699,7 +701,17 @@ function rowToTrack(row: TrackRow): TimelineTrack {
 function rowToClip(row: ClipRow): TimelineClip {
   let effects: ClipEffects
   try {
-    effects = JSON.parse(row.effects ?? '{}') as ClipEffects
+    // Old rows may carry partial `{}` payloads — merge over the defaults.
+    effects = {
+      brightness: 1,
+      contrast: 1,
+      saturate: 1,
+      hue: 0,
+      blur: 0,
+      grayscale: 0,
+      vignette: 0,
+      ...(JSON.parse(row.effects ?? '{}') as Partial<ClipEffects>),
+    }
   } catch {
     effects = {
       brightness: 1,

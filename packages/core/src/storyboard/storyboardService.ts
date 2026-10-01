@@ -58,6 +58,7 @@ interface ShotRow {
   notes: string | null
   frame_asset_id: string | null
   audio_asset_id: string | null
+  video_asset_id: string | null
   status: string
   created_at: string
   updated_at: string
@@ -351,6 +352,36 @@ export class StoryboardService {
     return this.getAsset(id)
   }
 
+  /**
+   * Stores a REAL generated video (provider bytes) in the project and
+   * attaches it to the shot — the preview plays it and the render uses it
+   * as the clip source instead of the looped frame.
+   */
+  registerGeneratedVideo(shotId: EntityId, bytes: Buffer, mime: string): AssetRecord {
+    this.requireShot(shotId)
+    const ext = mime.includes('webm') ? '.webm' : '.mp4'
+    const id = newEntityId()
+    const now = this.clock.isoNow()
+    const relativePath = join('video', 'generated', `${id}${ext}`)
+    const tx = this.db.transaction(() => {
+      mkdirSync(join(this.projectRoot, 'video', 'generated'), { recursive: true })
+      writeFileSync(join(this.projectRoot, relativePath), bytes)
+      this.db
+        .prepare(
+          `INSERT INTO assets (id, kind, relative_path, original_name, mime, bytes, created_at)
+           VALUES (?, 'VIDEO', ?, ?, ?, ?, ?)`,
+        )
+        .run(id, relativePath, `generated-video${ext}`, mime, bytes.length, now)
+      const previous = this.requireShot(shotId).videoAssetId
+      this.db
+        .prepare('UPDATE shots SET video_asset_id = ?, updated_at = ? WHERE id = ?')
+        .run(id, now, shotId)
+      if (previous) this.pruneAssetIfOrphan(previous)
+    })
+    tx()
+    return this.getAsset(id)
+  }
+
   // ------------------------------------------------------------ decisions
 
   /** Creative decision log — the project's AI memory (spec §43, Phase 2). */
@@ -526,6 +557,7 @@ function rowToShot(row: ShotRow): ShotRecord {
     notes: row.notes ?? undefined,
     frameAssetId: row.frame_asset_id,
     voiceAssetId: row.audio_asset_id,
+    videoAssetId: row.video_asset_id,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

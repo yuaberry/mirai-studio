@@ -37,6 +37,15 @@ export const AppSettings = z.object({
           size: z.string().default('1344x768'),
         })
         .default({}),
+      /** Video generation provider (OpenAI-videos-compatible endpoint). */
+      video: z
+        .object({
+          baseUrl: z.string().optional(),
+          model: z.string().optional(),
+          /** e.g. '1344x768'. */
+          size: z.string().default('1344x768'),
+        })
+        .default({}),
       temperature: z.number().min(0).max(2).default(0.7),
       maxTokens: z.number().int().min(1).max(1_000_000).default(2_048),
       streaming: z.boolean().default(true),
@@ -73,7 +82,7 @@ export type AppSettings = z.infer<typeof AppSettings>
 export const DEFAULT_APP_SETTINGS: AppSettings = AppSettings.parse({})
 
 /** Keys used by the credential store. 'nvidia' = NIM key, 'image' = image-gen key. */
-export const CREDENTIAL_KEYS = ['openrouter', 'nvidia', 'image'] as const
+export const CREDENTIAL_KEYS = ['openrouter', 'nvidia', 'image', 'videogen'] as const
 export type CredentialKey = (typeof CREDENTIAL_KEYS)[number]
 
 export const zCredentialKey = z.enum(CREDENTIAL_KEYS)

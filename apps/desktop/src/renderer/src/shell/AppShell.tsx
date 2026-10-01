@@ -8,7 +8,9 @@ import {
   Activity,
   AudioWaveform,
   BarChart3,
+  Captions,
   FileVideo,
+  Workflow,
   BookOpen,
   Building2,
   Clapperboard,
@@ -48,6 +50,8 @@ import { registerShortcutHandler, useShortcutDispatcher } from '../lib/shortcuts
 import { TimelinePage } from '../modules/timeline/TimelinePage'
 import { RenderPage } from '../modules/render/RenderPage'
 import { ProductionPage } from '../modules/production/ProductionPage'
+import { SubtitlesPage } from '../modules/subtitles/SubtitlesPage'
+import { WorkflowsPage } from '../modules/workflows/WorkflowsPage'
 import { StatusBar } from './StatusBar'
 import { CommandPalette } from './CommandPalette'
 import { ProjectHeader } from './ProjectHeader'
@@ -70,6 +74,8 @@ const PROJECT_NAV: ReadonlyArray<{ view: MainView; label: string; icon: LucideIc
   { view: 'timeline', label: 'Timeline', icon: AudioWaveform },
   { view: 'render', label: 'Render & Export', icon: FileVideo },
   { view: 'production', label: 'Production', icon: BarChart3 },
+  { view: 'subtitles', label: 'Subtitles', icon: Captions },
+  { view: 'workflows', label: 'AI Workflows', icon: Workflow },
   { view: 'media', label: 'Media Library', icon: Disc3 },
   { view: 'prompts', label: 'Prompt Library', icon: Wand2 },
   { view: 'assist', label: 'AI Assist', icon: Sparkles },
@@ -192,6 +198,8 @@ export function AppShell() {
           {view === 'timeline' && <TimelinePage />}
           {view === 'render' && <RenderPage />}
           {view === 'production' && <ProductionPage />}
+          {view === 'subtitles' && <SubtitlesPage />}
+          {view === 'workflows' && <WorkflowsPage />}
           {view === 'style' && <StyleBiblePage />}
           {view === 'media' && <MediaLibraryPage />}
           {view === 'prompts' && <PromptLibraryPage />}

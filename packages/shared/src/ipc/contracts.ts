@@ -36,6 +36,12 @@ import { AiContextScope, AiModelInfo, ChatMessage } from '../entities/ai'
 import { PromptInput, PromptRecord } from '../entities/prompt'
 import { AssetRecord, ShotInput, ShotRecord, StyleBible } from '../entities/storyboard'
 import { MediaTrack, SceneMedia, zMediaKind, zMediaRole } from '../entities/media'
+import {
+  ScreenplayAnalysis,
+  DirectorNotes,
+  ContinuityFinding,
+} from '../entities/media'
+import { SubtitleRecord, SubtitleInput, SubtitlePatch } from '../entities/subtitle'
 import { RenderOutput, zRenderQuality, DEFAULT_PRESET_ID } from '../entities/export'
 import {
   ApprovalEvent,
@@ -380,7 +386,7 @@ export const ipcContracts = {
   /** Records a creative decision (memory of accepted AI proposals). */
   'ai:recordDecision': {
     request: z.object({
-      kind: z.enum(['screenplay', 'image', 'other']),
+      kind: z.enum(['screenplay', 'image', 'video', 'production-review', 'other']),
       summary: z.string().min(1).max(2_000),
       sceneId: zEntityId.optional(),
       shotId: zEntityId.optional(),
@@ -460,6 +466,65 @@ export const ipcContracts = {
       available: z.boolean(),
       version: z.string().nullable(),
     }),
+  },
+
+  // ---- Subtitle Studio (Phase 4 wrap-up) ---------------------------------------
+  'subtitles:list': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ subtitles: z.array(SubtitleRecord) }),
+  },
+  'subtitles:create': {
+    request: SubtitleInput,
+    response: z.object({ subtitle: SubtitleRecord }),
+  },
+  'subtitles:update': {
+    request: z.object({ id: zEntityId, patch: SubtitlePatch }),
+    response: z.object({ subtitle: SubtitleRecord }),
+  },
+  'subtitles:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Imports a real .srt/.vtt file's cues into the scene (file picked via dialog). */
+  'subtitles:importFile': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ imported: z.number().int() }),
+  },
+  /** Exports the scene's subtitles to a real .srt/.vtt file. */
+  'subtitles:exportFile': {
+    request: z.object({
+      sceneId: zEntityId,
+      format: z.enum(['srt', 'vtt']).default('srt'),
+    }),
+    response: z.object({ path: z.string(), count: z.number().int() }),
+  },
+
+  // ---- Advanced AI (Phase 8) ----------------------------------------------------
+  'ai:analyzeScreenplay': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ analysis: ScreenplayAnalysis }),
+  },
+  'ai:directorNotes': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ notes: DirectorNotes }),
+  },
+  'ai:continuityCheck': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ findings: z.array(ContinuityFinding) }),
+  },
+  /** Orchestrated multi-step review (job-based): screenplay + continuity + director. */
+  'ai:productionReview': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ jobId: zEntityId }),
+  },
+  /** Generates a real video for a shot via the configured video-gen endpoint (job-based). */
+  'ai:generateVideo': {
+    request: z.object({
+      shotId: zEntityId,
+      extraPrompt: z.string().max(4_000).optional(),
+      seconds: z.number().min(1).max(20).default(4),
+    }),
+    response: z.object({ jobId: zEntityId }),
   },
 
   // ---- Production suite (Phase 7) -------------------------------------------

@@ -4,6 +4,7 @@
  * location, time of day and screenplay text (the "write dialogue" step).
  */
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, ListVideo, Plus, Trash2, X } from 'lucide-react'
 import {
   MiraiError,
@@ -17,13 +18,22 @@ import { Badge, Button, Input, Label, Select, Spinner, Textarea } from '../../sy
 import { EmptyState, ErrorState } from '../../system/EmptyState'
 import { ConfirmModal, Modal } from '../../system/Modal'
 import {
+  MEDIA_KIND_LABEL,
+  MEDIA_ROLES,
+  MEDIA_ROLE_LABEL,
+  type MediaRole,
+} from '@mirai/shared'
+import {
   useEpisodes,
   useEpisodeMutations,
   useScenes,
   useSceneMutations,
   useCharacters,
   useLocations,
+  useMediaLibrary,
+  useMediaMutations,
 } from '../../lib/queries'
+import { invoke } from '../../lib/ipc'
 import { toast } from '../../store/appStore'
 
 const TIME_LABEL: Record<TimeOfDay, string> = {
@@ -358,6 +368,19 @@ function SceneEditor({ scene, onClose }: { scene: SceneRecord; onClose: () => vo
   const mutations = useSceneMutations()
   const { data: characters } = useCharacters()
   const { data: locations } = useLocations()
+  const { data: media } = useMediaLibrary('all')
+  const mediaMutations = useMediaMutations()
+  const queryClient = useQueryClient()
+  const { data: sceneMedia } = useQuery({
+    queryKey: ['scene-media', scene.id],
+    queryFn: () =>
+      invoke('media:listSceneMedia', { sceneId: scene.id }).then((r) => r.assignments),
+  })
+
+  const [mediaAssign, setMediaAssign] = useState<{ mediaId: string; role: MediaRole }>({
+    mediaId: '',
+    role: 'BACKGROUND',
+  })
 
   const [form, setForm] = useState({
     title: scene.title,
@@ -504,6 +527,80 @@ function SceneEditor({ scene, onClose }: { scene: SceneRecord; onClose: () => vo
         </div>
 
         <div>
+          {/* ---- Scene music / SFX assignment (real, feeds Build Timeline) ---- */}
+          <div>
+            <Label>
+              Music, SFX & ambience
+              <span className="ml-2 font-normal text-mirai-faint">imported in the Media Library</span>
+            </Label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(sceneMedia ?? []).map((a) => {
+                const track = (media ?? []).find((m) => m.id === a.mediaId)
+                return (
+                  <span
+                    key={a.mediaId}
+                    className="flex items-center gap-1.5 rounded-full border border-mirai-pink/40 bg-mirai-pink/10 px-2.5 py-1 text-[11px] font-semibold text-mirai-pink"
+                  >
+                    {MEDIA_ROLE_LABEL[a.role]}: {track?.title ?? a.mediaId.slice(-4)}
+                    <button
+                      className="opacity-60 transition-opacity hover:opacity-100"
+                      title="Remove from scene"
+                      onClick={() =>
+                        mediaMutations.removeFromScene.mutate({ sceneId: scene.id, mediaId: a.mediaId })
+                      }
+                    >
+                      ×
+                    </button>
+                  </span>
+                )
+              })}
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <Select
+                className="h-7 w-44 text-[11px]"
+                value={mediaAssign.mediaId}
+                onChange={(e) => setMediaAssign((f) => ({ ...f, mediaId: e.target.value }))}
+              >
+                <option value="">Add a media track…</option>
+                {(media ?? []).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {MEDIA_KIND_LABEL[m.kind]} — {m.title}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                className="h-7 w-36 text-[11px]"
+                value={mediaAssign.role}
+                onChange={(e) => setMediaAssign((f) => ({ ...f, role: e.target.value as MediaRole }))}
+              >
+                {MEDIA_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {MEDIA_ROLE_LABEL[r]}
+                  </option>
+                ))}
+              </Select>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7"
+                disabled={!mediaAssign.mediaId}
+                onClick={() => {
+                  mediaMutations.assignToScene.mutate(
+                    { sceneId: scene.id, mediaId: mediaAssign.mediaId, role: mediaAssign.role, volume: 1 },
+                    {
+                      onSuccess: () => {
+                        void queryClient.invalidateQueries({ queryKey: ['scene-media', scene.id] })
+                        setMediaAssign((f) => ({ ...f, mediaId: '' }))
+                      },
+                    },
+                  )
+                }}
+              >
+                Assign
+              </Button>
+            </div>
+          </div>
+
           <Label htmlFor="sc-screenplay">
             Screenplay
             <span className="ml-2 font-normal text-mirai-faint">

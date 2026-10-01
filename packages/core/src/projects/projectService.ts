@@ -43,6 +43,7 @@ import { MediaService } from '../media/mediaService'
 import { RenderService } from '../render/renderService'
 import { TimelineService } from '../timeline/timelineService'
 import { ProductionService } from '../production/productionService'
+import { SubtitleService } from '../subtitles/subtitleService'
 import { newEntityId, type AppDirs, type Clock } from '../types'
 import type { LoggerService } from '../logger/logger'
 import { readManifest, writeManifest } from './manifest'
@@ -80,6 +81,8 @@ export interface OpenProjectContext {
   timeline: TimelineService
   /** Production management (Phase 7): tasks, approvals, versions, QC, analytics. */
   production: ProductionService
+  /** Subtitle studio (Phase 4 wrap-up). */
+  subtitles: SubtitleService
   /** Jobs recovered as PAUSED after an interrupted session. */
   recoveredCount: number
 }
@@ -572,14 +575,15 @@ export class ProjectService {
     const storyboard = new StoryboardService(db, this.opts.clock, path)
     const media = new MediaService(db, this.opts.clock, path)
     const timeline = new TimelineService(db, this.opts.clock)
-    const render = new RenderService(storyboard, media, path, creative, timeline)
     const production = new ProductionService(db, this.opts.clock, path, creative, storyboard, timeline, media)
+    const subtitles = new SubtitleService(db, this.opts.clock, path)
+    const render = new RenderService(storyboard, media, path, creative, timeline, subtitles)
 
     const now = this.opts.clock.isoNow()
     this.upsertRegistry(manifest, path, now)
 
     const summary = this.summaryById(manifest.id)
-    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, media, render, timeline, production, recoveredCount }
+    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, media, render, timeline, production, subtitles, recoveredCount }
     this.opts.logger.info('PROJECT', `Project opened: "${manifest.name}"`, {
       id: manifest.id,
       recoveredJobs: recoveredCount,
