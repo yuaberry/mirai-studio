@@ -131,6 +131,7 @@ mirai-studio/
 | 0006_media_library | `media_tracks`, `scene_media` |
 | 0007_timeline_editing | `timeline_tracks`, `timeline_clips`, `timeline_markers`, `keyframes` |
 | 0008_production | `tasks`, `crew_members`, `approval_events`, `entity_versions` |
+| 0009_subtitles_video | `subtitles`, `shots.video_asset_id` |
 
 **Key design decisions**:
 - IDs are ULIDs (26 chars Crockford base32) — never autoincrement
@@ -141,7 +142,7 @@ mirai-studio/
 
 ---
 
-## 5. IPC CONTRACTS (129 channels)
+## 5. IPC CONTRACTS (140 channels)
 
 All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests AND responses.
 
@@ -157,6 +158,8 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - **timeline (Phase 5):** 18 channels — get, build, reset, trackCreate/Update/Delete/Move, clipCreate/Update/Move/Split/Delete(+ripple), markerCreate/Delete, keyframesForScene, keyframeList/Upsert/Delete
 - **render/export (Phase 6):** 5 channels — render:scene, render:episode, render:outputs, render:revealOutput, render:deleteOutput
 - **production (Phase 7):** 17 channels — tasks:list/create/update/setStatus/delete, crew:list/create/delete, approvals:transition/log, versions:list/snapshot/restore/diff, qc:run, analytics:overview
+- **subtitles (v0.8):** 6 channels — list/create/update/delete/importFile/exportFile
+- **phase 8 AI (v0.8):** 5 channels — ai:analyzeScreenplay/directorNotes/continuityCheck/productionReview/generateVideo
 - **jobs:** 5 channels (list, retry, cancel, resumeInterrupted, discardInterrupted)
 - **settings/credentials:** 5 channels
 - **logs:** 3 channels
@@ -210,6 +213,13 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - **Orphan pruning**: replacing/clearing a frame deletes the old file if unreferenced
 - **Style Bible**: art direction, lineart, shading, palette, lighting, proportions, eyes & hair, backgrounds, camera language — autosave
 - **Voice lines**: real audio import per shot (wav/mp3/ogg/m4a/flac/aac/opus), inline audio player
+
+### ✅ v0.8.0 — Subtitles, Video Gen, Render Polish, Phase 8 AI (COMPLETE)
+- **Subtitle Studio**: real SRT/VTT codecs in shared (tolerant parse + writers, unit-tested), SubtitleService (CRUD/import/export to exports/), Subtitles page, live cue overlay in the Timeline preview, **render burn-in** (subtitles filter, temp .srt, verified by integration test)
+- **Video generation**: OpenAIVideoProvider (sync b64 + async job-polling + download URLs, abort, friendly errors; mocked-transport tests), settings.ai.video + 'videogen' credential, aiHost.generateVideo (consistency prompt + motion direction), job ai.generateVideo, registerGeneratedVideo (real bytes → video/generated/ + shot.videoAssetId + orphan pruning), preview plays the real video (engine-owned elements, drift-corrected, effects+camera), **render uses the real video file as clip source** (trim/scale/fps)
+- **Render polish**: blend modes render for overlay tracks (CSS↔ffmpeg map + tpad + blend + exact trim), animated camera opacity bakes into per-frame alpha (geq lum+alpha), effects merge fix ({} payloads no longer NaN)
+- **Phase 8 AI**: ai:analyzeScreenplay / directorNotes / continuityCheck (chatJson zod-validated; continuity merges rule-based cast cross-check), ai:productionReview orchestrated 3-step job + decision log, multi-agent personas in AI Assist, AI Workflows page (visual pipeline runner)
+- **Scene editor**: music/SFX/ambience assignment UI (chips + role select) feeding Build Timeline
 
 ### ✅ Phase 7 — Production Suite (COMPLETE, v0.7.0)
 - **Task Board** (kanban): 5 columns (TODO/IN_PROGRESS/REVIEW/APPROVED/FINAL), drag between columns, priorities (LOW/NORMAL/HIGH/CRITICAL), entity links (SCENE/SHOT/EPISODE/CHARACTER/LOCATION/MEDIA), crew assignment
@@ -269,10 +279,11 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 
 ## 7. WHAT REMAINS (by phase)
 
-### Phase 4 — Media (REMAINING — SMALL)
-- [ ] Subtitle Studio: SRT/VTT/ASS import + export per episode
-- [ ] Video generation provider contract (like OpenAIImagesProvider but for video endpoints)
-- [ ] Music assignment UI on scene editor (assign/unassign from Media Library)
+### Phase 4 — Media (COMPLETE in v0.8.0)
+- [x] Subtitle Studio: SRT/VTT import/export + render burn-in — DONE
+- [x] Video generation provider contract + shot attach + preview + render — DONE
+- [x] Music assignment UI on scene editor — DONE
+- [ ] ASS (Advanced SubStation) format support — future polish
 
 ### Phase 6 — Render (DONE in v0.6.0 — remaining polish)
 - [x] Timeline → MP4 with camera/effects/audio mixdown — DONE (sceneRenderBuilder + FFmpeg)
@@ -353,6 +364,10 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 17. **Never lint-fix imports blindly**: removing an "unused" import that a zod object references at module scope compiles away in the bundler as a runtime ReferenceError (`zTaskStatus is not defined`) before typecheck catches it in a stale run. Always re-run typecheck immediately after every lint change.
 18. **Zod input defaults clobber**: `updateX(input)` with `.default()` fields OVERWRITES omitted fields (role → SUPPORTING). Updates must preserve current values (`parsed.status ?? existing.status`) — never blind-default on update paths.
 19. **Linear pipelines are wrong for approvals**: REVISION is a side state (REVIEW approves forward or returns to REVISION), not a mandatory step. Model pipelines as forward-transition MAPS, not ordered arrays.
+20. **FFmpeg filter facts (tested)**: tpad modes are `add|clone` (NOT `color` — the color is a separate option); `geq` REQUIRES a luma/rgb expression even for alpha-only edits (`lum='lum(X,Y)'` passthrough) and reads planes via `lum(X,Y)`/`alpha(X,Y)` functions, NOT bare `r`/`alpha` variables; subtitle paths need `\:` and `\'` escaping.
+21. **`split(/\s+/)` on strings with leading spaces** yields an empty first element — `.trim()` before splitting (VTT to-timecode parse bug).
+22. **DB rows with partial JSON** (`'{}'` literals) must be merged over defaults when parsed — naive field access produced `NaN` filter expressions that only surfaced at FFmpeg runtime. The FFmpeg integration tests are the gate that catches these.
+23. **Workspace `exports` maps block subpaths**: `@mirai/core/src/...` imports silently vanish in bundling. Export new symbols from the package index instead.
 
 ---
 
@@ -408,6 +423,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.5.0 | Phase 5 | Master Timeline (canvas, real waveforms/thumbnails), clip editing (snap/trim/split/ripple), REAL Web Audio mixer + automation, Camera System + Keyframe Editor (linear/ease/bézier), preview compositing (blend/effects/vignette), configurable shortcuts + rebind UI, custom dockable panels |
 | v0.6.0 | Phase 6 | Timeline → REAL MP4 (sceneRenderBuilder: zoompan camera, eq/hue/gblur effects, amix audio mixdown with automation), episode lossless stitching, Export Center (7 presets, PREVIEW/MASTER), outputs browser, master flow CLOSED end-to-end |
 | v0.7.0 | Phase 7 | Production suite: kanban Task Board + crew, governed approval pipeline with audit log, entity versioning (snapshot/restore/diff with safety snapshots), QC (10 checks), production analytics dashboard |
+| v0.8.0 | Phase 4 wrap-up + Render polish + Phase 8 | Subtitle Studio (SRT/VTT + preview overlay + render burn-in), video generation provider (sync+polling) with real shot attach/preview/render, blend modes + animated opacity in render, AI Screenplay Analysis + Continuity Engine + AI Director + orchestrated production review + personas + Workflows page |
 
 ---
 
@@ -416,24 +432,23 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 - **Repo**: https://github.com/yuaberry/mirai-studio (public, main branch)
 - **Website**: https://yuaberry.github.io/mirai-studio (v0.4.0)
 - **Latest release**: v0.4.0 (GitHub Releases: .deb + AppImage)
-- **All tests**: 138 passing (15 shared + 23 AI + 100 core — incl. 18 timeline + 9 render + 11 production tests)
-- **Smoke**: 35/35 steps passing (steps 31-35 = real MP4 render + tasks/approvals/versions/QC+analytics)
+- **All tests**: 151 passing (15 shared + 27 AI incl. 4 video-provider + 109 core incl. 8 subtitles + 11 render)
+- **Smoke**: 40/40 steps passing (5 new v0.8 steps)
 - **Lint**: 0 errors, 0 warnings
 - **Typecheck**: 0 errors (4 workspaces)
-- **IPC channels**: 129 contracts, 130 handlers
-- **Migrations**: 0001-0008 (App + Project)
-- **Latest release**: v0.7.0 (.deb + AppImage, boot-tested)
-- **Website**: https://yuaberry.github.io/mirai-studio (v0.7.0)
-- **Backup**: `/home/llinux/mirai-studio-backup-v0.7.0.tar.gz`
+- **IPC channels**: 140 contracts, 141 handlers
+- **Migrations**: 0001-0009 (App + Project)
+- **Latest release**: v0.8.0 (.deb + AppImage, boot-tested)
+- **Website**: https://yuaberry.github.io/mirai-studio (v0.8.0)
+- **Backup**: `/home/llinux/mirai-studio-backup-v0.8.0.tar.gz`
 
 ---
 
 ## 13. NEXT IMMEDIATE ACTIONS
 
-1. **Phase 4 wrap-up**: Subtitle Studio (SRT/VTT/ASS import+export) — unlocks subtitle burn-in in render; video generation provider contract; music assignment UI on scene editor.
-2. **Phase 8 — Advanced AI**: AI Director (analyzes narrative/composition/rhythm), Continuity Engine (detects costume/location/temporal inconsistencies), multi-agent orchestration, visual workflow builder, screenplay analyzer.
-3. **Render polish**: animated camera opacity, blend modes in render, bundled FFmpeg licensing.
-4. **Phase 9 — Extensibility**: plugin API + provider SDK + marketplace; permission enforcement (needs multi-user).
+1. **Phase 9 — Extensibility** (the last roadmap phase): plugin API with permission model, provider SDK, marketplace foundation.
+2. **Polish backlog**: ASS subtitles, drag-and-drop workflow builder, bundled FFmpeg, undo/redo.
+3. **Optional**: multi-user/cloud sync.
 
 ---
 
@@ -456,6 +471,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.7.0 — Phase 7 (Production Suite) complete. Phases 0-7 all delivered. Ready for Phase 4 wrap-up (Subtitles) and Phase 8 (Advanced AI).*
+*Last updated: v0.8.0 — Phases 0-8 ALL delivered + Phase 4/6 wrap-ups complete. Only Phase 9 (Extensibility) + polish remain on the original roadmap.*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
