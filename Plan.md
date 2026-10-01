@@ -129,6 +129,7 @@ mirai-studio/
 | 0004_storyboard | `assets`, `shots` |
 | 0005_voice_tracks | `shots.audio_asset_id` (ALTER) |
 | 0006_media_library | `media_tracks`, `scene_media` |
+| 0007_timeline_editing | `timeline_tracks`, `timeline_clips`, `timeline_markers`, `keyframes` |
 
 **Key design decisions**:
 - IDs are ULIDs (26 chars Crockford base32) — never autoincrement
@@ -139,7 +140,7 @@ mirai-studio/
 
 ---
 
-## 5. IPC CONTRACTS (90 channels)
+## 5. IPC CONTRACTS (108 channels)
 
 All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests AND responses.
 
@@ -152,6 +153,7 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - **media:** 12 channels (list, import, update, delete, assignToScene, removeFromScene, listSceneMedia, reveal, importVoice, clearVoice)
 - **ai:** 9 channels (status, models, chat, abort, draftScreenplay, recordDecision, decisions:list, generateFrame)
 - **render:** 2 channels (shot, status)
+- **timeline (Phase 5):** 18 channels — get, build, reset, trackCreate/Update/Delete/Move, clipCreate/Update/Move/Split/Delete(+ripple), markerCreate/Delete, keyframesForScene, keyframeList/Upsert/Delete
 - **jobs:** 5 channels (list, retry, cancel, resumeInterrupted, discardInterrupted)
 - **settings/credentials:** 5 channels
 - **logs:** 3 channels
@@ -206,6 +208,22 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - **Style Bible**: art direction, lineart, shading, palette, lighting, proportions, eyes & hair, backgrounds, camera language — autosave
 - **Voice lines**: real audio import per shot (wav/mp3/ogg/m4a/flac/aac/opus), inline audio player
 
+### ✅ Phase 5 — Editing Suite (COMPLETE, v0.5.0)
+- **Master Timeline** (per-scene, canvas 2D): adaptive ruler, real frame thumbnails, REAL audio waveforms (Web Audio decodeAudioData peaks cached per asset)
+- **Build Timeline**: one click assembles shots → VIDEO/VOICE clips (sequential, real durations), scene media → MUSIC/SFX/AMBIENCE tracks; `buildFromScene` + reset
+- **Clip editing**: drag-move with magnetic snapping (clip edges, markers, playhead), cross-track moves with kind-compatibility rules, no-overlap enforcement (VALIDATION_ERROR), trim L/R with real in-point math, split at playhead preserving inOffset, plain delete + ripple delete (shifts clips at/after the deleted end across ALL tracks)
+- **Markers**: ruler flags, add (M), select, delete, jump prev/next (,/.)
+- **Zoom**: ctrl+wheel around cursor (4–480 px/s), Fit (0)
+- **REAL playback engine** (PlaybackEngine, Web Audio): `<audio>` → MediaElementSource → clipGain → trackGain → StereoPanner → master → destination; start/stop at clip boundaries, drift resync >150ms, loop toggle
+- **Audio Mixer**: channel strips per audio track + Master; custom pointer-driven faders, pan, mute, solo, dB display; volume automation (MIXER keyframes) + per-clip fades (CLIP keyframes) applied live
+- **Camera System**: CAMERA keyframes per shot (x, y, scale, rotation, opacity — pro ranges), sampled live into the preview transform (Ken Burns)
+- **Keyframe Editor**: SVG curve view with REAL sampled path, draggable keyframe dots, per-keyframe easing (linear/easeIn/easeOut/easeInOut/**cubic bezier** with Newton+bisection solver in shared), bezier control sliders, add/delete
+- **Preview compositing**: multi-video-track layer stack (track order = z), per-clip opacity, 8 CSS blend modes, effects chain (brightness/contrast/saturate/hue/blur/grayscale/vignette) — all previewable now and mapping 1:1 to FFmpeg eq/hue/gblur for Phase 6 render
+- **Configurable shortcuts (full system)**: SHORTCUT_ACTIONS catalog (16 actions), DEFAULT_SHORTCUTS ⊕ overrides in AppSettings.shortcuts, normalizeCombo/prettyCombo in shared, comboFromEvent + registry + global dispatcher in renderer, rebind UI in Settings (press-to-capture, conflict detection ⚠), palette Ctrl+K configurable
+- **Custom dockable panels**: Preview/Inspector+Curves tabs/Mixer/Timeline with drag splitters + visibility toggles; sizes + hidden panels persisted in settings.editing.layout
+- **Orchestration** (register.ts): shot delete → deletes CAMERA keyframes; media delete → removes its clips first; track delete → MIXER + CLIP keyframe cleanup; clip delete → CLIP keyframe cleanup
+- **Renderer modules**: modules/timeline/ (TimelinePage, TimelineCanvas, PlaybackEngine, PreviewStage, MixerPanel, KeyframeEditor, InspectorPanel, waveform)
+
 ### ✅ Phase 4 — Media & Render (COMPLETE, v0.4.0)
 - **Media Library**: Music / SFX / Ambience — import real audio files, categorize, assign to scenes with roles (Opening, Ending, Background, Insert, Battle, Romance, Tension), volume control, inline audio player, tags, search, reveal, delete
 - **Render Engine (FFmpeg)**: renders a single shot to REAL MP4:
@@ -233,17 +251,27 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - [ ] Video generation provider contract (like OpenAIImagesProvider but for video endpoints)
 - [ ] Music assignment UI on scene editor (assign/unassign from Media Library)
 
-### Phase 5 — Editing (NEXT)
-- [ ] Master Timeline: canvas-based visual timeline (video, voice, music, subtitle tracks)
-- [ ] Timeline features: zoom, snapping, markers, ripple editing, trimming, splitting
-- [ ] Audio Mixer: channels (Dialogue, Music, SFX, Ambience, Master) with volume, pan, fades, mute, solo
-- [ ] Compositing: layers, masks, blend modes, opacity, effects, lighting, particles
-- [ ] Camera System: position, rotation, zoom, focus, depth, movement, keyframes
-- [ ] Keyframe Editor: position, scale, rotation, opacity, camera, effects — linear/ease/bezier
-- [ ] Configurable shortcuts (the full system)
-- [ ] Dockable panel system (dockview or custom)
+### Phase 6 — Render (NEXT MAJOR PHASE)
+- [ ] **Timeline → MP4**: stitch the scene timeline (all clips in order) into one video
+  using FFmpeg concat + filter_complex: per-clip camera transforms (zoompan/crop expressions
+  or precomputed frame sequences), effects chain (eq/hue/gblur map 1:1), blend modes,
+  audio mixing of VOICE/MUSIC/SFX/AMBIENCE tracks with volume/pan/mute/automation baked
+- [ ] Render full episode → MP4 (concat scene outputs)
+- [ ] Render queue with priority + progress + cancel (extend JobQueue)
+- [ ] Preview render (low quality, fast)
+- [ ] Export Center: presets (YouTube, TV, Web, Cinema, Mobile, Social Media)
+- [ ] Bundled FFmpeg (resolve licensing: LGPL build without x264, use open codecs)
+- [ ] **GATE**: The master flow must work END-TO-END: Project → Character → Scene → Dialogue → Storyboard → Image → Voice → Music → TIMELINE → RENDER → Export MP4
 
-### Phase 6 — Render (REMAINING)
+### Phase 5 — Editing (DONE in v0.5.0 — remaining polish)
+- [x] Master Timeline + zoom/snapping/markers/ripple/trim/split — DONE
+- [x] Audio Mixer with volume, pan, fades, mute, solo — DONE (REAL Web Audio)
+- [x] Compositing: layers, blend modes, opacity, effects, lighting — DONE in preview (render in Phase 6); masks/particles → Phase 9
+- [x] Camera System keyframes — DONE (x/y/scale/rotation/opacity)
+- [x] Keyframe Editor linear/ease/bézier — DONE
+- [x] Configurable shortcuts (full system) — DONE
+- [x] Dockable panel system (custom) — DONE
+- [ ] Undo/redo for timeline operations (in-memory command history) — future polish
 - [ ] Render multiple shots → single MP4 (concat)
 - [ ] Render full scene → MP4
 - [ ] Render full episode → MP4
@@ -306,6 +334,11 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 5. **Working tree vs git**: `rm -rf` on the working tree to create a gh-pages branch destroyed `node_modules` (untracked). `git checkout` restored tracked files but not node_modules. **Always use orphan branches for gh-pages or be very careful with `rm -rf`.**
 6. **gh-pages push**: The gh-pages branch accumulated 1.6GB of garbage. Fix: create a clean orphan branch with just the 4 website files and force-push.
 7. **BuildImagePrompt**: The Style Bible step in the smoke test must run BEFORE the image pipeline step (dependency order matters in smoke tests).
+8. **gh-pages from a monorepo**: NEVER `git checkout main -- .` on the gh-pages branch — it pulls the whole tree into the orphan branch and bloats pushes past GitHub limits (1.6 GB → HTTP 408 rejected). Always create a clean orphan branch containing ONLY the website files, then force-push to `gh-pages`.
+9. **String replace pitfalls**: scripted bulk edits replacing `ctx.` with `tctx.` also match inside `tctx.` → `ttctx.`. Also zod `.default()` fields: service methods should accept `z.input<T>` (defaults optional), not `z.infer<T>`.
+10. **better-sqlite3 ABI**: after ANY `bun install` (node_modules wipe), run `node apps/desktop/node_modules/electron/install.js` + `bunx @electron/rebuild -f -w better-sqlite3` (inside apps/desktop; the root script now does this). Symptom if skipped: `tsc: command not found` or native module ABI mismatch.
+11. **Smoke context lifetime**: the ARCHIVE step closes the project — later steps must re-open (`projects.open(summary.path)`) before touching project services.
+12. **TanStack + settings**: `useUpdateSettings` takes the AppSettings object directly (not `{settings}`); Modal requires `open` prop and `width` is a CSS class string (e.g. `max-w-lg`).
 
 ---
 
@@ -358,6 +391,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.2.1 | Phase 3 | Storyboard Studio, real frames via mirai-asset://, Style Bible |
 | v0.3.0 | Phase 2 complete + Phase 4 start | Scene Writer agent (human-in-the-loop), NVIDIA NIM (GLM 5.3) provider, Generate Frame with studio consistency, voice lines, full anime genre taxonomy (~55), providers UI |
 | v0.4.0 | Phase 4 | Media Library (Music/SFX/Ambience + scene assignment), Render Engine (FFmpeg shot → MP4 H.264 animation-tuned) |
+| v0.5.0 | Phase 5 | Master Timeline (canvas, real waveforms/thumbnails), clip editing (snap/trim/split/ripple), REAL Web Audio mixer + automation, Camera System + Keyframe Editor (linear/ease/bézier), preview compositing (blend/effects/vignette), configurable shortcuts + rebind UI, custom dockable panels |
 
 ---
 
@@ -366,22 +400,24 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 - **Repo**: https://github.com/yuaberry/mirai-studio (public, main branch)
 - **Website**: https://yuaberry.github.io/mirai-studio (v0.4.0)
 - **Latest release**: v0.4.0 (GitHub Releases: .deb + AppImage)
-- **All tests**: 100 passing (15 shared + 23 AI + 62 core)
-- **Smoke**: 25/25 steps passing
-- **Lint**: 0 errors (1 cosmetic warning)
+- **All tests**: 118 passing (15 shared + 23 AI + 80 core — incl. 18 timeline tests)
+- **Smoke**: 30/30 steps passing (5 new Phase 5 steps)
+- **Lint**: 0 errors, 0 warnings
 - **Typecheck**: 0 errors (4 workspaces)
-- **IPC channels**: 90 contracts, 91 handlers (1 reserved for future)
-- **Migrations**: 0001-0006 (App + Project)
-- **Backup**: `/home/llinux/mirai-studio-backup-v0.4.0.tar.gz`
+- **IPC channels**: 108 contracts, 109 handlers
+- **Migrations**: 0001-0007 (App + Project)
+- **Latest release**: v0.5.0 (.deb + AppImage, boot-tested)
+- **Website**: https://yuaberry.github.io/mirai-studio (v0.5.0)
+- **Backup**: `/home/llinux/mirai-studio-backup-v0.5.0.tar.gz` (to be created after this commit)
 
 ---
 
 ## 13. NEXT IMMEDIATE ACTIONS
 
-1. **Phase 5 — Editing**: Master Timeline (canvas-based), Audio Mixer, Compositing, Keyframes, Configurable Shortcuts
-2. **Phase 4 remaining**: Subtitle Studio, Video Generation provider contract, music assignment UI on scene editor
-3. **Phase 6**: Multi-shot render → episode MP4, Export Center with presets
-4. **Phase 7**: Task board, versioning, QC, analytics
+1. **Phase 6 — Render the timeline**: scene timeline → MP4 with FFmpeg (concat + camera keyframes via zoompan/crop + effects via eq/hue/gblur + real audio mixdown of all tracks incl. volume/pan/mute/automation). This closes the master flow END-TO-END.
+2. **Phase 6 continued**: episode render (concat scenes), render queue, preview render, Export Center presets, bundled FFmpeg licensing.
+3. **Phase 4 remaining**: Subtitle Studio (SRT/VTT/ASS), video generation provider contract, music assignment UI on scene editor.
+4. **Phase 7**: Task board, approval pipeline, entity versioning, QC, analytics.
 
 ---
 
@@ -404,6 +440,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.4.0 — Phase 4 complete, ready for Phase 5 (Editing).*
+*Last updated: v0.5.0 — Phase 5 (Editing Suite) complete, ready for Phase 6 (Render).*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
