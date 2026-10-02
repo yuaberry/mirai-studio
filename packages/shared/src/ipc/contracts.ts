@@ -42,6 +42,7 @@ import {
   ContinuityFinding,
 } from '../entities/media'
 import { SubtitleRecord, SubtitleInput, SubtitlePatch } from '../entities/subtitle'
+import { PluginRecord } from '../entities/plugins'
 import { RenderOutput, zRenderQuality, DEFAULT_PRESET_ID } from '../entities/export'
 import {
   ApprovalEvent,
@@ -466,6 +467,32 @@ export const ipcContracts = {
       available: z.boolean(),
       version: z.string().nullable(),
     }),
+  },
+
+  // ---- Plugins (Phase 9) ---------------------------------------------------------
+  'plugins:list': {
+    request: emptyRequest,
+    response: z.object({ plugins: z.array(PluginRecord) }),
+  },
+  'plugins:setEnabled': {
+    request: z.object({ id: z.string().min(1).max(80), enabled: z.boolean() }),
+    response: z.object({ plugin: PluginRecord }),
+  },
+  /** Install from a folder picked via dialog (manifest.json + index.js). */
+  'plugins:installFromFolder': {
+    request: emptyRequest,
+    response: z.object({ plugin: PluginRecord }),
+  },
+  'plugins:delete': {
+    request: z.object({ id: z.string().min(1).max(80) }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'plugins:runCommand': {
+    request: z.object({
+      pluginId: z.string().min(1).max(80),
+      commandId: z.string().min(1).max(120),
+    }),
+    response: z.object({ result: z.unknown() }),
   },
 
   // ---- Subtitle Studio (Phase 4 wrap-up) ---------------------------------------

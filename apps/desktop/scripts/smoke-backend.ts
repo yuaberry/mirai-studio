@@ -15,6 +15,7 @@
 import { mkdtempSync, mkdirSync, existsSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { deflateSync } from 'node:zlib'
+import { PluginHost } from '../src/main/plugins/pluginHost'
 import { join } from 'node:path'
 import {
   APP_DB_MIGRATIONS,
@@ -23,6 +24,7 @@ import {
   CredentialStore,
   LoggerService,
   ProjectService,
+  PluginRegistry,
   RenderService,
   SettingsService,
   openDatabase,
@@ -987,6 +989,123 @@ async function main(): Promise<void> {
     if (!flat.includes(`{{ASSET:${source.videoAssetId}}}`)) throw new Error('video file not an input')
     if (!graph.includes(`trim=start=${clip.inOffsetSec}`)) throw new Error('video clip trim missing')
     void clip
+  })
+
+  // ---- Phase 9: Plugins -------------------------------------------------------
+  await step('PLUGINS: registry seeds examples, validates manifests and persists enable state', () => {
+    const pluginsRoot = join(root, 'plugins')
+    const pluginsDb = openDatabase(join(root, 'plugins-app.sqlite'))
+    runMigrations(pluginsDb, APP_DB_MIGRATIONS)
+    const registry = new PluginRegistry(pluginsDb, systemClock, pluginsRoot)
+
+    const list = registry.list()
+    const ids = list.map((p) => p.manifest.id)
+    if (!ids.includes('starter-commands') || !ids.includes('prompt-pack-manga')) {
+      throw new Error('example plugins not seeded')
+    }
+    const starter = registry.get('starter-commands')
+    if (starter.manifest.commands.length !== 2) throw new Error('commands not parsed')
+    if (!starter.manifest.permissions.includes('READ')) throw new Error('permissions not parsed')
+
+    // Enable persists across instances.
+    registry.setEnabled('starter-commands', true)
+    const reopened = new PluginRegistry(pluginsDb, systemClock, pluginsRoot)
+    if (!reopened.get('starter-commands').enabled) throw new Error('enable state lost')
+
+    // Folder install with a provider declaration (Provider SDK).
+    const source = join(root, 'my-provider')
+    mkdirSync(source, { recursive: true })
+    writeFileSync(
+      join(source, 'manifest.json'),
+      JSON.stringify({
+        id: 'my-provider',
+        name: 'Community Provider',
+        version: '0.1.0',
+        author: 'Community',
+        permissions: ['SUGGEST'],
+        providers: [{ id: 'chat-x', label: 'Chat X', kind: 'chat', baseUrl: 'https://api.x.test/v1', model: 'x/model' }],
+      }),
+    )
+    writeFileSync(join(source, 'index.js'), 'module.exports = {}')
+    const installed = registry.installFromFolder(source)
+    if (installed.manifest.providers[0].model !== 'x/model') throw new Error('provider SDK manifest lost')
+
+    // Invalid manifests are locked but listed.
+    const bad = join(pluginsRoot, 'bad-plugin')
+    mkdirSync(bad, { recursive: true })
+    writeFileSync(join(bad, 'manifest.json'), JSON.stringify({ id: 'bad plugin', version: 'one' }))
+    const broken = registry.list().find((p) => p.manifest.id === 'bad-plugin')
+    if (!broken || broken.errors.length === 0 || broken.enabled) throw new Error('invalid manifest not locked')
+  })
+
+  await step('PLUGINS: host runs commands with the REAL project + enforces permissions', async () => {
+    const pluginsRoot = join(root, 'plugins')
+    const pluginsDb = openDatabase(join(root, 'plugins-app.sqlite'))
+    const registry = new PluginRegistry(pluginsDb, systemClock, pluginsRoot)
+    registry.setEnabled('starter-commands', true)
+
+    // A plugin with a MODULE handler that calls the permission-gated API.
+    const source = join(root, 'probe-plugin')
+    mkdirSync(source, { recursive: true })
+    writeFileSync(
+      join(source, 'manifest.json'),
+      JSON.stringify({
+        id: 'probe-plugin',
+        name: 'Probe',
+        version: '1.0.0',
+        author: 'Smoke',
+        permissions: ['SUGGEST'], // deliberately NO 'READ'
+        commands: [{ id: 'probe-plugin.peek', label: 'Probe: peek project' }],
+      }),
+    )
+    writeFileSync(
+      join(source, 'index.js'),
+      'module.exports = { commands: { "probe-plugin.peek": (mirai) => mirai.project() } }',
+    )
+    const installed = registry.installFromFolder(source)
+    if (installed.manifest.id !== 'probe-plugin') throw new Error('probe not installed')
+    registry.setEnabled('probe-plugin', true)
+
+    // Minimal container surface the host needs — real project + real logger.
+    const fakeContainer = {
+      projects,
+      logger,
+      plugins: registry,
+      settings: undefined,
+      credentials: undefined,
+      ai: undefined,
+      emitter: undefined,
+      health: undefined,
+      dirs,
+      appDb,
+      pluginHost: undefined,
+      shutdown: async () => undefined,
+    } as never
+    const host = new PluginHost(fakeContainer)
+
+    // Manifest-declared command (no module handler) still runs for the starter.
+    const greet = await host.runCommand('starter-commands', 'starter-commands.greet')
+    if (!greet || typeof greet !== 'object' || !('message' in greet)) throw new Error('manifest command failed')
+
+    // The SUGGEST-only probe calling api.project() is DENIED (READ missing).
+    let denied = false
+    try {
+      await host.runCommand('probe-plugin', 'probe-plugin.peek')
+    } catch (err) {
+      denied = (err as Error).message.includes('READ')
+    }
+    if (!denied) throw new Error('permission enforcement failed')
+
+    // A READ-granted variant succeeds and returns REAL project data.
+    const manifestPath = join(pluginsRoot, 'probe-plugin', 'manifest.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { permissions: string[] }
+    manifest.permissions = ['READ', 'SUGGEST']
+    writeFileSync(manifestPath, JSON.stringify(manifest))
+    const probe = registry.get('probe-plugin')
+    const ok = await host.runCommand('probe-plugin', 'probe-plugin.peek')
+    void probe
+    if (!ok || typeof ok !== 'object' || !('name' in ok)) throw new Error('READ-granted command returned no project data')
+    if ((ok as { name: string }).name !== summary.name) throw new Error('project data wrong')
   })
 
   await step('SHORTCUTS: configurable bindings persist and stay valid', () => {

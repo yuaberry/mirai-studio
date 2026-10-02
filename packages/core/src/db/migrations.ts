@@ -39,6 +39,18 @@ export const APP_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0002_app_kv',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE app_kv (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+      `)
+    },
+  },
 ]
 
 // ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ import {
   ListVideo,
   Palette,
   Play,
+  Puzzle,
   Settings,
   Sparkles,
   Users,
@@ -52,6 +53,7 @@ import { RenderPage } from '../modules/render/RenderPage'
 import { ProductionPage } from '../modules/production/ProductionPage'
 import { SubtitlesPage } from '../modules/subtitles/SubtitlesPage'
 import { WorkflowsPage } from '../modules/workflows/WorkflowsPage'
+import { PluginsPage } from '../modules/plugins/PluginsPage'
 import { StatusBar } from './StatusBar'
 import { CommandPalette } from './CommandPalette'
 import { ProjectHeader } from './ProjectHeader'
@@ -76,6 +78,7 @@ const PROJECT_NAV: ReadonlyArray<{ view: MainView; label: string; icon: LucideIc
   { view: 'production', label: 'Production', icon: BarChart3 },
   { view: 'subtitles', label: 'Subtitles', icon: Captions },
   { view: 'workflows', label: 'AI Workflows', icon: Workflow },
+  { view: 'plugins', label: 'Plugins', icon: Puzzle },
   { view: 'media', label: 'Media Library', icon: Disc3 },
   { view: 'prompts', label: 'Prompt Library', icon: Wand2 },
   { view: 'assist', label: 'AI Assist', icon: Sparkles },
@@ -200,6 +203,7 @@ export function AppShell() {
           {view === 'production' && <ProductionPage />}
           {view === 'subtitles' && <SubtitlesPage />}
           {view === 'workflows' && <WorkflowsPage />}
+          {view === 'plugins' && <PluginsPage />}
           {view === 'style' && <StyleBiblePage />}
           {view === 'media' && <MediaLibraryPage />}
           {view === 'prompts' && <PromptLibraryPage />}

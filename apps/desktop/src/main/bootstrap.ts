@@ -18,7 +18,10 @@ import {
 import type { IpcEventChannel, IpcEventPayload, OpenedProject } from '@mirai/shared'
 import { ipcEventPayloads } from '@mirai/shared'
 import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { PluginRegistry } from '@mirai/core'
 import { createSecureCodec, electronDirs } from './adapters/electronAdapters'
+import { PluginHost } from './plugins/pluginHost'
 import { createHealthChecker, type HealthChecker } from './system/health'
 import { AiHost } from './ai/aiHost'
 
@@ -60,6 +63,9 @@ export interface Container {
   ai: AiHost
   emitter: MainEmitter
   health: HealthChecker
+  /** App-level plugin registry (Phase 9). */
+  plugins: import('@mirai/core').PluginRegistry
+  pluginHost: import('./plugins/pluginHost').PluginHost
   shutdown(): Promise<void>
 }
 
@@ -103,6 +109,8 @@ export function bootstrap(): Container {
 
   const health = createHealthChecker({ dirs, logger, appDb, secure: () => codec.isSecure })
 
+  const plugins = new PluginRegistry(appDb, systemClock, join(dirs.root, 'plugins'))
+
   const container: Container = {
     dirs,
     logger,
@@ -113,12 +121,15 @@ export function bootstrap(): Container {
     ai,
     emitter,
     health,
+    plugins,
+    pluginHost: undefined as never,
     shutdown: async () => {
       await projects.close()
       logger.close()
       appDb.close()
     },
   }
+  container.pluginHost = new PluginHost(container)
   return container
 }
 

@@ -20,6 +20,7 @@ export type ProjectView =
   | 'production'
   | 'subtitles'
   | 'workflows'
+  | 'plugins'
   | 'media'
   | 'prompts'
   | 'assist'
@@ -41,6 +42,7 @@ export const PROJECT_VIEWS: readonly ProjectView[] = [
   'production',
   'subtitles',
   'workflows',
+  'plugins',
   'media',
   'prompts',
   'assist',

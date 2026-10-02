@@ -27,6 +27,8 @@ import {
   Magnet,
   PanelBottom,
   PanelLeft,
+  Redo2,
+  Undo2,
   Plus,
   Rocket,
   RotateCcw,
@@ -51,6 +53,7 @@ import {
   assetUrl,
 } from '../../lib/queries'
 import { useAppStore, toast } from '../../store/appStore'
+import { useQueryClient } from '@tanstack/react-query'
 import { Button, Select, Spinner } from '../../system/ui'
 import { EmptyState } from '../../system/EmptyState'
 import { ConfirmModal, Modal } from '../../system/Modal'
@@ -76,6 +79,7 @@ const DEFAULT_SIZES: DockSizes = { previewW: 0.62, rightW: 320, timelineH: 300, 
 
 export function TimelinePage() {
   const setView = useAppStore((s) => s.setView)
+  const queryClient = useQueryClient()
   const { data: episodes } = useEpisodes()
   const { data: settings } = useSettings()
   const updateSettings = useUpdateSettings()
@@ -110,6 +114,39 @@ export function TimelinePage() {
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null)
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null)
   const [pxPerSec, setPxPerSec] = useState(DEFAULT_PPS)
+  // Undo/redo: stacks of inverse operations computed from the pre-mutation state.
+  const undoStack = useRef<Array<{ label: string; undo: () => void; redo: () => void }>>([])
+  const redoStack = useRef<Array<{ label: string; undo: () => void; redo: () => void }>>([])
+  const [undoDepth, setUndoDepth] = useState(0)
+  const [redoDepth, setRedoDepth] = useState(0)
+
+  const pushUndo = useCallback((entry: { label: string; undo: () => void; redo: () => void }) => {
+    undoStack.current.push(entry)
+    if (undoStack.current.length > 100) undoStack.current.shift()
+    redoStack.current = []
+    setUndoDepth(undoStack.current.length)
+    setRedoDepth(0)
+  }, [])
+
+  const runUndo = useCallback(() => {
+    const entry = undoStack.current.pop()
+    if (!entry) return
+    entry.undo()
+    redoStack.current.push(entry)
+    setUndoDepth(undoStack.current.length)
+    setRedoDepth(redoStack.current.length)
+    toast({ kind: 'info', title: `Undid: ${entry.label}` })
+  }, [])
+
+  const runRedo = useCallback(() => {
+    const entry = redoStack.current.pop()
+    if (!entry) return
+    entry.redo()
+    undoStack.current.push(entry)
+    setUndoDepth(undoStack.current.length)
+    setRedoDepth(redoStack.current.length)
+    toast({ kind: 'info', title: `Redid: ${entry.label}` })
+  }, [])
   const [scrollX, setScrollX] = useState(0)
   const [rightTab, setRightTab] = useState<'inspector' | 'curves'>('inspector')
   const [mixerTargetId, setMixerTargetId] = useState<string | null>(null)
@@ -247,36 +284,101 @@ export function TimelinePage() {
 
   const splitAtPlayhead = useCallback(() => {
     if (!selectedClip || !engineRef.current) return
+    const before = selectedClip
     const t = engineRef.current.playhead
+    pushUndo({
+      label: 'split clip',
+      undo: () => {
+        // Re-split is destructive to undo cleanly; the inverse deletes the
+        // right part and restores the left duration (id of right = unknown
+        // pre-mutation, so undo queries the current bundle via invalidate —
+        // the delete happens by position: the clip starting at `t`).
+        void queryClient.invalidateQueries({ queryKey: ['timeline'] })
+      },
+      redo: () => mutations.clipSplit.mutate({ id: before.id, atSec: t }),
+    })
     mutations.clipSplit.mutate(
-      { id: selectedClip.id, atSec: t },
+      { id: before.id, atSec: t },
       {
-        onSuccess: () => toast({ kind: 'success', title: 'Clip split' }),
+        onSuccess: (result) => {
+          const rightId = result.right.id
+          // Replace the provisional undo with a precise one (we know the ids now).
+          undoStack.current.pop()
+          undoStack.current.push({
+            label: 'split clip',
+            undo: () => {
+              mutations.clipDelete.mutate({ id: rightId, ripple: false })
+              mutations.clipUpdate.mutate({
+                id: before.id,
+                patch: { durationSec: before.durationSec, startSec: before.startSec },
+              })
+            },
+            redo: () => mutations.clipSplit.mutate({ id: before.id, atSec: t }),
+          })
+          setUndoDepth(undoStack.current.length)
+          toast({ kind: 'success', title: 'Clip split' })
+        },
         onError: (err) => toast({ kind: 'error', title: 'Split failed', description: err.message }),
       },
     )
-  }, [selectedClip, mutations.clipSplit])
+  }, [selectedClip, mutations, pushUndo, queryClient])
 
   const deleteSelection = useCallback(
     (ripple: boolean) => {
       if (selectedMarkerId) {
+        const marker = bundle?.markers.find((m) => m.id === selectedMarkerId)
         mutations.markerDelete.mutate(selectedMarkerId)
+        if (marker) {
+          pushUndo({
+            label: 'delete marker',
+            undo: () => mutations.markerCreate.mutate({ atSec: marker.atSec, label: marker.label }),
+            redo: () => mutations.markerDelete.mutate(marker.id),
+          })
+        }
         setSelectedMarkerId(null)
         return
       }
       if (!selectedClip) return
+      const before = selectedClip
+      const affected = ripple
+        ? (bundle?.clips ?? []).filter(
+            (c) => c.id !== before.id && c.startSec >= before.startSec + before.durationSec - 1e-6,
+          )
+        : []
+      pushUndo({
+        label: ripple ? 'ripple delete' : 'delete clip',
+        undo: () => {
+          if (ripple) {
+            for (const c of affected) mutations.clipMove.mutate({ id: c.id, startSec: c.startSec })
+          }
+          mutations.clipCreate.mutate({
+            trackId: before.trackId,
+            sourceType: before.sourceType,
+            sourceId: before.sourceId,
+            startSec: before.startSec,
+            durationSec: before.durationSec,
+            inOffsetSec: before.inOffsetSec,
+            label: before.label,
+          })
+        },
+        redo: () => mutations.clipDelete.mutate({ id: before.id, ripple }),
+      })
       mutations.clipDelete.mutate(
-        { id: selectedClip.id, ripple },
+        { id: before.id, ripple },
         {
           onSuccess: () => {
             setSelectedClipId(null)
             toast({ kind: 'success', title: ripple ? 'Ripple deleted' : 'Clip deleted' })
           },
-          onError: (err) => toast({ kind: 'error', title: 'Delete failed', description: err.message }),
+          onError: (err) => {
+            undoStack.current.pop()
+            setUndoDepth(undoStack.current.length)
+            toast({ kind: 'error', title: 'Delete failed', description: err.message })
+          },
         },
       )
     },
-    [selectedClip, selectedMarkerId, mutations],
+    [selectedClip, selectedMarkerId, mutations, bundle, pushUndo],
   )
 
   const addMarker = useCallback(() => {
@@ -379,6 +481,8 @@ export function TimelinePage() {
       registerShortcutHandler('timeline.zoomOut', () => setPxPerSec((p) => Math.max(MIN_PPS, p / 1.25))),
       registerShortcutHandler('timeline.zoomFit', zoomFit),
       registerShortcutHandler('timeline.snap', () => persistEditing({ snapping: !snapping })),
+      registerShortcutHandler('timeline.undo', runUndo),
+      registerShortcutHandler('timeline.redo', runRedo),
       registerShortcutHandler('timeline.prevMarker', () => jumpMarker(-1)),
       registerShortcutHandler('timeline.nextMarker', () => jumpMarker(1)),
     ]
@@ -388,6 +492,8 @@ export function TimelinePage() {
     onStep,
     splitAtPlayhead,
     deleteSelection,
+    runUndo,
+    runRedo,
     addMarker,
     cameraKeyframe,
     zoomFit,
@@ -521,6 +627,12 @@ export function TimelinePage() {
           title="Delete (Del) · Ripple (Shift+Del)"
         >
           <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" disabled={undoDepth === 0} onClick={runUndo} title="Undo (Ctrl+Z)">
+          <Undo2 className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" disabled={redoDepth === 0} onClick={runRedo} title="Redo (Ctrl+Shift+Z)">
+          <Redo2 className="h-3.5 w-3.5" />
         </Button>
 
         <span className="ml-auto font-mono text-xs text-mirai-dim">
@@ -803,20 +915,44 @@ export function TimelinePage() {
                       if (id) setSelectedMarkerId(null)
                     },
                     onMoveClip: (id, startSec, toTrackId) => {
+                      const before = bundle.clips.find((c) => c.id === id)
+                      if (!before) return
+                      pushUndo({
+                        label: 'move clip',
+                        undo: () => mutations.clipMove.mutate({ id, startSec: before.startSec, toTrackId: before.trackId }),
+                        redo: () => mutations.clipMove.mutate({ id, startSec, toTrackId }),
+                      })
                       mutations.clipMove.mutate(
                         { id, startSec, toTrackId },
                         {
-                          onError: (err) =>
-                            toast({ kind: 'error', title: 'Move blocked', description: err.message }),
+                          onError: (err) => {
+                            undoStack.current.pop()
+                            setUndoDepth(undoStack.current.length)
+                            toast({ kind: 'error', title: 'Move blocked', description: err.message })
+                          },
                         },
                       )
                     },
                     onTrimClip: (id, patch) => {
+                      const before = bundle.clips.find((c) => c.id === id)
+                      if (!before) return
+                      pushUndo({
+                        label: 'trim clip',
+                        undo: () =>
+                          mutations.clipUpdate.mutate({
+                            id,
+                            patch: { startSec: before.startSec, durationSec: before.durationSec, inOffsetSec: before.inOffsetSec },
+                          }),
+                        redo: () => mutations.clipUpdate.mutate({ id, patch: patch as never }),
+                      })
                       mutations.clipUpdate.mutate(
                         { id, patch: patch as never },
                         {
-                          onError: (err) =>
-                            toast({ kind: 'error', title: 'Trim blocked', description: err.message }),
+                          onError: (err) => {
+                            undoStack.current.pop()
+                            setUndoDepth(undoStack.current.length)
+                            toast({ kind: 'error', title: 'Trim blocked', description: err.message })
+                          },
                         },
                       )
                     },

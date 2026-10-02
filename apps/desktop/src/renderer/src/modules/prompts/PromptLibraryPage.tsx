@@ -14,6 +14,7 @@ import {
   type PromptRecord,
 } from '@mirai/shared'
 import { Badge, Button, Input, Label, Select, Spinner, Textarea } from '../../system/ui'
+import { usePlugins } from '../../lib/queries'
 import { EmptyState, ErrorState } from '../../system/EmptyState'
 import { ConfirmModal, Modal } from '../../system/Modal'
 import { copyText, usePromptMutations, usePrompts } from '../../lib/queries'
@@ -21,6 +22,23 @@ import { useAppStore, toast } from '../../store/appStore'
 
 export function PromptLibraryPage() {
   const { data: prompts, isLoading, isError, error, refetch } = usePrompts()
+  // Plugin-contributed prompts (SUGGEST capability) — merged read-only.
+  const { data: pluginRecords } = usePlugins()
+  const pluginPrompts = (pluginRecords ?? [])
+    .filter((pl) => pl.enabled && pl.errors.length === 0)
+    .flatMap((pl) =>
+      pl.manifest.prompts.map((pr) => ({
+        id: `${pl.manifest.id}:${pr.title}`,
+        category: pr.category,
+        title: pr.title,
+        body: pr.body,
+        tags: pr.tags,
+        builtin: false,
+        plugin: pl.manifest.name,
+        createdAt: '',
+        updatedAt: '',
+      })),
+    )
   const mutations = usePromptMutations()
   const [category, setCategory] = useState<'ALL' | PromptCategory>('ALL')
   const [search, setSearch] = useState('')
@@ -31,7 +49,10 @@ export function PromptLibraryPage() {
   const setAssistSeed = useAppStore((s) => s.setAssistSeed)
 
   const filtered = useMemo(() => {
-    let list = prompts ?? []
+    let list: Array<(typeof pluginPrompts)[number] | import('@mirai/shared').PromptRecord> = [
+      ...(prompts ?? []),
+      ...pluginPrompts,
+    ]
     if (category !== 'ALL') list = list.filter((p) => p.category === category)
     if (search.trim()) {
       const needle = search.trim().toLowerCase()
@@ -43,7 +64,7 @@ export function PromptLibraryPage() {
       )
     }
     return list
-  }, [prompts, category, search])
+  }, [prompts, pluginPrompts, category, search])
 
   const sendToAssist = (prompt: PromptRecord) => {
     setAssistSeed(prompt.body)
@@ -132,6 +153,7 @@ export function PromptLibraryPage() {
                       {PROMPT_CATEGORY_LABEL[prompt.category]}
                     </Badge>
                     {prompt.builtin && <Badge tone="accent">Built-in</Badge>}
+                    {'plugin' in prompt && prompt.plugin && <Badge tone="violet">plugin</Badge>}
                   </div>
                   <h3 className="mt-1.5 truncate font-display text-sm font-semibold text-mirai-text">
                     {prompt.title}

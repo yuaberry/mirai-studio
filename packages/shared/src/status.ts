@@ -44,6 +44,7 @@ export const LOG_CATEGORIES = [
   'RENDER',
   'MEDIA',
   'IPC',
+  'PLUGINS',
 ] as const
 export type LogCategory = (typeof LOG_CATEGORIES)[number]
 

@@ -594,6 +594,42 @@ export function registerIpcHandlers(c: Container): void {
     return { ok: true }
   })
 
+  // ---- Plugins (Phase 9) ---------------------------------------------------------
+  handleIpc('plugins:list', () => ({ plugins: c.plugins.list() }))
+
+  handleIpc('plugins:setEnabled', (req) => {
+    const plugin = c.plugins.setEnabled(req.id, req.enabled)
+    c.logger.info('PLUGINS', `Plugin ${req.id} ${req.enabled ? 'enabled' : 'disabled'}`)
+    return { plugin }
+  })
+
+  handleIpc('plugins:installFromFolder', async () => {
+    const win = c.emitter.window
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Choose a plugin folder (manifest.json + index.js)',
+      properties: ['openDirectory'],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      throw new MiraiError('CANCELLED', 'Plugin install cancelled.')
+    }
+    const plugin = c.plugins.installFromFolder(result.filePaths[0]!)
+    c.logger.info('PLUGINS', `Plugin installed: ${plugin.manifest.id}`, {
+      version: plugin.manifest.version,
+    })
+    return { plugin }
+  })
+
+  handleIpc('plugins:delete', (req) => {
+    c.plugins.delete(req.id)
+    c.logger.info('PLUGINS', `Plugin deleted: ${req.id}`)
+    return { ok: true }
+  })
+
+  handleIpc('plugins:runCommand', async (req) => {
+    const result = await c.pluginHost.runCommand(req.pluginId, req.commandId)
+    return { result }
+  })
+
   // ---- Subtitle Studio (Phase 4 wrap-up) ---------------------------------------
   handleIpc('subtitles:list', (req) => ({
     subtitles: requireActive(c).subtitles.list(req.sceneId),

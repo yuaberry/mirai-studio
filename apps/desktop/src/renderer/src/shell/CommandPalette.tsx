@@ -24,7 +24,7 @@ import {
   X,
 } from 'lucide-react'
 import { invoke } from '../lib/ipc'
-import { queryKeys, useCurrentProject, useJobActions, useProjectAction } from '../lib/queries'
+import { queryKeys, useCurrentProject, useJobActions, usePluginMutations, usePlugins, useProjectAction } from '../lib/queries'
 import { useAppStore, toast } from '../store/appStore'
 import { ItemStyles } from './paletteStyles'
 
@@ -37,6 +37,11 @@ export function CommandPalette() {
   const projectAction = useProjectAction()
   const jobActions = useJobActions()
   const queryClient = useQueryClient()
+  const { data: plugins } = usePlugins()
+  const pluginMutations = usePluginMutations()
+  const pluginCommands = (plugins ?? [])
+    .filter((p) => p.enabled && p.errors.length === 0)
+    .flatMap((p) => p.manifest.commands.map((cmd) => ({ ...cmd, pluginId: p.manifest.id, pluginName: p.manifest.name })))
 
   const run = (label: string, fn: () => unknown) => () => {
     setOpen(false)
@@ -149,6 +154,33 @@ export function CommandPalette() {
             <LifeBuoy className="h-4 w-4" /> Go to Diagnostics
           </Command.Item>
         </Command.Group>
+
+        {pluginCommands.length > 0 && (
+          <Command.Group heading="Plugins" className={ItemStyles.group}>
+            {pluginCommands.map((cmd) => (
+              <Command.Item
+                key={`${cmd.pluginId}:${cmd.id}`}
+                className={ItemStyles.item}
+                onSelect={run(cmd.label, async () => {
+                  const result = (await pluginMutations.runCommand.mutateAsync({
+                    pluginId: cmd.pluginId,
+                    commandId: cmd.id,
+                  })) as { message?: string } | null
+                  toast({
+                    kind: 'success',
+                    title: cmd.label,
+                    description:
+                      result && typeof result === 'object' && 'message' in result
+                        ? String(result.message)
+                        : `${cmd.pluginName} command completed.`,
+                  })
+                })}
+              >
+                <Wand2 className="h-4 w-4 text-mirai-pink" /> {cmd.label}
+              </Command.Item>
+            ))}
+          </Command.Group>
+        )}
 
         <Command.Group heading="System" className={ItemStyles.group}>
           <Command.Item

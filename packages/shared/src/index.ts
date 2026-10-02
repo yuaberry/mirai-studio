@@ -199,6 +199,22 @@ export type {
 } from './entities/timeline'
 
 export {
+  // plugins (Phase 9)
+  PLUGIN_PERMISSIONS,
+  PERMISSION_LABEL,
+  PluginCommand,
+  PluginPrompt,
+  PluginExportPreset,
+  PluginProvider,
+  PluginManifest,
+  PluginRecord,
+  MarketplaceEntry,
+  CURATED_MARKETPLACE,
+  zPluginPermission,
+} from './entities/plugins'
+export type { PluginPermission } from './entities/plugins'
+
+export {
   // tasks
   TASK_PRIORITIES,
   PRIORITY_LABEL,

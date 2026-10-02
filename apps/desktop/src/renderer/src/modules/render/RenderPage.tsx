@@ -18,6 +18,7 @@ import { Clapperboard, Film, FolderOpen, Play, Trash2 } from 'lucide-react'
 import {
   useEpisodes,
   useJobs,
+  usePlugins,
   useRenderOutputs,
   useRenderMutations,
   useRenderStatus,
@@ -45,6 +46,14 @@ export function RenderPage() {
   const [sceneId, setSceneId] = useState<string>('')
   const [presetId, setPresetId] = useState<string>(EXPORT_PRESETS[0]!.id)
   const [quality, setQuality] = useState<RenderQuality>('MASTER')
+  // Plugin-contributed export presets (SUGGEST capability) — real render params.
+  const { data: pluginRecords } = usePlugins()
+  const pluginPresets = (pluginRecords ?? [])
+    .filter((pl) => pl.enabled && pl.errors.length === 0)
+    .flatMap((pl) =>
+      pl.manifest.exportPresets.map((preset) => ({ ...preset, plugin: pl.manifest.name })),
+    )
+  const allPresets = [...EXPORT_PRESETS, ...pluginPresets]
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   useEffect(() => {
@@ -92,7 +101,9 @@ export function RenderPage() {
     )
   }
 
-  const preset: ExportPreset | undefined = EXPORT_PRESETS.find((p) => p.id === presetId)
+  const preset: ExportPreset | undefined = allPresets.find(
+    (p): p is ExportPreset => p.id === presetId && !('plugin' in p),
+  )
 
   return (
     <div className="mx-auto w-full max-w-6xl px-8 py-8">
@@ -126,9 +137,9 @@ export function RenderPage() {
             <div>
               <p className="mb-1 text-[10px] font-bold text-mirai-faint uppercase">Preset</p>
               <Select className="h-8 text-xs" value={presetId} onChange={(e) => setPresetId(e.target.value)}>
-                {EXPORT_PRESETS.map((p) => (
+                {allPresets.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.label} — {p.width}×{p.height} @ {p.fps}fps
+                    {p.label} — {p.width}×{p.height} @ {p.fps}fps{'plugin' in p && p.plugin ? ` (plugin: ${p.plugin})` : ''}
                   </option>
                 ))}
               </Select>

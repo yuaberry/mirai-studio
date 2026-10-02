@@ -31,6 +31,8 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   { id: 'timeline.zoomOut', label: 'Zoom out', group: 'Timeline', defaultCombo: 'minus' },
   { id: 'timeline.zoomFit', label: 'Zoom to fit timeline', group: 'Timeline', defaultCombo: '0' },
   { id: 'timeline.snap', label: 'Toggle snapping', group: 'Timeline', defaultCombo: 'shift+s' },
+  { id: 'timeline.undo', label: 'Undo timeline edit', group: 'Timeline', defaultCombo: 'ctrl+z' },
+  { id: 'timeline.redo', label: 'Redo timeline edit', group: 'Timeline', defaultCombo: 'ctrl+shift+z' },
   { id: 'timeline.prevMarker', label: 'Jump to previous marker', group: 'Timeline', defaultCombo: 'comma' },
   { id: 'timeline.nextMarker', label: 'Jump to next marker', group: 'Timeline', defaultCombo: 'period' },
   // ---- Application -------------------------------------------------------

@@ -1110,3 +1110,88 @@ export function useGenerateVideo() {
     },
   })
 }
+
+// ---------------------------------------------------------------- plugins (Phase 9)
+
+export const pluginKeys = {
+  all: ['plugins'] as const,
+}
+
+export function usePlugins() {
+  return useQuery({
+    queryKey: pluginKeys.all,
+    queryFn: () =>
+      invoke('plugins:list').then((r) => r.plugins as import('@mirai/shared').PluginRecord[]),
+  })
+}
+
+export function usePluginMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['plugins'] })
+  }
+  return {
+    setEnabled: useMutation({
+      mutationFn: (input: { id: string; enabled: boolean }) =>
+        invoke('plugins:setEnabled', input).then((r) => r.plugin),
+      onSuccess: invalidate,
+    }),
+    installFromFolder: useMutation({
+      mutationFn: () => invoke('plugins:installFromFolder').then((r) => r.plugin),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => invoke('plugins:delete', { id }).then(() => undefined),
+      onSuccess: invalidate,
+    }),
+    runCommand: useMutation({
+      mutationFn: (input: { pluginId: string; commandId: string }) =>
+        invoke('plugins:runCommand', input).then((r) => r.result),
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      },
+    }),
+  }
+}
+
+/** Applies a plugin-declared provider config into the matching Settings slot. */
+export function useApplyPluginProvider() {
+  const { data: settings } = useSettings()
+  const updateSettings = useUpdateSettings()
+  return useMutation({
+    mutationFn: (input: {
+      provider: import('@mirai/shared').PluginProvider
+    }): Promise<'chat' | 'image' | 'video'> => {
+      if (!settings) throw new Error('Settings not loaded.')
+      const s = settings
+      const kind = input.provider.kind
+      if (kind === 'image') {
+        return updateSettings
+          .mutateAsync({
+            ...s,
+            ai: { ...s.ai, image: { ...s.ai.image, baseUrl: input.provider.baseUrl, model: input.provider.model } },
+          })
+          .then(() => 'image' as const)
+      }
+      if (kind === 'video') {
+        return updateSettings
+          .mutateAsync({
+            ...s,
+            ai: { ...s.ai, video: { ...s.ai.video, baseUrl: input.provider.baseUrl, model: input.provider.model } },
+          })
+          .then(() => 'video' as const)
+      }
+      // Chat: the nvidia slot is the generic OpenAI-compatible chat config.
+      return updateSettings
+        .mutateAsync({
+          ...s,
+          ai: {
+            ...s.ai,
+            chatProvider: 'nvidia',
+            nvidia: { ...s.ai.nvidia, baseUrl: input.provider.baseUrl, model: input.provider.model },
+          },
+        })
+        .then(() => 'chat' as const)
+    },
+  })
+}

@@ -53,6 +53,9 @@ export { ProductionService } from './production/productionService'
 // subtitles (Phase 4 wrap-up)
 export { SubtitleService } from './subtitles/subtitleService'
 
+// plugins (Phase 9)
+export { PluginRegistry, EXAMPLE_MANIFESTS } from './plugins/pluginRegistry'
+
 // settings
 export { SettingsService, CredentialStore } from './settings/settingsService'
 export type { CredentialStatus } from './settings/settingsService'
