@@ -132,6 +132,7 @@ mirai-studio/
 | 0007_timeline_editing | `timeline_tracks`, `timeline_clips`, `timeline_markers`, `keyframes` |
 | 0008_production | `tasks`, `crew_members`, `approval_events`, `entity_versions` |
 | 0009_subtitles_video | `subtitles`, `shots.video_asset_id` |
+| App 0002_app_kv | `app_kv` (plugin enable state + future app-level kv) |
 
 **Key design decisions**:
 - IDs are ULIDs (26 chars Crockford base32) — never autoincrement
@@ -142,7 +143,7 @@ mirai-studio/
 
 ---
 
-## 5. IPC CONTRACTS (140 channels)
+## 5. IPC CONTRACTS (145 channels)
 
 All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests AND responses.
 
@@ -160,6 +161,7 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - **production (Phase 7):** 17 channels — tasks:list/create/update/setStatus/delete, crew:list/create/delete, approvals:transition/log, versions:list/snapshot/restore/diff, qc:run, analytics:overview
 - **subtitles (v0.8):** 6 channels — list/create/update/delete/importFile/exportFile
 - **phase 8 AI (v0.8):** 5 channels — ai:analyzeScreenplay/directorNotes/continuityCheck/productionReview/generateVideo
+- **plugins (Phase 9):** 5 channels — plugins:list/setEnabled/installFromFolder/delete/runCommand
 - **jobs:** 5 channels (list, retry, cancel, resumeInterrupted, discardInterrupted)
 - **settings/credentials:** 5 channels
 - **logs:** 3 channels
@@ -213,6 +215,15 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - **Orphan pruning**: replacing/clearing a frame deletes the old file if unreferenced
 - **Style Bible**: art direction, lineart, shading, palette, lighting, proportions, eyes & hair, backgrounds, camera language — autosave
 - **Voice lines**: real audio import per shot (wav/mp3/ogg/m4a/flac/aac/opus), inline audio player
+
+### ✅ Phase 9 — Extensibility (COMPLETE, v0.9.0) — THE ORIGINAL ROADMAP IS DONE
+- **Plugin system**: strict PluginManifest (zod: slug ids, semver, namespaced commands, permissions), folder install (idempotent reinstall), delete; invalid manifests listed but LOCKED; two REAL bundled examples (Starter Commands, Manga Prompt Pack)
+- **Permission model** (READ/SUGGEST/EDIT/CREATE/DELETE/EXPORT): enforced at every `mirai.*` call in the PluginHost — smoke-verified against a real open project (SUGGEST-only plugin denied READ; granted variant returns real data)
+- **PluginHost** (main): loads user-installed index.js (CommonJS) with a strictly scoped API (project summary via READ, scene render via EXPORT — never raw IPC, credentials, paths or DB handles)
+- **Provider SDK**: plugins declare chat/image/video endpoints; the Plugins page APPLIES them into Settings (user owns the key) — real for all three provider kinds
+- **Marketplace foundation**: CURATED_MARKETPLACE curated specs registry + docs/plugins (README + MANIFEST reference + publishing guide)
+- **Deep integration**: plugin commands in the Command Palette; plugin prompts in the Prompt Library (badge); plugin presets in the Export Center (real render params)
+- **Timeline undo/redo** (polish): inverse-op stacks for move/trim/split/delete/ripple (restores shifted clips)/markers; Ctrl+Z / Ctrl+Shift+Z in the shortcut catalog; invalid forward ops pop their entry
 
 ### ✅ v0.8.0 — Subtitles, Video Gen, Render Polish, Phase 8 AI (COMPLETE)
 - **Subtitle Studio**: real SRT/VTT codecs in shared (tolerant parse + writers, unit-tested), SubtitleService (CRUD/import/export to exports/), Subtitles page, live cue overlay in the Timeline preview, **render burn-in** (subtitles filter, temp .srt, verified by integration test)
@@ -314,12 +325,18 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - [ ] Visual Workflow Builder: connected nodes (Input → Writer → Continuity → Storyboard → Image Gen → Video Gen → Voice → Render)
 - [ ] AI Screenplay Analyzer: pacing, dialogue quality, repetition, character voice consistency
 
-### Phase 9 — Extensibility
-- [ ] Plugin API with permission model (READ, SUGGEST, EDIT, CREATE, DELETE, EXPORT)
-- [ ] Provider SDK for community adapters
-- [ ] Marketplace foundation
+### Phase 9 — Extensibility (DONE in v0.9.0)
+- [x] Plugin API with permission model — DONE (enforced end-to-end)
+- [x] Provider SDK for community adapters — DONE (declarative, user-applied)
+- [x] Marketplace foundation — DONE (curated registry + docs)
+- [ ] Drag-and-drop marketplace browser with remote install (needs hosting infra — beyond local-first v1)
+- [ ] Permission enforcement across MULTI-USER teams (needs cloud sync)
 
----
+### Post-roadmap polish backlog (all optional)
+- [ ] ASS (Advanced SubStation) subtitle format
+- [ ] Drag-and-drop workflow builder (node EDITING beyond the v0.8 runner)
+- [ ] Bundled FFmpeg (LGPL licensing decision)
+- [ ] Task due dates + calendar view
 
 ## 8. KEY ARCHITECTURAL DECISIONS (ADRs)
 
@@ -368,6 +385,9 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 21. **`split(/\s+/)` on strings with leading spaces** yields an empty first element — `.trim()` before splitting (VTT to-timecode parse bug).
 22. **DB rows with partial JSON** (`'{}'` literals) must be merged over defaults when parsed — naive field access produced `NaN` filter expressions that only surfaced at FFmpeg runtime. The FFmpeg integration tests are the gate that catches these.
 23. **Workspace `exports` maps block subpaths**: `@mirai/core/src/...` imports silently vanish in bundling. Export new symbols from the package index instead.
+24. **Enable/disable maps default to the SAFE value**: an "absent = enabled" map combined with `delete on enable` inverts the default and breaks round-trips (plugin state test caught it). Store the actual boolean; absence = disabled.
+25. **Python-scripted edits miss as often as they hit**: three of this session's import patches didn't match the real file (different context lines) and silently no-op'd. ALWAYS grep the result immediately after every scripted edit.
+26. **`import type` is erased, runtime `require()` of user code is fine in main**: the PluginHost loads user plugins via CommonJS require exactly like editor extensions do — the scoped API + permission gates are the security boundary, not module loading.
 
 ---
 
@@ -424,6 +444,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.6.0 | Phase 6 | Timeline → REAL MP4 (sceneRenderBuilder: zoompan camera, eq/hue/gblur effects, amix audio mixdown with automation), episode lossless stitching, Export Center (7 presets, PREVIEW/MASTER), outputs browser, master flow CLOSED end-to-end |
 | v0.7.0 | Phase 7 | Production suite: kanban Task Board + crew, governed approval pipeline with audit log, entity versioning (snapshot/restore/diff with safety snapshots), QC (10 checks), production analytics dashboard |
 | v0.8.0 | Phase 4 wrap-up + Render polish + Phase 8 | Subtitle Studio (SRT/VTT + preview overlay + render burn-in), video generation provider (sync+polling) with real shot attach/preview/render, blend modes + animated opacity in render, AI Screenplay Analysis + Continuity Engine + AI Director + orchestrated production review + personas + Workflows page |
+| v0.9.0 | Phase 9 | Plugin system (strict manifests, enforced permissions, bundled examples), Provider SDK (declarative, user-applied), marketplace foundation, palette/prompt/preset deep integration, timeline undo/redo — ROADMAP COMPLETE |
 
 ---
 
@@ -432,25 +453,25 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 - **Repo**: https://github.com/yuaberry/mirai-studio (public, main branch)
 - **Website**: https://yuaberry.github.io/mirai-studio (v0.4.0)
 - **Latest release**: v0.4.0 (GitHub Releases: .deb + AppImage)
-- **All tests**: 151 passing (15 shared + 27 AI incl. 4 video-provider + 109 core incl. 8 subtitles + 11 render)
-- **Smoke**: 40/40 steps passing (5 new v0.8 steps)
+- **All tests**: 156 passing (15 shared + 27 AI + 114 core — incl. 5 plugin-registry tests)
+- **Smoke**: 42/42 steps passing (incl. real plugin permission enforcement)
 - **Lint**: 0 errors, 0 warnings
 - **Typecheck**: 0 errors (4 workspaces)
-- **IPC channels**: 140 contracts, 141 handlers
-- **Migrations**: 0001-0009 (App + Project)
-- **Latest release**: v0.8.0 (.deb + AppImage, boot-tested)
-- **Website**: https://yuaberry.github.io/mirai-studio (v0.8.0)
-- **Backup**: `/home/llinux/mirai-studio-backup-v0.8.0.tar.gz`
+- **IPC channels**: 145 contracts, 146 handlers
+- **Migrations**: Project 0001-0009 + App 0001-0002
+- **Latest release**: v0.9.0 (.deb + AppImage, boot-tested) — ROADMAP COMPLETE
+- **Website**: https://yuaberry.github.io/mirai-studio (v0.9.0)
+- **Backup**: `/home/llinux/mirai-studio-backup-v0.9.0.tar.gz`
 
 ---
 
 ## 13. NEXT IMMEDIATE ACTIONS
 
-1. **Phase 9 — Extensibility** (the last roadmap phase): plugin API with permission model, provider SDK, marketplace foundation.
-2. **Polish backlog**: ASS subtitles, drag-and-drop workflow builder, bundled FFmpeg, undo/redo.
-3. **Optional**: multi-user/cloud sync.
+**The roadmap (Phases 0-9) is COMPLETE.** Everything from here is optional polish or new horizons:
 
----
+1. **Polish backlog**: ASS subtitles, drag-and-drop workflow builder, bundled FFmpeg (LGPL), task due dates.
+2. **New horizons**: multi-user/cloud sync (unlocks permission enforcement + team workflows), remote marketplace with one-click install, dubbing/translation pipeline (voice cloning), web-companion for review approvals.
+3. **Hardening**: performance profiling on large productions (100+ scenes), E2E driver tests (Playwright) for the renderer, i18n (pt-BR/ja strings).
 
 ## 14. RULES FOR THE NEXT SESSION
 
@@ -471,6 +492,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.8.0 — Phases 0-8 ALL delivered + Phase 4/6 wrap-ups complete. Only Phase 9 (Extensibility) + polish remain on the original roadmap.*
+*Last updated: v0.9.0 — THE ORIGINAL ROADMAP IS COMPLETE (Phases 0-9 all delivered). Everything else is optional polish or new horizons.*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
