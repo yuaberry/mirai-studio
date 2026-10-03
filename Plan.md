@@ -133,6 +133,7 @@ mirai-studio/
 | 0008_production | `tasks`, `crew_members`, `approval_events`, `entity_versions` |
 | 0009_subtitles_video | `subtitles`, `shots.video_asset_id` |
 | App 0002_app_kv | `app_kv` (plugin enable state + future app-level kv) |
+| 0010_blend_files | `shots.blend_asset_id` |
 
 **Key design decisions**:
 - IDs are ULIDs (26 chars Crockford base32) — never autoincrement
@@ -143,7 +144,7 @@ mirai-studio/
 
 ---
 
-## 5. IPC CONTRACTS (145 channels)
+## 5. IPC CONTRACTS (152 channels)
 
 All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests AND responses.
 
@@ -162,6 +163,7 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - **subtitles (v0.8):** 6 channels — list/create/update/delete/importFile/exportFile
 - **phase 8 AI (v0.8):** 5 channels — ai:analyzeScreenplay/directorNotes/continuityCheck/productionReview/generateVideo
 - **plugins (Phase 9):** 5 channels — plugins:list/setEnabled/installFromFolder/delete/runCommand
+- **v0.10:** 7 channels — license:activate/status, content:setMature, blender:status/attachBlend/renderShot, ai:autoproduce
 - **jobs:** 5 channels (list, retry, cancel, resumeInterrupted, discardInterrupted)
 - **settings/credentials:** 5 channels
 - **logs:** 3 channels
@@ -215,6 +217,14 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - **Orphan pruning**: replacing/clearing a frame deletes the old file if unreferenced
 - **Style Bible**: art direction, lineart, shading, palette, lighting, proportions, eyes & hair, backgrounds, camera language — autosave
 - **Voice lines**: real audio import per shot (wav/mp3/ogg/m4a/flac/aac/opus), inline audio player
+
+### ✅ v0.10.0 — Mature Mode (Pro), Blender bridge, Producer Agent (COMPLETE)
+- **Licensing**: offline Ed25519-signed keys (LicenseService, production public key embedded; private key OFF-repo at `/home/llinux/mirai-studio-private`-style path — mint with `scripts/licensegen.mjs`); strict payload (v/holder/tier/features/iat/exp); tests use runtime keypairs through the SAME code path
+- **Mature Content Mode**: gated by Pro license with the `mature` feature + 18+ conscientization modal (story-first positioning, legal + provider-ToS responsibility, hard rules displayed); server-side `content:setMature` enforces license + ageConfirmed; mature genres (Hentai/Erotica/Adult Drama) hidden until enabled (`filterGenres`)
+- **Adults-only policy IN CODE** (MaturePolicy): explicit generation requires every cast character explicitly adult (`assessAge` parses numbers + keywords; minors and ambiguous ages throw POLICY_VIOLATION); enforced in generateFrame/generateVideo; `maturePipelineActive` = setting AND project rated 18+; mature contract line in prompts only then
+- **Blender bridge**: attach .blend (validated ≤500MB, project-stored, orphan-pruned) → headless render job (`blender -b … -F FFMPEG`) → MP4 becomes the shot's real video (preview + render seamless); graceful detect; shot-editor UI buttons
+- **Producer Agent** (`ai.autoproduce` job + Producer page): idea → bible draft (NEVER overwrites the author) → cast design (name-deduped) → episode/scene plan (locations + cast links) → screenplays (Scene Writer) → shots (enum-validated) → optional keyframes → timelines; live step progress + summary; smoke-verified END-TO-END with mocked transport against a real project
+- New error codes: POLICY_VIOLATION, LICENSE_INVALID
 
 ### ✅ Phase 9 — Extensibility (COMPLETE, v0.9.0) — THE ORIGINAL ROADMAP IS DONE
 - **Plugin system**: strict PluginManifest (zod: slug ids, semver, namespaced commands, permissions), folder install (idempotent reinstall), delete; invalid manifests listed but LOCKED; two REAL bundled examples (Starter Commands, Manga Prompt Pack)
@@ -388,6 +398,10 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 24. **Enable/disable maps default to the SAFE value**: an "absent = enabled" map combined with `delete on enable` inverts the default and breaks round-trips (plugin state test caught it). Store the actual boolean; absence = disabled.
 25. **Python-scripted edits miss as often as they hit**: three of this session's import patches didn't match the real file (different context lines) and silently no-op'd. ALWAYS grep the result immediately after every scripted edit.
 26. **`import type` is erased, runtime `require()` of user code is fine in main**: the PluginHost loads user plugins via CommonJS require exactly like editor extensions do — the scoped API + permission gates are the security boundary, not module loading.
+27. **Sync-throwing policy functions**: never wrap a synchronous-throwing validator in promise-style try/catch scaffolding in smoke tests — assertExplicitCastAllowed throws synchronously; use a plain try/catch.
+28. **The Producer must respect the author**: autoproduce skips bible drafting when a premise exists and dedupes characters by name — tests must assert that BEHAVIOR (skip + dedupe), not blind counts.
+29. **Never embed the license PRIVATE key anywhere in the repo** — tests generate runtime Ed25519 keypairs and inject the public key; the production pair lives only on the dev machine (private: `mirai-license-private.pem` next to the backups).
+30. **spawnSync detect timeouts (5s) can be transient under load** — a "FFmpeg not installed" smoke skip that comes and goes is system load, not a bug; re-run before debugging code.
 
 ---
 
@@ -445,6 +459,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.7.0 | Phase 7 | Production suite: kanban Task Board + crew, governed approval pipeline with audit log, entity versioning (snapshot/restore/diff with safety snapshots), QC (10 checks), production analytics dashboard |
 | v0.8.0 | Phase 4 wrap-up + Render polish + Phase 8 | Subtitle Studio (SRT/VTT + preview overlay + render burn-in), video generation provider (sync+polling) with real shot attach/preview/render, blend modes + animated opacity in render, AI Screenplay Analysis + Continuity Engine + AI Director + orchestrated production review + personas + Workflows page |
 | v0.9.0 | Phase 9 | Plugin system (strict manifests, enforced permissions, bundled examples), Provider SDK (declarative, user-applied), marketplace foundation, palette/prompt/preset deep integration, timeline undo/redo — ROADMAP COMPLETE |
+| v0.10.0 | Pro features | Mature Content Mode (Ed25519 license keys, conscientization, adults-only enforcement in code, mature genres), Blender bridge (attach .blend → headless render → shot video), Producer Agent (idea → full episode end-to-end) |
 
 ---
 
@@ -453,25 +468,25 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 - **Repo**: https://github.com/yuaberry/mirai-studio (public, main branch)
 - **Website**: https://yuaberry.github.io/mirai-studio (v0.4.0)
 - **Latest release**: v0.4.0 (GitHub Releases: .deb + AppImage)
-- **All tests**: 156 passing (15 shared + 27 AI + 114 core — incl. 5 plugin-registry tests)
-- **Smoke**: 42/42 steps passing (incl. real plugin permission enforcement)
+- **All tests**: 166 passing (15 shared + 27 AI + 124 core — incl. 10 license/policy/blender tests)
+- **Smoke**: 45/45 steps passing (incl. Producer Agent end-to-end)
 - **Lint**: 0 errors, 0 warnings
 - **Typecheck**: 0 errors (4 workspaces)
-- **IPC channels**: 145 contracts, 146 handlers
-- **Migrations**: Project 0001-0009 + App 0001-0002
-- **Latest release**: v0.9.0 (.deb + AppImage, boot-tested) — ROADMAP COMPLETE
-- **Website**: https://yuaberry.github.io/mirai-studio (v0.9.0)
-- **Backup**: `/home/llinux/mirai-studio-backup-v0.9.0.tar.gz`
+- **IPC channels**: 152 contracts, 153 handlers
+- **Migrations**: Project 0001-0010 + App 0001-0002
+- **Latest release**: v0.10.0 (.deb + AppImage, boot-tested)
+- **Website**: https://yuaberry.github.io/mirai-studio (v0.10.0)
+- **License private key**: `mirai-license-private.pem` (kept OUTSIDE the repo, on the dev machine) — mint keys with `scripts/licensegen.mjs`
+- **Backup**: `/home/llinux/mirai-studio-backup-v0.10.0.tar.gz`
 
 ---
 
 ## 13. NEXT IMMEDIATE ACTIONS
 
-**The roadmap (Phases 0-9) is COMPLETE.** Everything from here is optional polish or new horizons:
-
-1. **Polish backlog**: ASS subtitles, drag-and-drop workflow builder, bundled FFmpeg (LGPL), task due dates.
-2. **New horizons**: multi-user/cloud sync (unlocks permission enforcement + team workflows), remote marketplace with one-click install, dubbing/translation pipeline (voice cloning), web-companion for review approvals.
-3. **Hardening**: performance profiling on large productions (100+ scenes), E2E driver tests (Playwright) for the renderer, i18n (pt-BR/ja strings).
+1. **Mature Mode polish**: mature-rated QC checks (age disclaimer in exports?), mature style-guide presets, provider-compat notes per provider in Settings.
+2. **Producer polish**: multi-episode arcs, "continue producing" (respects existing work), batch keyframe queue with concurrency.
+3. **Blender polish**: custom binary path setting, render presets (cycles/eevee), image-sequence imports.
+4. **Long-term**: multi-user/cloud, remote marketplace, dubbing pipeline.
 
 ## 14. RULES FOR THE NEXT SESSION
 
@@ -492,6 +507,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.9.0 — THE ORIGINAL ROADMAP IS COMPLETE (Phases 0-9 all delivered). Everything else is optional polish or new horizons.*
+*Last updated: v0.10.0 — Mature Content Mode (Pro) + Blender bridge + Producer Agent delivered. Roadmap complete + Pro feature set live.*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
