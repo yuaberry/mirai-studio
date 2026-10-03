@@ -122,6 +122,43 @@ function Hero({ onCreate, onOpen }: { onCreate: () => void; onOpen: () => void }
           </Button>
         </div>
       </div>
+
+      {/* capabilities strip — what ships inside every project */}
+      <div className="relative mx-auto mt-8 w-full max-w-5xl px-8 pb-2">
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-mirai-border pt-5">
+          <span className="mr-1 font-display text-[9px] font-bold tracking-[0.2em] text-mirai-faint uppercase">
+            Inside every project
+          </span>
+          {[
+            'Story Bible',
+            'Storyboard',
+            'Timeline Editor',
+            'Audio Mixer',
+            'Camera Keyframes',
+            'Subtitles',
+            'Voice & Music',
+            'FFmpeg Render',
+            'Producer Agent',
+            'AI Workflows',
+            'Production Board',
+            'Plugins',
+          ].map((chip) => (
+            <span
+              key={chip}
+              className="rounded-full border border-mirai-border bg-mirai-panel px-2.5 py-0.5 text-[10px] font-semibold text-mirai-dim"
+            >
+              {chip}
+            </span>
+          ))}
+          <span className="ml-auto flex items-center gap-3 text-[10px] text-mirai-faint">
+            <span className="flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> 100% local-first
+            </span>
+            <span>·</span>
+            <span>Your keys, your machine</span>
+          </span>
+        </div>
+      </div>
     </div>
   )
 }

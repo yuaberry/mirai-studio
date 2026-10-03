@@ -3,7 +3,7 @@
  * and the "Recovered Jobs" banner (spec §43).
  */
 import { useMemo, useState } from 'react'
-import { AlertTriangle, HardDriveDownload, Package, ShieldCheck, X } from 'lucide-react'
+import { AlertTriangle, HardDriveDownload, Package, ShieldCheck, Wand2, X } from 'lucide-react'
 import { Badge, Button } from '../system/ui'
 import { ConfirmModal } from '../system/Modal'
 import {
@@ -43,6 +43,30 @@ export function ProjectHeader() {
           <p className="mt-0.5 truncate text-[11px] text-mirai-faint" title={project.path}>
             {project.path}
           </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            {(project.manifest.config.genres ?? []).slice(0, 5).map((genre) => (
+              <span
+                key={genre}
+                className="rounded-full border border-mirai-border bg-mirai-panel px-2 py-0.5 text-[9px] font-semibold text-mirai-dim"
+              >
+                {genre}
+              </span>
+            ))}
+            {project.manifest.config.contentRating && (
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${
+                  project.manifest.config.contentRating === '18+'
+                    ? 'border-mirai-danger/40 text-mirai-danger'
+                    : 'border-mirai-border text-mirai-faint'
+                }`}
+              >
+                {project.manifest.config.contentRating}
+              </span>
+            )}
+            <span className="text-[9px] text-mirai-faint">
+              · {project.manifest.config.fps ?? 24}fps · {project.manifest.config.aspectRatio ?? '16:9'}
+            </span>
+          </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <Button
@@ -91,6 +115,14 @@ export function ProjectHeader() {
             onClick={() => projectAction.mutate({ kind: 'revealInFolder', id: project.id })}
           >
             <Package className="h-3.5 w-3.5" /> Reveal
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            title="Producer Agent — describe your idea, the studio builds the episode"
+            onClick={() => setView('producer')}
+          >
+            <Wand2 className="h-3.5 w-3.5" /> Produce Episode
           </Button>
           <Button
             variant="ghost"

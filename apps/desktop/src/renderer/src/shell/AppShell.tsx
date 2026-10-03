@@ -189,6 +189,21 @@ export function AppShell() {
                 <Kbd>K</Kbd>
               </span>
             </button>
+            <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
+              <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
+                <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
+                v0.10.1
+              </span>
+              <a
+                href="https://github.com/yuaberry/mirai-studio"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] text-mirai-faint transition-colors hover:text-mirai-accent"
+                title="Star Mirai Studio on GitHub"
+              >
+                ★ on GitHub
+              </a>
+            </div>
           </div>
         </aside>
         <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">

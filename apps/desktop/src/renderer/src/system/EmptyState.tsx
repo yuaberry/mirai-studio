@@ -26,8 +26,11 @@ export function EmptyState({
         className,
       )}
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-mirai-border bg-mirai-panel text-mirai-faint">
-        {icon}
+      <div className="relative">
+        <div className="absolute inset-0 rounded-2xl bg-gradient-mirai opacity-20 blur-md" aria-hidden="true" />
+        <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-mirai-border-strong bg-mirai-panel text-mirai-accent">
+          {icon}
+        </div>
       </div>
       <div>
         <p className="text-sm font-semibold text-mirai-text">{title}</p>
