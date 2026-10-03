@@ -21,6 +21,8 @@ CREATE PROJECT → CHARACTER → LOCATION → EPISODE → SCENE → WRITE DIALOG
 
 **Identity**: "From imagination to animation." Dark-first UI, sakura-pink → violet → cyan gradient brand.
 
+**POSITIONING (v0.10)**: The app is a STORYTELLING STUDIO, not an adult-content generator. Mature Content Mode (Pro) is a toolset for adult-rated narratives with the adults-only policy enforced in code. SFW is the default. This position is stated in the activation conscientization, on the website Pro section, and in this file — keep it consistent in all future work.
+
 ---
 
 ## 2. USER REQUIREMENTS (verbatim from conversation)
@@ -401,7 +403,10 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 27. **Sync-throwing policy functions**: never wrap a synchronous-throwing validator in promise-style try/catch scaffolding in smoke tests — assertExplicitCastAllowed throws synchronously; use a plain try/catch.
 28. **The Producer must respect the author**: autoproduce skips bible drafting when a premise exists and dedupes characters by name — tests must assert that BEHAVIOR (skip + dedupe), not blind counts.
 29. **Never embed the license PRIVATE key anywhere in the repo** — tests generate runtime Ed25519 keypairs and inject the public key; the production pair lives only on the dev machine (private: `mirai-license-private.pem` next to the backups).
-30. **spawnSync detect timeouts (5s) can be transient under load** — a "FFmpeg not installed" smoke skip that comes and goes is system load, not a bug; re-run before debugging code.
+30. **spawnSync detect timeouts (5s) can be transient under load** — a "FFmpeg not installed" smoke skip that comes and comes is system load, not a bug; re-run before debugging code.
+31. **Website link rot is silent**: the download hrefs still pointed at v0.2.1 filenames after eight version bumps (the visible version text was updated, the filenames weren't). Always verify BOTH the version label AND the asset filenames in hrefs when bumping versions.
+32. **Check the CSS variable vocabulary before writing new styles**: the site uses `--raise/--panel/--bg/--accent`, not `--bg-raise/--pink` — appending a block with wrong var names silently renders as broken colors. Grep `:root` first.
+33. **Producer/dedupe semantics must be tested as BEHAVIOR**: autoproduce skips existing premises and dedupes character names by design — assertions that count blind totals fail; assert the skip + dedupe happened instead.
 
 ---
 
@@ -460,6 +465,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.8.0 | Phase 4 wrap-up + Render polish + Phase 8 | Subtitle Studio (SRT/VTT + preview overlay + render burn-in), video generation provider (sync+polling) with real shot attach/preview/render, blend modes + animated opacity in render, AI Screenplay Analysis + Continuity Engine + AI Director + orchestrated production review + personas + Workflows page |
 | v0.9.0 | Phase 9 | Plugin system (strict manifests, enforced permissions, bundled examples), Provider SDK (declarative, user-applied), marketplace foundation, palette/prompt/preset deep integration, timeline undo/redo — ROADMAP COMPLETE |
 | v0.10.0 | Pro features | Mature Content Mode (Ed25519 license keys, conscientization, adults-only enforcement in code, mature genres), Blender bridge (attach .blend → headless render → shot video), Producer Agent (idea → full episode end-to-end) |
+| v0.10.1 | Polish | Website professional redesign (CSS app mockup, producer terminal, 12-card studio grid, full pipeline, Pro section, changelog; FIXED broken v0.2.1 download links), Hub capabilities strip, header genre/rating chips + Produce Episode CTA, sidebar version footer, richer EmptyStates, ambient gradients |
 
 ---
 
@@ -474,8 +480,8 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 - **Typecheck**: 0 errors (4 workspaces)
 - **IPC channels**: 152 contracts, 153 handlers
 - **Migrations**: Project 0001-0010 + App 0001-0002
-- **Latest release**: v0.10.0 (.deb + AppImage, boot-tested)
-- **Website**: https://yuaberry.github.io/mirai-studio (v0.10.0)
+- **Latest release**: v0.10.1 (.deb + AppImage, boot-tested)
+- **Website**: https://yuaberry.github.io/mirai-studio (v0.10.1 — professional redesign: app mockup, producer terminal, full studio grid, pipeline, Pro section, changelog)
 - **License private key**: `mirai-license-private.pem` (kept OUTSIDE the repo, on the dev machine) — mint keys with `scripts/licensegen.mjs`
 - **Backup**: `/home/llinux/mirai-studio-backup-v0.10.0.tar.gz`
 
@@ -484,9 +490,10 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 ## 13. NEXT IMMEDIATE ACTIONS
 
 1. **Mature Mode polish**: mature-rated QC checks (age disclaimer in exports?), mature style-guide presets, provider-compat notes per provider in Settings.
-2. **Producer polish**: multi-episode arcs, "continue producing" (respects existing work), batch keyframe queue with concurrency.
+2. **Producer polish**: multi-episode arcs, "continue producing" (respects existing work), batch keyframe queue with concurrency, keyframe style options.
 3. **Blender polish**: custom binary path setting, render presets (cycles/eevee), image-sequence imports.
-4. **Long-term**: multi-user/cloud, remote marketplace, dubbing pipeline.
+4. **UI backlog**: real screenshots on the website (once a showcase project exists), app onboarding tour for first-run users.
+5. **Long-term**: multi-user/cloud, remote marketplace, dubbing pipeline.
 
 ## 14. RULES FOR THE NEXT SESSION
 
@@ -507,6 +514,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.10.0 — Mature Content Mode (Pro) + Blender bridge + Producer Agent delivered. Roadmap complete + Pro feature set live.*
+*Last updated: v0.10.1 — Studio polish shipped (website redesign + app UI density). Roadmap complete + Pro set live. Compact freely: everything needed to continue lives in this file.*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
