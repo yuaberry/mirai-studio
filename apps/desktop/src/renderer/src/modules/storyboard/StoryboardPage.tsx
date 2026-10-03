@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Clock,
   Clapperboard,
+  Box,
   Film,
   ImagePlus,
   LayoutGrid,
@@ -45,6 +46,8 @@ import {
   useAiStatus,
   useGenerateFrame,
   useGenerateVideo,
+  useBlenderActions,
+  useBlenderStatus,
   useVoiceActions,
   useRecordDecision,
   useRenderStatus,
@@ -368,6 +371,8 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
   const { data: ai } = useAiStatus()
   const generateFrame = useGenerateFrame()
   const generateVideo = useGenerateVideo()
+  const blender = useBlenderActions()
+  const { data: blenderStatus } = useBlenderStatus()
   const voice = useVoiceActions()
   const recordDecision = useRecordDecision()
   const { data: renderStatus } = useRenderStatus()
@@ -558,6 +563,54 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
             >
               <Film className="h-3.5 w-3.5" /> {shot.videoAssetId ? 'Regenerate' : 'Generate'} Video
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              title={
+                blenderStatus?.available
+                  ? 'Attach your own Blender scene (.blend) — headless-rendered into a real shot video'
+                  : 'Install Blender (blender.org) to use your own 3D scenes'
+              }
+              onClick={() =>
+                blender.attachBlend.mutate(shot.id, {
+                  onSuccess: (asset) =>
+                    toast({ kind: 'success', title: 'Blender scene attached', description: asset.originalName }),
+                  onError: (err) => {
+                    if (err.message.includes('cancelled')) return
+                    toast({ kind: 'error', title: 'Attach failed', description: err.message })
+                  },
+                })
+              }
+            >
+              <Box className="h-3.5 w-3.5" /> {shot.blendAssetId ? 'Replace .blend' : 'Attach .blend'}
+            </Button>
+            {shot.blendAssetId && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-mirai-cyan/40 text-mirai-cyan"
+                disabled={!blenderStatus?.available}
+                loading={blender.renderShot.isPending && blender.renderShot.variables === shot.id}
+                title={
+                  blenderStatus?.available
+                    ? `Headless Blender render → real MP4 attached to this shot (${blenderStatus.version})`
+                    : 'Blender not detected on this system'
+                }
+                onClick={() =>
+                  blender.renderShot.mutate(shot.id, {
+                    onSuccess: (jobId) =>
+                      toast({
+                        kind: 'success',
+                        title: 'Blender render queued',
+                        description: `Job ${jobId.slice(-6)} — the MP4 attaches automatically.`,
+                      }),
+                    onError: (err) => toast({ kind: 'error', title: 'Render failed', description: err.message }),
+                  })
+                }
+              >
+                <Box className="h-3.5 w-3.5" /> Render with Blender
+              </Button>
+            )}
             {shot.frameAssetId && (
               <Button
                 size="sm"

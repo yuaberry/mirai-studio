@@ -1195,3 +1195,73 @@ export function useApplyPluginProvider() {
     },
   })
 }
+
+// ---------------------------------------------------------------- license, mature, blender, producer (v0.10)
+
+export function useLicenseStatus() {
+  return useQuery({
+    queryKey: ['license', 'status'],
+    queryFn: () => invoke('license:status').then((r) => r.status as import('@mirai/shared').LicenseStatus),
+    staleTime: 30_000,
+  })
+}
+
+export function useLicenseMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['license'] })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.settings })
+  }
+  return {
+    activate: useMutation({
+      mutationFn: (key: string) => invoke('license:activate', { key }).then((r) => r.status),
+      onSuccess: invalidate,
+    }),
+  }
+}
+
+export function useSetMature() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { enabled: boolean; ageConfirmed: boolean }) =>
+      invoke('content:setMature', input).then((r) => r.enabled),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings })
+      void queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+}
+
+export function useBlenderStatus() {
+  return useQuery({
+    queryKey: ['blender', 'status'],
+    queryFn: () => invoke('blender:status'),
+    staleTime: 60_000,
+  })
+}
+
+export function useBlenderActions() {
+  const queryClient = useQueryClient()
+  return {
+    attachBlend: useMutation({
+      mutationFn: (shotId: string) => invoke('blender:attachBlend', { shotId }).then((r) => r.asset),
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: ['shots'] })
+        void queryClient.invalidateQueries({ queryKey: ['timeline'] })
+      },
+    }),
+    renderShot: useMutation({
+      mutationFn: (shotId: string) => invoke('blender:renderShot', { shotId }).then((r) => r.jobId),
+      onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.jobs }),
+    }),
+  }
+}
+
+export function useAutoproduce() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (options: import('@mirai/shared').AutoproduceOptions) =>
+      invoke('ai:autoproduce', options).then((r) => r.jobId),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.jobs }),
+  })
+}

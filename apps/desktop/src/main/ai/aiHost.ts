@@ -12,10 +12,16 @@ import {
   ScreenplayAnalysis,
   DirectorNotes,
   ContinuityFinding,
+  BibleDraftPlan,
+  CharacterPlanList,
+  ScenePlanList,
+  ShotPlanList,
   type AiContextScope,
+  type AutoproduceSummary,
   type ChatMessage,
   type EntityId,
 } from '@mirai/shared'
+import { assertExplicitCastAllowed, maturePipelineActive } from '@mirai/core'
 import {
   ModelRegistry,
   OpenRouterProvider,
@@ -166,6 +172,11 @@ export class AiHost {
       .listCharacters()
       .filter((c) => scene.characterIds.includes(c.id))
       .map((c) => ({ name: c.name }))
+    if (this.matureActive(ctx)) {
+      assertExplicitCastAllowed(
+        ctx.creative.listCharacters().filter((c) => scene.characterIds.includes(c.id)),
+      )
+    }
     const prompt = [
       buildImagePrompt({
         styleBible: ctx.storyboard.getStyleBible(),
@@ -186,6 +197,7 @@ export class AiHost {
         },
         characters,
         extraPrompt,
+        mature: this.matureActive(ctx),
       }),
       'MOTION: animate with the camera movement above, subtle natural motion, stable character design across all frames, 24fps, no text overlays, no scene cuts.',
     ].join('\n\n')
@@ -211,6 +223,232 @@ export class AiHost {
       bytes: result.bytes.length,
     })
     return { assetId: asset.id, prompt }
+  }
+
+  // ------------------------------------------------------------- mature mode (Pro)
+
+  /** Mature pipeline = user-enabled mature mode AND the project rated 18+. */
+  private matureActive(ctx: NonNullable<ReturnType<ProjectService['current']>>): boolean {
+    const settings = this.deps.settings.get()
+    return maturePipelineActive(ctx.manifest, settings.content?.matureEnabled ?? false)
+  }
+
+  // ------------------------------------------------------------- producer agent
+
+  /**
+   * THE PRODUCER AGENT — takes the user's anime idea and produces a full
+   * episode: bible → characters → scenes → screenplays → shots → (frames)
+   * → timelines. Every step is a real service call; the model only PLANS,
+   * the studio EXECUTES.
+   */
+  async autoproduce(
+    options: import('@mirai/shared').AutoproduceOptions,
+    progress: (pct: number) => void,
+    signal: { readonly aborted: boolean },
+  ): Promise<AutoproduceSummary> {
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+    const steps: AutoproduceSummary['steps'] = []
+    const push = (step: string, detail: string, ok = true) => steps.push({ step, detail, ok })
+    const guard = () => {
+      if (signal.aborted) throw new MiraiError('CANCELLED', 'Production cancelled.')
+    }
+
+    const mature = this.matureActive(ctx)
+    const matureLine = mature
+      ? ' This production is rated 18+ and may include mature themes — all characters are adults, write them accordingly (state adult ages).'
+      : ''
+    const instruction = `PRODUCER BRIEF: ${options.idea}\n\nProject: "${ctx.summary.name}" (${ctx.summary.description ?? 'no description'}).${matureLine}`
+
+    // ---- 1. bible draft (only when empty — never overwrite the author) ------
+    let bibleDrafted = false
+    const bible = ctx.creative.getBible()
+    if (!bible.premise || bible.premise.trim().length === 0) {
+      guard()
+      const plan = await this.chatJson(
+        `You are the story editor of an anime studio. From the brief below, draft the Story Bible.\n\n${instruction}\n\nReturn JSON: { premise: string (2-4 sentences), themes: string[] (3-6), tone: string, message: string (what the audience takes away), genreNotes: string }.`,
+        BibleDraftPlan,
+        0.7,
+      )
+      ctx.creative.updateBible({
+        ...bible,
+        premise: plan.premise,
+        themes: plan.themes.join(', '),
+        tone: plan.tone,
+        message: plan.message,
+        genreNotes: plan.genreNotes,
+      })
+      bibleDrafted = true
+      push('Story Bible', 'Premise, themes, tone and message drafted.')
+    } else {
+      push('Story Bible', "Already written — kept the author's version.")
+    }
+    progress(5)
+
+    // ---- 2. characters -----------------------------------------------------
+    guard()
+    const characterPlans = await this.chatJson(
+      `You are the character designer of an anime studio. From the brief below, design the main cast (${options.scenesCount > 4 ? '3-4' : '2-3'} characters).\n\n${instruction}\n\nReturn JSON: { characters: [{ name, role (one of PROTAGONIST/DEUTERAGONIST/SUPPORTING/ANTAGONIST/CAMEO/OTHER), age (stated explicitly — e.g. "21"; ${mature ? 'ALL characters must be clearly adults (18+)' : 'age-appropriate to the story'}), appearance (visual, concrete — hair, eyes, build, signature outfit), personality, goals, voice (how they speak) }] }.`,
+      CharacterPlanList,
+      0.7,
+    )
+    const existingNames = new Set(ctx.creative.listCharacters().map((c) => c.name.toLowerCase()))
+    const createdCharacters: Array<{ id: string; name: string }> = []
+    for (const plan of characterPlans) {
+      if (existingNames.has(plan.name.toLowerCase())) continue
+      const created = ctx.creative.createCharacter(plan)
+      createdCharacters.push({ id: created.id, name: created.name })
+    }
+    push('Characters', `${createdCharacters.length} designed (${createdCharacters.map((c) => c.name).join(', ') || 'existing cast kept'}).`)
+    progress(15)
+
+    // ---- 3. episode + scene plan -------------------------------------------
+    guard()
+    const scenePlans = await this.chatJson(
+      `You are the series director planning episode structure. From the brief below, plan the FIRST episode as ${options.scenesCount} scenes with a clear dramatic arc (setup → development → turn → climax landing).\n\n${instruction}\n\nReturn JSON: { scenes: [{ title, synopsis (2-4 sentences), timeOfDay (one of DAY/NIGHT/DAWN/DUSK/UNSPECIFIED), locationName, castNames (from the cast list above; max 4 per scene) }] }.`,
+      ScenePlanList,
+      0.6,
+    )
+    // Episode number: next free slot unless provided.
+    const episodes = ctx.creative.listEpisodes()
+    const season = episodes.length > 0 ? episodes[0]!.season : 1
+    const number =
+      options.episodeNumber ??
+      (episodes.length > 0 ? Math.max(...episodes.map((e) => e.number)) + 1 : 1)
+    const episode = ctx.creative.createEpisode({
+      season,
+      number,
+      title: `${options.idea.split(/[.,;\n]/)[0]!.trim().slice(0, 60) || 'Episode'} — Part 1`,
+      synopsis: `Autoproduced from the idea: ${options.idea.slice(0, 500)}`,
+    })
+    // Locations (unique by name).
+    const locationIds = new Map<string, string>()
+    const castByName = new Map(ctx.creative.listCharacters().map((c) => [c.name, c.id] as const))
+    let scenesCreated = 0
+    for (const plan of scenePlans) {
+      let locationId: string | undefined
+      if (plan.locationName && !locationIds.has(plan.locationName)) {
+        const created = ctx.creative.createLocation({
+          name: plan.locationName,
+          description: `Setting for "${plan.title}" — ${plan.synopsis.slice(0, 200)}`,
+        })
+        locationIds.set(plan.locationName, created.id)
+        locationId = created.id
+      } else if (plan.locationName) {
+        locationId = locationIds.get(plan.locationName)!
+      }
+      ctx.creative.createScene(episode.id, {
+        title: plan.title,
+        synopsis: plan.synopsis,
+        timeOfDay: plan.timeOfDay,
+        locationId,
+        characterIds: plan.castNames.map((n) => castByName.get(n)).filter((id): id is string => id !== undefined),
+      })
+      scenesCreated++
+    }
+    push('Episode structure', `Episode S${season}E${number} with ${scenesCreated} scenes planned.`)
+    progress(25)
+
+    // ---- 4. screenplays ------------------------------------------------------
+    guard()
+    const scenes = ctx.creative.listScenes(episode.id)
+    let screenplaysDrafted = 0
+    for (const scene of scenes) {
+      guard()
+      try {
+        const draft = await this.draftScreenplay(scene.id)
+        ctx.creative.updateScene(scene.id, {
+          title: scene.title,
+          timeOfDay: scene.timeOfDay,
+          characterIds: scene.characterIds,
+          locationId: scene.locationId ?? undefined,
+          synopsis: scene.synopsis ?? undefined,
+          screenplay: draft.draft,
+        })
+        screenplaysDrafted++
+      } catch (err) {
+        push('Screenplay', `Scene "${scene.title}" draft failed: ${(err as Error).message}`, false)
+      }
+    }
+    push('Screenplays', `${screenplaysDrafted}/${scenes.length} scenes written by the Scene Writer.`)
+    progress(50)
+
+    // ---- 5. storyboard shots --------------------------------------------------
+    guard()
+    let shotsCreated = 0
+    for (const scene of scenes) {
+      guard()
+      const shotPlans = await this.chatJson(
+        `You are the storyboard artist. Break the scene below into ${options.shotsPerScene} shots with a clear visual rhythm.\n\nSCENE: ${scene.title}\nSYNOPSIS: ${scene.synopsis ?? ''}\nSCREENPLAY:\n${(scene.screenplay ?? '').slice(0, 2_000)}\nCAST: ${scene.characterIds.length > 0 ? ctx.creative.listCharacters().filter((c) => scene.characterIds.includes(c.id)).map((c) => c.name).join(', ') : 'the protagonist'}\n\nReturn JSON: { shots: [{ title, shotType (one of EXTREME_CLOSE_UP/CLOSE_UP/MEDIUM/WIDE/EXTREME_WIDE/OVER_THE_SHOULDER/POV/TWO_SHOT/AERIAL/MACRO), lens (one of 14mm/24mm/35mm/50mm/85mm/135mm), cameraMovement (one of STATIC/PAN_LEFT/PAN_RIGHT/TILT_UP/TILT_DOWN/DOLLY_IN/DOLLY_OUT/TRACKING_LEFT/TRACKING_RIGHT/CRANE_UP/CRANE_DOWN/ZOOM_IN/ZOOM_OUT), durationSeconds (0.5-30), dialogue (optional, in "NAME\nline" screenplay format) }] }.`,
+        ShotPlanList,
+        0.6,
+      )
+      for (const plan of shotPlans) {
+        ctx.storyboard.createShot(scene.id, plan)
+        shotsCreated++
+      }
+    }
+    push('Storyboard', `${shotsCreated} shots boarded across ${scenes.length} scenes.`)
+    progress(65)
+
+    // ---- 6. frames (optional — only when the user opted in) -------------------
+    let framesGenerated = 0
+    if (options.generateFrames) {
+      if (this.resolveImageProvider() === null) {
+        push('Keyframes', 'Skipped — no image provider configured (Settings → Providers).', false)
+      } else {
+        for (const scene of scenes) {
+          for (const shot of ctx.storyboard.listShots(scene.id)) {
+            guard()
+            try {
+              const frameSignal = new AbortController().signal
+              await this.generateFrame(shot.id, undefined, frameSignal, () => undefined)
+              framesGenerated++
+            } catch (err) {
+              push('Keyframes', `Shot "${shot.title}" frame failed: ${(err as Error).message}`, false)
+              break // provider issue — stop hammering, the story is still complete
+            }
+          }
+        }
+        push('Keyframes', `${framesGenerated} frames generated with studio-consistency prompts.`)
+      }
+    } else {
+      push('Keyframes', 'Skipped (disabled — generate per shot or via Batch later).')
+    }
+    progress(85)
+
+    // ---- 7. timelines ----------------------------------------------------------
+    guard()
+    let timelinesBuilt = 0
+    for (const scene of scenes) {
+      try {
+        ctx.timeline.buildFromScene(scene.id, true)
+        timelinesBuilt++
+      } catch {
+        // scenes with zero shots build empty timelines — skip quietly
+      }
+    }
+    push('Timelines', `${timelinesBuilt} scene timelines assembled (ready to edit & render).`)
+    progress(95)
+
+    ctx.storyboard.addDecision({
+      kind: 'other',
+      summary: `Producer Agent: autoproduced Episode S${season}E${number} from the idea "${options.idea.slice(0, 300)}" — ${createdCharacters.length}, ${scenesCreated} scenes, ${shotsCreated} shots.`,
+      sceneId: scenes[0]?.id,
+    })
+    progress(100)
+
+    return {
+      bibleDrafted,
+      charactersCreated: createdCharacters.length,
+      scenesCreated,
+      screenplaysDrafted,
+      shotsCreated,
+      framesGenerated,
+      timelinesBuilt,
+      episodeTitle: episode.title,
+      steps,
+    }
   }
 
   // ------------------------------------------------------------------- phase 8 analysis
@@ -653,7 +891,14 @@ export class AiHost {
       },
       characters,
       extraPrompt,
+      mature: this.matureActive(ctx),
     })
+    // Pro: the adults-only policy is enforced in code before any mature prompt.
+    if (this.matureActive(ctx)) {
+      assertExplicitCastAllowed(
+        ctx.creative.listCharacters().filter((c) => scene.characterIds.includes(c.id)),
+      )
+    }
 
     progress(20)
     const provider = new OpenAIImagesProvider({

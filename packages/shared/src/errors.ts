@@ -24,6 +24,8 @@ export const MIRAI_ERROR_CODES = [
   'PROJECT_INVALID',
   'PATH_INVALID',
   'CANCELLED',
+  'POLICY_VIOLATION',
+  'LICENSE_INVALID',
   'INTERNAL',
 ] as const
 

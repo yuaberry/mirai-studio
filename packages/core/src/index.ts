@@ -56,6 +56,11 @@ export { SubtitleService } from './subtitles/subtitleService'
 // plugins (Phase 9)
 export { PluginRegistry, EXAMPLE_MANIFESTS } from './plugins/pluginRegistry'
 
+// licensing + mature policy + blender (v0.10)
+export { LicenseService, MIRAI_LICENSE_PUBLIC_KEY_B64 } from './license/licenseService'
+export { assertExplicitCastAllowed, assessAge, maturePipelineActive } from './license/maturePolicy'
+export { BlenderBridge } from './blender/blenderBridge'
+
 // settings
 export { SettingsService, CredentialStore } from './settings/settingsService'
 export type { CredentialStatus } from './settings/settingsService'

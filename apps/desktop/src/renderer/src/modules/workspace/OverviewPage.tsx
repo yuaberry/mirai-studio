@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { Pencil, ShieldCheck, AlertTriangle, CheckCircle2, Clock } from 'lucide-react'
 import {
   ANIME_GENRES,
+  filterGenres,
   ASPECT_RATIOS,
   FPS_OPTIONS,
   MiraiError,
@@ -23,6 +24,7 @@ import {
   useLocations,
   useEpisodes,
   usePrompts,
+  useSettings,
 } from '../../lib/queries'
 import { toast } from '../../store/appStore'
 
@@ -198,6 +200,8 @@ function Stat({ label, value }: { label: string; value: number }) {
 
 function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data: project } = useCurrentProject()
+  const { data: settingsData } = useSettings()
+  const matureEnabled = settingsData?.content?.matureEnabled ?? false
   const update = useUpdateProjectConfig()
   const manifest = project?.manifest
   const [title, setTitle] = useState('')
@@ -272,7 +276,7 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
             <span className="ml-2 font-normal text-mirai-faint">(max 12)</span>
           </Label>
           <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-mirai-border bg-mirai-panel p-2">
-            {ANIME_GENRES.map((g) => {
+            {filterGenres(ANIME_GENRES, matureEnabled).map((g) => {
               const active = genres.includes(g)
               return (
                 <button

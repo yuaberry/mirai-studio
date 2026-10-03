@@ -43,6 +43,8 @@ import {
 } from '../entities/media'
 import { SubtitleRecord, SubtitleInput, SubtitlePatch } from '../entities/subtitle'
 import { PluginRecord } from '../entities/plugins'
+import { AutoproduceOptions } from '../entities/producer'
+import { LicenseStatus as LicenseStatusType } from '../entities/license'
 import { RenderOutput, zRenderQuality, DEFAULT_PRESET_ID } from '../entities/export'
 import {
   ApprovalEvent,
@@ -467,6 +469,45 @@ export const ipcContracts = {
       available: z.boolean(),
       version: z.string().nullable(),
     }),
+  },
+
+  // ---- Licensing & Mature Content Mode (v0.10) ------------------------------------
+  'license:activate': {
+    request: z.object({ key: z.string().min(10).max(1_500) }),
+    response: z.object({ status: LicenseStatusType }),
+  },
+  'license:status': {
+    request: emptyRequest,
+    response: z.object({ status: LicenseStatusType }),
+  },
+  /** Mature Mode toggle — server-side gated by license + age confirmation. */
+  'content:setMature': {
+    request: z.object({
+      enabled: z.boolean(),
+      /** Must be true when enabling — the conscientization notice. */
+      ageConfirmed: z.boolean(),
+    }),
+    response: z.object({ enabled: z.boolean() }),
+  },
+
+  // ---- Blender bridge (v0.10) ------------------------------------------------------
+  'blender:status': {
+    request: emptyRequest,
+    response: z.object({ available: z.boolean(), version: z.string().nullable() }),
+  },
+  'blender:attachBlend': {
+    request: z.object({ shotId: zEntityId }),
+    response: z.object({ asset: AssetRecord }),
+  },
+  'blender:renderShot': {
+    request: z.object({ shotId: zEntityId }),
+    response: z.object({ jobId: zEntityId }),
+  },
+
+  // ---- Producer Agent (v0.10) -----------------------------------------------------
+  'ai:autoproduce': {
+    request: AutoproduceOptions,
+    response: z.object({ jobId: zEntityId }),
   },
 
   // ---- Plugins (Phase 9) ---------------------------------------------------------

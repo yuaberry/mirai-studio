@@ -15,6 +15,7 @@ import {
 } from '@mirai/shared'
 import { comboFromEvent } from '../../lib/shortcuts'
 import { cn } from '../../lib/utils'
+import { ContentCard } from './ContentCard'
 import { Badge, Button, Card, Input, Label, SectionTitle, Select, Spinner } from '../../system/ui'
 import { ErrorState } from '../../system/EmptyState'
 import { Kbd } from '../../system/ui'
@@ -55,6 +56,7 @@ export function SettingsPage() {
       <div className="space-y-6">
         <GeneralCard settings={settings} />
         <ProvidersCard />
+        <ContentCard />
         <ShortcutsCard />
       </div>
     </div>

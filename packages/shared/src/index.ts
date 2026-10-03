@@ -262,6 +262,32 @@ export type {
 } from './entities/production'
 
 export {
+  LICENSE_FEATURES,
+  LICENSE_TIERS,
+  FEATURE_LABEL,
+  LicensePayload,
+  LicenseStatus,
+  ContentSettings,
+  MATURE_GENRES,
+  MATURE_RATINGS,
+  filterGenres,
+  isMatureRating,
+} from './entities/license'
+export type { LicenseFeature, LicenseTier } from './entities/license'
+
+export {
+  AutoproduceOptions,
+  BibleDraftPlan,
+  CharacterPlan,
+  CharacterPlanList,
+  ScenePlan,
+  ScenePlanList,
+  ShotPlan,
+  ShotPlanList,
+  AutoproduceSummary,
+} from './entities/producer'
+
+export {
   RENDER_QUALITIES,
   QUALITY_LABEL,
   EXPORT_PRESETS,

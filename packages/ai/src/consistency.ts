@@ -30,6 +30,12 @@ export interface ConsistencyData {
   shot: ConsistencyShot
   characters: ContextCharacter[]
   extraPrompt?: string
+  /**
+   * Mature Content Mode (Pro): when true the production is rated 18+ and the
+   * prompt may carry explicit artistic direction. The pipeline enforces the
+   * adults-only policy before this flag ever reaches here.
+   */
+  mature?: boolean
 }
 
 /**
@@ -76,6 +82,16 @@ export function buildImagePrompt(data: ConsistencyData): string {
   if (sb.backgrounds) styleLines.push(`Backgrounds: ${sb.backgrounds}`)
   if (styleLines.length > 0) {
     sections.push(`STYLE (canon — never deviate):\n${styleLines.map((l) => `- ${l}`).join('\n')}`)
+  }
+
+  // ---- 4b. maturity contract (Pro): R-18 permitted, adults only, story-first
+  if (data.mature) {
+    sections.push(
+      'CONTENT RATING: this production is rated 18+. Mature, sensual or explicit ' +
+        'artistic content is permitted for this keyframe. All characters depicted ' +
+        'are adults. Serve the story — intimacy and mature themes support the ' +
+        'narrative, they never replace it.',
+    )
   }
 
   // ---- 5. professional output language

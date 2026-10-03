@@ -54,6 +54,7 @@ import { ProductionPage } from '../modules/production/ProductionPage'
 import { SubtitlesPage } from '../modules/subtitles/SubtitlesPage'
 import { WorkflowsPage } from '../modules/workflows/WorkflowsPage'
 import { PluginsPage } from '../modules/plugins/PluginsPage'
+import { ProducerPage } from '../modules/producer/ProducerPage'
 import { StatusBar } from './StatusBar'
 import { CommandPalette } from './CommandPalette'
 import { ProjectHeader } from './ProjectHeader'
@@ -78,6 +79,7 @@ const PROJECT_NAV: ReadonlyArray<{ view: MainView; label: string; icon: LucideIc
   { view: 'production', label: 'Production', icon: BarChart3 },
   { view: 'subtitles', label: 'Subtitles', icon: Captions },
   { view: 'workflows', label: 'AI Workflows', icon: Workflow },
+  { view: 'producer', label: 'Producer Agent', icon: Wand2 },
   { view: 'plugins', label: 'Plugins', icon: Puzzle },
   { view: 'media', label: 'Media Library', icon: Disc3 },
   { view: 'prompts', label: 'Prompt Library', icon: Wand2 },
@@ -203,6 +205,7 @@ export function AppShell() {
           {view === 'production' && <ProductionPage />}
           {view === 'subtitles' && <SubtitlesPage />}
           {view === 'workflows' && <WorkflowsPage />}
+          {view === 'producer' && <ProducerPage />}
           {view === 'plugins' && <PluginsPage />}
           {view === 'style' && <StyleBiblePage />}
           {view === 'media' && <MediaLibraryPage />}

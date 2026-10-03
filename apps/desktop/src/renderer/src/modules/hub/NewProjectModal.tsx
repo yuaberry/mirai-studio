@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import { FolderOpen, Loader2, Sparkles } from 'lucide-react'
 import {
   ANIME_GENRES,
+  filterGenres,
   ASPECT_RATIOS,
   FPS_OPTIONS,
   HOT_GENRES,
@@ -17,7 +18,7 @@ import {
 import { Modal } from '../../system/Modal'
 import { Button, FieldError, Input, Label, Select, Textarea } from '../../system/ui'
 import { invoke } from '../../lib/ipc'
-import { useCreateProject, useHealth, useOpenProject } from '../../lib/queries'
+import { useCreateProject, useHealth, useOpenProject, useSettings } from '../../lib/queries'
 import { useAppStore, toast } from '../../store/appStore'
 
 interface FormState {
@@ -79,6 +80,8 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
   const openProject = useOpenProject()
   const setView = useAppStore((s) => s.setView)
 
+  const { data: settingsData } = useSettings()
+  const matureEnabled = settingsData?.content?.matureEnabled ?? false
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [serverError, setServerError] = useState<string | null>(null)
@@ -287,7 +290,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
             </span>
           </Label>
           <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-mirai-border bg-mirai-panel p-2">
-            {ANIME_GENRES.map((genre) => {
+            {filterGenres(ANIME_GENRES, matureEnabled).map((genre) => {
               const active = form.genres.includes(genre)
               const hot = HOT_GENRES.has(genre)
               return (

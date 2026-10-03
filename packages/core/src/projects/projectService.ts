@@ -44,6 +44,7 @@ import { RenderService } from '../render/renderService'
 import { TimelineService } from '../timeline/timelineService'
 import { ProductionService } from '../production/productionService'
 import { SubtitleService } from '../subtitles/subtitleService'
+import { BlenderBridge } from '../blender/blenderBridge'
 import { newEntityId, type AppDirs, type Clock } from '../types'
 import type { LoggerService } from '../logger/logger'
 import { readManifest, writeManifest } from './manifest'
@@ -83,6 +84,8 @@ export interface OpenProjectContext {
   production: ProductionService
   /** Subtitle studio (Phase 4 wrap-up). */
   subtitles: SubtitleService
+  /** Headless Blender rendering (attach .blend → real shot video). */
+  blender: BlenderBridge
   /** Jobs recovered as PAUSED after an interrupted session. */
   recoveredCount: number
 }
@@ -578,12 +581,13 @@ export class ProjectService {
     const production = new ProductionService(db, this.opts.clock, path, creative, storyboard, timeline, media)
     const subtitles = new SubtitleService(db, this.opts.clock, path)
     const render = new RenderService(storyboard, media, path, creative, timeline, subtitles)
+    const blender = new BlenderBridge(storyboard, path)
 
     const now = this.opts.clock.isoNow()
     this.upsertRegistry(manifest, path, now)
 
     const summary = this.summaryById(manifest.id)
-    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, media, render, timeline, production, subtitles, recoveredCount }
+    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, media, render, timeline, production, subtitles, blender, recoveredCount }
     this.opts.logger.info('PROJECT', `Project opened: "${manifest.name}"`, {
       id: manifest.id,
       recoveredJobs: recoveredCount,

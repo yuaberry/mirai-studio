@@ -76,6 +76,25 @@ export const AppSettings = z.object({
     .default({}),
   /** User shortcut overrides: actionId → combo (missing = default). */
   shortcuts: z.record(z.string(), z.string()).default({}),
+  /** Content & licensing (Pro): mature mode gating lives here. */
+  content: z
+    .object({
+      licenseKey: z.string().max(1_500).nullable().default(null),
+      license: z
+        .object({
+          v: z.literal(1),
+          holder: z.string().min(1).max(120),
+          tier: z.enum(['pro']),
+          features: z.array(z.enum(['mature'])).max(10),
+          iat: z.number().int(),
+          exp: z.number().int().nullable(),
+        })
+        .nullable()
+        .default(null),
+      matureEnabled: z.boolean().default(false),
+      matureConfirmedAt: z.string().nullable().default(null),
+    })
+    .default({}),
 })
 export type AppSettings = z.infer<typeof AppSettings>
 

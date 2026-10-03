@@ -390,4 +390,12 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0010_blend_files',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE shots ADD COLUMN blend_asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL;
+      `)
+    },
+  },
 ]

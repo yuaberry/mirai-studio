@@ -16,6 +16,7 @@ import { mkdtempSync, mkdirSync, existsSync, rmSync, readFileSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { deflateSync } from 'node:zlib'
 import { PluginHost } from '../src/main/plugins/pluginHost'
+import { AiHost } from '../src/main/ai/aiHost'
 import { join } from 'node:path'
 import {
   APP_DB_MIGRATIONS,
@@ -24,9 +25,11 @@ import {
   CredentialStore,
   LoggerService,
   ProjectService,
+  LicenseService,
   PluginRegistry,
   RenderService,
   SettingsService,
+  assertExplicitCastAllowed,
   openDatabase,
   runMigrations,
   systemClock,
@@ -46,6 +49,8 @@ import {
   ScreenplayAnalysis,
   DirectorNotes,
   ContinuityFinding,
+  ANIME_GENRES,
+  filterGenres,
   parseSrt,
   exportPresetById,
   effectiveShortcuts,
@@ -1106,6 +1111,168 @@ async function main(): Promise<void> {
     void probe
     if (!ok || typeof ok !== 'object' || !('name' in ok)) throw new Error('READ-granted command returned no project data')
     if ((ok as { name: string }).name !== summary.name) throw new Error('project data wrong')
+  })
+
+  // ---- v0.10: License, Mature Mode, Blender, Producer Agent -----------------
+  await step('LICENSE + MATURE: Ed25519 validation, adults-only policy, genre gating', async () => {
+    const { generateKeyPairSync, sign: cryptoSign } = await import('node:crypto')
+    const pair = generateKeyPairSync('ed25519')
+    const rawPublic = pair.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32)
+    const licenses = new LicenseService(Buffer.from(rawPublic).toString('base64'))
+    const mint = (payload: object) => {
+      const json = JSON.stringify(payload)
+      const sig = cryptoSign(null, Buffer.from(json, 'utf8'), pair.privateKey)
+      return `${Buffer.from(json, 'utf8').toString('base64url')}.${sig.toString('base64url')}`
+    }
+    const nowSec = Math.floor(Date.now() / 1000)
+    const good = licenses.validate(mint({
+      v: 1, holder: 'smoke@test', tier: 'pro', features: ['mature'],
+      iat: nowSec, exp: nowSec + 3600,
+    }))
+    if (!good.valid || !good.payload?.features.includes('mature')) throw new Error('valid license rejected')
+    const expired = licenses.validate(mint({
+      v: 1, holder: 'x', tier: 'pro', features: ['mature'], iat: 1, exp: nowSec - 10,
+    }))
+    if (expired.valid) throw new Error('expired license accepted')
+
+    // Adults-only policy: minors never enter explicit contexts (throws synchronously).
+    let minorBlocked = false
+    try {
+      assertExplicitCastAllowed([{ id: 'm', name: 'Kid', age: '12' }] as never)
+    } catch (err) {
+      minorBlocked = (err as Error).message.includes('never minors')
+    }
+    if (!minorBlocked) throw new Error('minor passed the explicit-cast policy')
+    // Explicitly adult casts pass.
+    assertExplicitCastAllowed([{ id: 'a', name: 'Adult', age: '21' }] as never)
+    // Genre gating: mature genres hidden until the mode is on.
+    if (filterGenres(ANIME_GENRES, false).includes('Hentai')) throw new Error('mature genre leaked')
+    if (!filterGenres(ANIME_GENRES, true).includes('Hentai')) throw new Error('mature genre missing')
+
+    // Production public key refuses garbage (no private key needed here).
+    if (new LicenseService().validate('garbage').valid) throw new Error('production validator broken')
+  })
+
+  await step('BLENDER: real .blend attach + graceful render guard', () => {
+    const scene = tctx!.creative.listScenes(tctx!.creative.listEpisodes()[0]!.id)[0]!
+    const shot = tctx!.storyboard.listShots(scene.id)[0]!
+    const blend = join(root, 'scene.blend')
+    writeFileSync(blend, Buffer.from('BLENDER-file-bytes'))
+    const asset = tctx!.blender.attachBlend(shot.id, blend)
+    if (asset.kind !== 'BLENDER') throw new Error('blend asset kind wrong')
+    if (!existsSync(join(summary.path, asset.relativePath))) throw new Error('blend not stored')
+    if (tctx!.storyboard.getShotById(shot.id).blendAssetId !== asset.id) throw new Error('blend not attached')
+    // Wrong format rejected.
+    const bad = join(root, 'scene.obj')
+    writeFileSync(bad, Buffer.from('x'))
+    let rejected = false
+    try {
+      tctx!.blender.attachBlend(shot.id, bad)
+    } catch {
+      rejected = true
+    }
+    if (!rejected) throw new Error('non-blend accepted')
+  })
+
+  await step('PRODUCER AGENT: idea → full episode, end-to-end', async () => {
+    // The Producer uses the REAL AiHost with the network mocked at the
+    // transport level — every step (bible/cast/scenes/screenplay/shots)
+    // runs through the real provider + validation + services.
+    const realFetch = globalThis.fetch
+    const chat = (content: string): Response =>
+      new Response(JSON.stringify({
+        id: 'x', object: 'chat.completion', created: 1, model: 'test/model',
+        choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
+        usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+      }), { status: 200 })
+    globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { messages?: Array<{ content: string }> }
+      const last = body.messages?.[body.messages.length - 1]?.content ?? ''
+      if (last.includes('draft the Story Bible')) {
+        return chat(JSON.stringify({
+          premise: 'A yuri romance where confession letters cast real spells.',
+          themes: ['love', 'courage'], tone: 'bittersweet, luminous',
+          message: 'Say what you feel before the ink dries.', genreNotes: 'Yuri, School, Magic.',
+        }))
+      }
+      if (last.includes('design the main cast')) {
+        return chat(JSON.stringify({ characters: [
+          { name: 'Yuna Hoshimiya', role: 'PROTAGONIST', age: '20', appearance: 'Silver hair, amber eyes.', personality: 'Brave, clumsy.', goals: 'Confess before graduation.', voice: 'soft but firm' },
+          { name: 'Rin Aozaki', role: 'DEUTERAGONIST', age: '21', appearance: 'Black hair, blue eyes.', personality: 'Cool, caring.', goals: 'Protect the letters.', voice: 'dry wit' },
+        ] }))
+      }
+      if (last.includes('planning episode structure')) {
+        return chat(JSON.stringify({ scenes: [
+          { title: 'The midnight rehearsal', synopsis: 'Yuna sneaks into the hall and a letter glows.', timeOfDay: 'NIGHT', locationName: 'Haunted rehearsal hall', castNames: ['Yuna Hoshimiya', 'Rin Aozaki'] },
+          { title: 'The misfired spell', synopsis: 'The confession spell backfires hilariously.', timeOfDay: 'DAY', locationName: 'Magic academy courtyard', castNames: ['Yuna Hoshimiya'] },
+        ] }))
+      }
+      if (last.includes('Write a complete screenplay draft')) {
+        return chat('YUNA\n"Rin… the letter glowed again."\n\nRIN\n"Then say it out loud this time."')
+      }
+      if (last.includes('storyboard artist')) {
+        return chat(JSON.stringify({ shots: [
+          { title: 'Wide on the hall', shotType: 'WIDE', lens: '24mm', cameraMovement: 'DOLLY_IN', durationSeconds: 4, dialogue: 'YUNA\n"It is glowing."' },
+          { title: 'Yuna close-up', shotType: 'CLOSE_UP', lens: '85mm', cameraMovement: 'STATIC', durationSeconds: 3 },
+        ] }))
+      }
+      return chat(JSON.stringify({ ok: true }))
+    }) as typeof fetch
+
+    const settings = new SettingsService(appDb)
+    const credentials = new CredentialStore(appDb, plaintextCodec, systemClock)
+    credentials.set('openrouter', 'sk-smoke-producer-key')
+    settings.update({ ...settings.get(), ai: { ...settings.get().ai, defaultModel: 'test/model' } })
+    const ai = new AiHost({
+      credentials,
+      settings,
+      projects,
+      logger,
+      emitter: { send: () => undefined, window: null } as never,
+    })
+    const result = await ai.autoproduce(
+      {
+        idea: 'Two rival idol groups share the same haunted rehearsal hall at midnight.',
+        scenesCount: 2,
+        shotsPerScene: 2,
+        generateFrames: false,
+      },
+      () => undefined,
+      { aborted: false },
+    )
+    globalThis.fetch = realFetch
+
+    // The smoke project already has a premise — the Producer never overwrites
+    // the author: it must report bibleDrafted=false and keep going.
+    if (result.bibleDrafted !== false) throw new Error('bible was overwritten')
+    if (!result.steps.some((s) => s.step === 'Story Bible' && s.detail.includes('author'))) {
+      throw new Error('bible skip not reported')
+    }
+    // The project already had Yuna — the Producer dedupes by name and only
+    // creates NEW cast members (Rin), keeping the author's characters.
+    if (result.charactersCreated < 1) throw new Error('no characters created')
+    const castNames = tctx!.creative.listCharacters().map((c) => c.name)
+    if (!castNames.includes('Rin Aozaki') || !castNames.includes('Yuna Hoshimiya')) {
+      throw new Error('cast incomplete after production')
+    }
+    if (result.scenesCreated !== 2) throw new Error(`expected 2 scenes, got ${result.scenesCreated}`)
+    if (result.screenplaysDrafted !== 2) throw new Error('screenplays not drafted')
+    if (result.shotsCreated !== 4) throw new Error(`expected 4 shots, got ${result.shotsCreated}`)
+    if (result.timelinesBuilt !== 2) throw new Error('timelines not built')
+
+    // The production is REAL — verify in the project itself.
+    const episodes = tctx!.creative.listEpisodes()
+    const produced = episodes.find((e) => e.title.includes('Part 1'))
+    if (!produced) throw new Error('episode not created')
+    const scenes = tctx!.creative.listScenes(produced.id)
+    const scene0 = scenes[0]!
+    if (!scene0.screenplay || !scene0.screenplay.includes('the letter glowed')) throw new Error('screenplay not persisted')
+    if (scene0.characterIds.length !== 2) throw new Error('cast not linked')
+    const shots = tctx!.storyboard.listShots(scene0.id)
+    if (shots.length !== 2 || shots[0]!.shotType !== 'WIDE') throw new Error('shots not created with metadata')
+    const timeline = tctx!.timeline.getTimeline(scene0.id)
+    if (timeline.clips.length === 0) throw new Error('timeline not assembled')
+    console.log(`    (produced: ${result.charactersCreated} characters, ${result.scenesCreated} scenes, ${result.shotsCreated} shots, ${result.timelinesBuilt} timelines)`)
   })
 
   await step('SHORTCUTS: configurable bindings persist and stay valid', () => {

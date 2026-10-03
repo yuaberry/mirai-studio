@@ -7,7 +7,7 @@ import { MiraiError, type ProjectConfig } from '@mirai/shared'
 import { handleIpc } from './router'
 import { toOpenedProject, type Container } from '../bootstrap'
 import { join } from 'node:path'
-import { newEntityId } from '@mirai/core'
+import { newEntityId, LicenseService } from '@mirai/core'
 import { RenderService } from '@mirai/core'
 
 export function registerIpcHandlers(c: Container): void {
@@ -592,6 +592,119 @@ export function registerIpcHandlers(c: Container): void {
   handleIpc('timeline:keyframeDelete', (req) => {
     requireActive(c).timeline.keyframes.delete(req.id)
     return { ok: true }
+  })
+
+  // ---- Licensing & Mature Content Mode (v0.10) ------------------------------------
+  const licenses = new LicenseService()
+
+  handleIpc('license:activate', (req) => {
+    const status = licenses.validate(req.key)
+    const current = c.settings.get()
+    const content = current.content
+    if (status.valid) {
+      c.settings.update({
+        ...current,
+        content: { ...content, licenseKey: req.key.trim(), license: status.payload },
+      })
+      c.logger.info('SYSTEM', `Pro license activated: ${status.payload?.holder}`, {
+        tier: status.payload?.tier,
+      })
+    } else {
+      c.settings.update({ ...current, content: { ...content, license: null } })
+    }
+    return { status }
+  })
+
+  handleIpc('license:status', () => {
+    const content = c.settings.get().content
+    if (!content.licenseKey) {
+      return { status: { valid: false, reason: 'No license key activated.', payload: null } }
+    }
+    return { status: licenses.validate(content.licenseKey) }
+  })
+
+  handleIpc('content:setMature', (req) => {
+    const content = c.settings.get().content
+    if (!req.enabled) {
+      c.settings.update({ ...c.settings.get(), content: { ...content, matureEnabled: false } })
+      return { enabled: false }
+    }
+    if (!req.ageConfirmed) {
+      throw new MiraiError(
+        'POLICY_VIOLATION',
+        'The 18+ responsibility notice must be confirmed to enable Mature Content Mode.',
+      )
+    }
+    const key = content.licenseKey
+    if (!key) {
+      throw new MiraiError(
+        'LICENSE_INVALID',
+        'Mature Content Mode requires an active Mirai Studio Pro license — activate one first.',
+      )
+    }
+    const status = licenses.validate(key)
+    if (!status.valid || !status.payload?.features.includes('mature')) {
+      throw new MiraiError(
+        'LICENSE_INVALID',
+        status.valid
+          ? 'This license does not include Mature Content Mode.'
+          : (status.reason ?? 'License invalid.'),
+      )
+    }
+    c.settings.update({
+      ...c.settings.get(),
+      content: { ...content, matureEnabled: true, matureConfirmedAt: new Date().toISOString() },
+    })
+    c.logger.info('SYSTEM', 'Mature Content Mode enabled (Pro)', {})
+    return { enabled: true }
+  })
+
+  // ---- Blender bridge (v0.10) ------------------------------------------------------
+  handleIpc('blender:status', () => {
+    const ctx = c.projects.current()
+    if (!ctx) return { available: false, version: null }
+    return ctx.blender.detect()
+  })
+
+  handleIpc('blender:attachBlend', async (req) => {
+    const ctx = requireActive(c)
+    const win = c.emitter.window
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Attach a Blender scene (.blend)',
+      properties: ['openFile'],
+      filters: [{ name: 'Blender', extensions: ['blend', 'blend1'] }],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      throw new MiraiError('CANCELLED', 'Blender attach cancelled.')
+    }
+    const asset = ctx.blender.attachBlend(req.shotId, result.filePaths[0]!)
+    c.logger.info('MEDIA', `Blender scene attached to shot ${req.shotId}`, { assetId: asset.id })
+    return { asset }
+  })
+
+  handleIpc('blender:renderShot', async (req) => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('blender.renderShot', async (job, jobCtx) => {
+      const payload = (job.payload ?? {}) as { shotId?: string }
+      if (!payload.shotId) throw new MiraiError('VALIDATION_ERROR', 'blender.renderShot payload missing shotId.')
+      const shot = ctx.storyboard.getShotById(payload.shotId)
+      return ctx.blender.renderShot(shot, shot.durationSeconds, jobCtx.reportProgress, jobCtx.signal)
+    })
+    const job = await ctx.jobs.enqueue('blender.renderShot', { shotId: req.shotId }, { priority: 9, maxAttempts: 2 })
+    return { jobId: job.id }
+  })
+
+  // ---- Producer Agent (v0.10) -----------------------------------------------------
+  handleIpc('ai:autoproduce', async (req) => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('ai.autoproduce', async (job, jobCtx) => {
+      const payload = (job.payload ?? {}) as import('@mirai/shared').AutoproduceOptions | undefined
+      if (!payload?.idea) throw new MiraiError('VALIDATION_ERROR', 'autoproduce payload missing idea.')
+      return c.ai.autoproduce(payload, jobCtx.reportProgress, jobCtx.signal)
+    })
+    const job = await ctx.jobs.enqueue('ai.autoproduce', req, { priority: 10, maxAttempts: 1 })
+    c.logger.info('AI', 'Producer Agent started', { idea: req.idea.slice(0, 200) })
+    return { jobId: job.id }
   })
 
   // ---- Plugins (Phase 9) ---------------------------------------------------------

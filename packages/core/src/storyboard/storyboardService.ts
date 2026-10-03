@@ -59,6 +59,7 @@ interface ShotRow {
   frame_asset_id: string | null
   audio_asset_id: string | null
   video_asset_id: string | null
+  blend_asset_id: string | null
   status: string
   created_at: string
   updated_at: string
@@ -382,6 +383,44 @@ export class StoryboardService {
     return this.getAsset(id)
   }
 
+  /**
+   * Copies a real .blend file into the project and attaches it to the shot —
+   * the source for headless Blender renders (BlenderBridge).
+   */
+  registerBlendFile(shotId: EntityId, sourcePath: string, size: number): AssetRecord {
+    this.requireShot(shotId)
+    const ext = extname(sourcePath).toLowerCase() || '.blend'
+    const id = newEntityId()
+    const now = this.clock.isoNow()
+    const relativePath = join('blender', 'scenes', `${id}${ext}`)
+    const tx = this.db.transaction(() => {
+      mkdirSync(join(this.projectRoot, 'blender', 'scenes'), { recursive: true })
+      copyFileSync(sourcePath, join(this.projectRoot, relativePath))
+      this.db
+        .prepare(
+          `INSERT INTO assets (id, kind, relative_path, original_name, mime, bytes, created_at)
+           VALUES (?, 'BLENDER', ?, ?, 'application/x-blender', ?, ?)`,
+        )
+        .run(id, relativePath, basename(sourcePath), size, now)
+      const previous = this.requireShot(shotId).blendAssetId
+      this.db
+        .prepare('UPDATE shots SET blend_asset_id = ?, updated_at = ? WHERE id = ?')
+        .run(id, now, shotId)
+      if (previous) this.pruneAssetIfOrphan(previous)
+    })
+    tx()
+    return this.getAsset(id)
+  }
+
+  /** The shot's attached .blend asset (throws when none). */
+  getBlendAsset(shotId: EntityId): AssetRecord {
+    const shot = this.requireShot(shotId)
+    if (!shot.blendAssetId) {
+      throw new MiraiError('NOT_FOUND', 'This shot has no .blend attached — attach one first.')
+    }
+    return this.getAsset(shot.blendAssetId)
+  }
+
   // ------------------------------------------------------------ decisions
 
   /** Creative decision log — the project's AI memory (spec §43, Phase 2). */
@@ -558,6 +597,7 @@ function rowToShot(row: ShotRow): ShotRecord {
     frameAssetId: row.frame_asset_id,
     voiceAssetId: row.audio_asset_id,
     videoAssetId: row.video_asset_id,
+    blendAssetId: row.blend_asset_id,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

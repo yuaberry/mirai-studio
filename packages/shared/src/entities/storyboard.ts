@@ -101,6 +101,8 @@ export const ShotRecord = z.object({
   voiceAssetId: zEntityId.nullable(),
   /** Generated video attached to this shot (Phase 4 wrap-up). */
   videoAssetId: zEntityId.nullable(),
+  /** Blender scene attached to this shot (headless render source). */
+  blendAssetId: zEntityId.nullable(),
   status: zTaskStatus,
   createdAt: zIsoDate,
   updatedAt: zIsoDate,
@@ -128,7 +130,7 @@ export type StyleBible = z.infer<typeof StyleBible>
 
 // ------------------------------------------------------------------- assets
 
-export const ASSET_KINDS = ['IMAGE', 'AUDIO', 'VIDEO'] as const
+export const ASSET_KINDS = ['IMAGE', 'AUDIO', 'VIDEO', 'BLENDER'] as const
 export type AssetKind = (typeof ASSET_KINDS)[number]
 
 export const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'] as const
