@@ -1,0 +1,23 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="star" x1="200" y1="120" x2="830" y2="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f472b6"/>
+      <stop offset="0.5" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="frame" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f472b6" stop-opacity="0.25"/>
+      <stop offset="0.5" stop-color="#a78bfa" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#22d3ee" stop-opacity="0.25"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="224" fill="#0a0c10"/>
+  <rect width="1024" height="1024" rx="224" fill="url(#frame)"/>
+  <rect x="14" y="14" width="996" height="996" rx="212" fill="#0d1017"/>
+
+  <path d="M512 64 L642.24 381.76 960 512 642.24 642.24 512 960 381.76 642.24 64 512 381.76 381.76 Z"
+        fill="url(#star)"/>
+  <path d="M512 264 L568 456 760 512 568 568 512 760 456 568 264 512 456 456 Z"
+        fill="#0d1017" fill-opacity="0.45"/>
+</svg>
