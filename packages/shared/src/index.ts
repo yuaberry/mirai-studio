@@ -270,7 +270,9 @@ export {
   ContentSettings,
   MATURE_GENRES,
   MATURE_RATINGS,
+  MATURE_PROMPT_PACK,
   filterGenres,
+  isMatureGenre,
   isMatureRating,
 } from './entities/license'
 export type { LicenseFeature, LicenseTier } from './entities/license'

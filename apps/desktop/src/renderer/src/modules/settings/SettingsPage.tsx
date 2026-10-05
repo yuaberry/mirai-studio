@@ -68,6 +68,8 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
   const [locale, setLocale] = useState<string>(settings.general.locale)
   const [autosave, setAutosave] = useState(String(settings.general.autosaveIntervalMs))
   const [confirmDestructive, setConfirmDestructive] = useState(settings.general.confirmDestructive)
+  const [density, setDensity] = useState(settings.appearance.density)
+  const [uiScale, setUiScale] = useState(String(settings.appearance.uiScale ?? 1))
 
   const save = () =>
     update.mutate(
@@ -77,6 +79,11 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
           locale: locale as AppSettings['general']['locale'],
           autosaveIntervalMs: Number(autosave) || 5000,
           confirmDestructive,
+        },
+        appearance: {
+          ...settings.appearance,
+          density: density as AppSettings['appearance']['density'],
+          uiScale: Number(uiScale) || 1,
         },
       },
       {
@@ -106,6 +113,24 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
             onChange={(e) => setAutosave(e.target.value)}
           />
           <p className="mt-1 text-[10px] text-mirai-faint">Editors autosave draft state (Story Bible today, more in Phase 1+).</p>
+        </div>
+        <div>
+          <Label htmlFor="st-density">Interface density</Label>
+          <Select id="st-density" value={density} onChange={(e) => setDensity(e.target.value as 'comfortable' | 'compact')}>
+            <option value="comfortable">Comfortable</option>
+            <option value="compact">Compact (smaller text & spacing)</option>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="st-scale">UI scale</Label>
+          <Select id="st-scale" value={uiScale} onChange={(e) => setUiScale(e.target.value)}>
+            <option value="0.85">85% — small screens</option>
+            <option value="1">100% — default</option>
+            <option value="1.1">110%</option>
+            <option value="1.25">125% — large screens</option>
+            <option value="1.4">140% — reading comfort</option>
+          </Select>
+          <p className="mt-1 text-[10px] text-mirai-faint">Rescales the entire interface — the window adapts to any screen size.</p>
         </div>
         <div className="col-span-2 flex items-center justify-between rounded-lg border border-mirai-border bg-mirai-panel px-4 py-3">
           <div>

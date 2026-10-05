@@ -13,6 +13,27 @@
     height: 100%;
   }
 
+  /* CRITICAL: makes native form controls (select dropdown lists, scrollbars,
+     date inputs) render dark — without this the option list opens with a
+     system-white background and the text becomes invisible on Linux/Windows. */
+  html {
+    color-scheme: dark;
+  }
+
+  /* Belt & suspenders for the native select popup: explicitly paint the
+     options dark too (some Chromium versions ignore color-scheme on option). */
+  select,
+  select option {
+    background-color: var(--bg-panel);
+    color: var(--text);
+  }
+  select option:checked,
+  select option:hover,
+  select option:focus {
+    background-color: color-mix(in srgb, var(--accent) 25%, var(--bg-panel));
+    color: var(--text);
+  }
+
   body {
     @apply bg-mirai-base text-mirai-text antialiased;
     background-image:

@@ -86,13 +86,22 @@ export function ContentCard() {
               <div>
                 <p className="text-xs font-bold text-mirai-text">
                   Mature Content Mode
-                  {matureEnabled && <Badge tone="accent">18+ tools unlocked</Badge>}
+                  {matureEnabled ? <Badge tone="accent">18+ tools unlocked</Badge> : <Badge>Pro</Badge>}
                 </p>
                 <p className="mt-0.5 max-w-lg text-[11px] leading-relaxed text-mirai-faint">
-                  Unlocks R-18 storytelling: mature genres (Hentai, Erotica, Adult Drama), mature-rated
-                  projects and explicit artistic direction in generation prompts. The studio stays
-                  story-first — this is a toolset for adult <em>narratives</em>, not an adult-content mill.
+                  Unlocks the adult storytelling toolset. The studio stays story-first — this is a
+                  toolset for adult <em>narratives</em>, never an adult-content mill.
                 </p>
+                {matureEnabled && (
+                  <ul className="mt-2 grid max-w-lg grid-cols-1 gap-1 text-[11px] text-mirai-dim md:grid-cols-2">
+                    <li>◆ 24 mature genres (Hentai, Erotica, Adult Harem…)</li>
+                    <li>◆ 18+ rated projects with explicit prompts</li>
+                    <li>◆ 8-entry mature Prompt Pack in the library</li>
+                    <li>◆ Auto-rating on mature genre selection</li>
+                    <li>◆ Producer Agent writes adult material (adults only)</li>
+                    <li>◆ Adults-only policy enforced in code</li>
+                  </ul>
+                )}
               </div>
               <Button
                 size="sm"

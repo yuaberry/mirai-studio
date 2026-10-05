@@ -51,6 +51,7 @@ import {
   ContinuityFinding,
   ANIME_GENRES,
   filterGenres,
+  isMatureGenre,
   parseSrt,
   exportPresetById,
   effectiveShortcuts,

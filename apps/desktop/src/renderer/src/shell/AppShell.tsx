@@ -137,6 +137,16 @@ export function AppShell() {
   const { data: current } = useCurrentProject()
   const { data: settings } = useSettings()
 
+  // RESPONSIVENESS: the whole suite is rem-based — scaling the root font-size
+  // resizes every panel, text and spacing to fit any screen. Density drops
+  // the base a notch; uiScale is the user's multiplier on top.
+  useEffect(() => {
+    const density = settings?.appearance.density ?? 'comfortable'
+    const scale = settings?.appearance.uiScale ?? 1
+    const base = density === 'compact' ? 14 : 16
+    document.documentElement.style.fontSize = `${base * scale}px`
+  }, [settings?.appearance.density, settings?.appearance.uiScale])
+
   // The FULL configurable shortcut system (Phase 5): defaults ⊕ user overrides.
   useShortcutDispatcher(settings)
 
@@ -192,7 +202,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                v0.10.1
+                v0.11.0
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio"

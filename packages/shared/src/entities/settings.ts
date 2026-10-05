@@ -58,6 +58,8 @@ export const AppSettings = z.object({
       /** Phase 0 ships dark-only; the token keeps future themes honest. */
       theme: z.enum(['dark']).default('dark'),
       density: z.enum(['comfortable', 'compact']).default('comfortable'),
+      /** Global UI scale multiplier — adapts the whole suite to any screen. */
+      uiScale: z.number().min(0.8).max(1.4).default(1),
     })
     .default({}),
   editing: z

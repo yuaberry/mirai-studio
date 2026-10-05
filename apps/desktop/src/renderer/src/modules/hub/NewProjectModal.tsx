@@ -6,7 +6,9 @@ import { useMemo, useState } from 'react'
 import { FolderOpen, Loader2, Sparkles } from 'lucide-react'
 import {
   ANIME_GENRES,
+  CONTENT_RATINGS,
   filterGenres,
+  isMatureGenre,
   ASPECT_RATIOS,
   FPS_OPTIONS,
   HOT_GENRES,
@@ -34,6 +36,7 @@ interface FormState {
   fps: string
   resolution: string
   episodeCount: string
+  contentRating: string
 }
 
 function toggleGenre(list: string[], genre: string): string[] {
@@ -72,6 +75,7 @@ const EMPTY_FORM: FormState = {
   fps: '24',
   resolution: '1920x1080 (Full HD)',
   episodeCount: '12',
+  contentRating: '13+',
 }
 
 export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -150,6 +154,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
       resolution,
       episodeCount: form.episodeCount === '' ? undefined : Number(form.episodeCount),
       visualStyle: preset?.config.visualStyle,
+      contentRating: (form.contentRating as 'ALL' | '7+' | '13+' | '16+' | '18+') ?? undefined,
     })
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
@@ -297,7 +302,17 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
                 <button
                   key={genre}
                   type="button"
-                  onClick={() => setForm((f) => ({ ...f, genres: toggleGenre(f.genres, genre) }))}
+                  onClick={() =>
+                    setForm((f) => {
+                      const genres = toggleGenre(f.genres, genre)
+                      // Auto-rate 18+ when a mature genre is picked with Mature Mode on.
+                      const autoRating =
+                        matureEnabled && genres.some(isMatureGenre) && f.contentRating !== '18+'
+                          ? '18+'
+                          : f.contentRating
+                      return { ...f, genres, contentRating: autoRating }
+                    })
+                  }
                   className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                     active
                       ? hot
@@ -375,7 +390,28 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
               </option>
             ))}
           </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="np-rating">
+            Content rating
+            {form.contentRating === '18+' && (
+              <span className="ml-2 font-bold text-mirai-danger">18+ — adult content enabled for this production</span>
+            )}
+          </Label>
+          <Select id="np-rating" value={form.contentRating} onChange={(e) => set('contentRating', e.target.value)}>
+            {CONTENT_RATINGS.map((r) => (
+              <option key={r} value={r}>
+                {r === 'ALL' ? 'All ages' : r === '18+' ? '18+ — adults only (Mature Mode)' : r}
+              </option>
+            ))}
+          </Select>
           <FieldError message={fieldErrors.config} />
+          {matureEnabled && form.genres.some(isMatureGenre) && (
+            <p className="mt-1 text-[10px] font-semibold text-mirai-danger">
+              Mature genre selected — rating locked to 18+ by the adults-only policy.
+            </p>
+          )}
         </div>
 
         {serverError && (

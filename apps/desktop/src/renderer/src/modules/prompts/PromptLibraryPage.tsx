@@ -14,7 +14,8 @@ import {
   type PromptRecord,
 } from '@mirai/shared'
 import { Badge, Button, Input, Label, Select, Spinner, Textarea } from '../../system/ui'
-import { usePlugins } from '../../lib/queries'
+import { usePlugins, useSettings } from '../../lib/queries'
+import { MATURE_PROMPT_PACK } from '@mirai/shared'
 import { EmptyState, ErrorState } from '../../system/EmptyState'
 import { ConfirmModal, Modal } from '../../system/Modal'
 import { copyText, usePromptMutations, usePrompts } from '../../lib/queries'
@@ -23,6 +24,9 @@ import { useAppStore, toast } from '../../store/appStore'
 export function PromptLibraryPage() {
   const { data: prompts, isLoading, isError, error, refetch } = usePrompts()
   // Plugin-contributed prompts (SUGGEST capability) — merged read-only.
+  // Pro mature pack — merged only while Mature Content Mode is on.
+  const { data: settingsData } = useSettings()
+  const matureOn = settingsData?.content?.matureEnabled ?? false
   const { data: pluginRecords } = usePlugins()
   const pluginPrompts = (pluginRecords ?? [])
     .filter((pl) => pl.enabled && pl.errors.length === 0)
@@ -52,6 +56,19 @@ export function PromptLibraryPage() {
     let list: Array<(typeof pluginPrompts)[number] | import('@mirai/shared').PromptRecord> = [
       ...(prompts ?? []),
       ...pluginPrompts,
+      ...(matureOn
+        ? MATURE_PROMPT_PACK.map((mp) => ({
+            id: `mature:${mp.title}`,
+            category: mp.category,
+            title: mp.title,
+            body: mp.body,
+            tags: mp.tags,
+            builtin: false,
+            mature: true,
+            createdAt: '',
+            updatedAt: '',
+          }))
+        : []),
     ]
     if (category !== 'ALL') list = list.filter((p) => p.category === category)
     if (search.trim()) {
@@ -64,7 +81,7 @@ export function PromptLibraryPage() {
       )
     }
     return list
-  }, [prompts, pluginPrompts, category, search])
+  }, [prompts, pluginPrompts, matureOn, category, search])
 
   const sendToAssist = (prompt: PromptRecord) => {
     setAssistSeed(prompt.body)
@@ -153,7 +170,8 @@ export function PromptLibraryPage() {
                       {PROMPT_CATEGORY_LABEL[prompt.category]}
                     </Badge>
                     {prompt.builtin && <Badge tone="accent">Built-in</Badge>}
-                    {'plugin' in prompt && prompt.plugin && <Badge tone="violet">plugin</Badge>}
+                    {'plugin' in prompt && Boolean(prompt.plugin) && <Badge tone="violet">plugin</Badge>}
+                    {'mature' in prompt && Boolean(prompt.mature) && <Badge tone="danger">18+ Pro</Badge>}
                   </div>
                   <h3 className="mt-1.5 truncate font-display text-sm font-semibold text-mirai-text">
                     {prompt.title}
