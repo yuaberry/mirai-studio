@@ -407,6 +407,9 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 31. **Website link rot is silent**: the download hrefs still pointed at v0.2.1 filenames after eight version bumps (the visible version text was updated, the filenames weren't). Always verify BOTH the version label AND the asset filenames in hrefs when bumping versions.
 32. **Check the CSS variable vocabulary before writing new styles**: the site uses `--raise/--panel/--bg/--accent`, not `--bg-raise/--pink` — appending a block with wrong var names silently renders as broken colors. Grep `:root` first.
 33. **Producer/dedupe semantics must be tested as BEHAVIOR**: autoproduce skips existing premises and dedupes character names by design — assertions that count blind totals fail; assert the skip + dedupe happened instead.
+34. **Native `<select>` popups ignore the app theme on Linux**: without `color-scheme: dark` on html + explicit `option { background/color }`, dropdown lists render system-white and become unreadable. Test select-heavy screens (Settings, New Project) on every styling change.
+35. **The whole UI is rem-based — the root font-size is the responsiveness knob**: setting `document.documentElement.style.fontSize` (density 14/16px × uiScale) rescales EVERYTHING cleanly; no per-page responsive work needed.
+36. **User-reported UI scale issues** = density/uiScale settings; the default (comfortable × 100%) may look oversized on small/laptop screens — direct users to Settings → General → UI scale.
 
 ---
 
@@ -466,6 +469,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.9.0 | Phase 9 | Plugin system (strict manifests, enforced permissions, bundled examples), Provider SDK (declarative, user-applied), marketplace foundation, palette/prompt/preset deep integration, timeline undo/redo — ROADMAP COMPLETE |
 | v0.10.0 | Pro features | Mature Content Mode (Ed25519 license keys, conscientization, adults-only enforcement in code, mature genres), Blender bridge (attach .blend → headless render → shot video), Producer Agent (idea → full episode end-to-end) |
 | v0.10.1 | Polish | Website professional redesign (CSS app mockup, producer terminal, 12-card studio grid, full pipeline, Pro section, changelog; FIXED broken v0.2.1 download links), Hub capabilities strip, header genre/rating chips + Produce Episode CTA, sidebar version footer, richer EmptyStates, ambient gradients |
+| v0.11.0 | Adaptability + Pro expansion | CRITICAL fix: native selects opened system-white (color-scheme:dark + option painting); RESPONSIVENESS: appearance.uiScale (85–140%) + density wired to root font-size (whole rem-based UI adapts); genres expanded to 140+ industry tags incl. 24-tag mature block; MATURE_PROMPT_PACK (8 Pro entries in Prompt Library, gated); New Project content-rating select + AUTO-18+ rating on mature genres; ContentCard unlock list |
 
 ---
 
@@ -514,6 +518,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.10.1 — Studio polish shipped (website redesign + app UI density). Roadmap complete + Pro set live. Compact freely: everything needed to continue lives in this file.*
+*Last updated: v0.11.0 — Selects fixed (dark), UI fully adaptive (scale/density), 140+ genres, Pro mature toolset expanded. Compact freely: this file carries the full state.*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
