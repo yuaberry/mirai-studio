@@ -47,6 +47,7 @@ import { BackupsPage } from '../modules/workspace/BackupsPage'
 import { SettingsPage } from '../modules/settings/SettingsPage'
 import { DiagnosticsPage } from '../modules/diagnostics/DiagnosticsPage'
 import { useSettings } from '../lib/queries'
+import { t } from '../lib/i18n'
 import { registerShortcutHandler, useShortcutDispatcher } from '../lib/shortcuts'
 import { TimelinePage } from '../modules/timeline/TimelinePage'
 import { RenderPage } from '../modules/render/RenderPage'
@@ -100,10 +101,12 @@ function NavGroup({
 }) {
   const view = useAppStore((s) => s.view)
   const setView = useAppStore((s) => s.setView)
+  const { data: settings } = useSettings()
+  const locale = settings?.general.locale ?? 'en'
   return (
     <div className="mt-4">
       <p className="mb-1 px-3 text-[10px] font-bold tracking-[0.16em] text-mirai-faint uppercase">
-        {title}
+        {t(locale, title)}
       </p>
       <div className="flex flex-col gap-0.5">
         {items.map((item) => {
@@ -121,7 +124,7 @@ function NavGroup({
               )}
             >
               <Icon className={cn('h-3.5 w-3.5', active && 'text-mirai-accent')} />
-              {item.label}
+              {t(locale, item.label)}
             </button>
           )
         })}
@@ -193,7 +196,7 @@ export function AppShell() {
               onClick={() => setPaletteOpen(true)}
               className="flex w-full items-center justify-between rounded-md border border-mirai-border bg-mirai-panel px-3 py-2 text-xs text-mirai-faint transition-colors hover:border-mirai-border-strong hover:text-mirai-dim"
             >
-              Command palette
+              {t(settings?.general.locale ?? 'en', 'Command palette')}
               <span className="flex items-center gap-0.5">
                 <Kbd>Ctrl</Kbd>
                 <Kbd>K</Kbd>
@@ -202,7 +205,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                v0.12.0
+                v0.12.1
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio"

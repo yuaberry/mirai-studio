@@ -21,6 +21,7 @@ import { Modal } from '../../system/Modal'
 import { Button, FieldError, Input, Label, Select, Textarea } from '../../system/ui'
 import { invoke } from '../../lib/ipc'
 import { useCreateProject, useHealth, useOpenProject, useSettings } from '../../lib/queries'
+import { t } from '../../lib/i18n'
 import { useAppStore, toast } from '../../store/appStore'
 
 interface FormState {
@@ -86,6 +87,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
 
   const { data: settingsData } = useSettings()
   const matureEnabled = settingsData?.content?.matureEnabled ?? false
+  const tr = (k: string) => t(settingsData?.general.locale ?? 'en', k)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [serverError, setServerError] = useState<string | null>(null)
@@ -212,7 +214,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
     >
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
-          <Label htmlFor="np-name">Project name</Label>
+          <Label htmlFor="np-name">{tr('Project name')}</Label>
           <Input
             id="np-name"
             placeholder="Sakura Chronicles"
@@ -224,7 +226,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div className="col-span-2">
-          <Label htmlFor="np-desc">Description</Label>
+          <Label htmlFor="np-desc">{tr('Description')}</Label>
           <Textarea
             id="np-desc"
             rows={2}
@@ -235,7 +237,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div>
-          <Label htmlFor="np-preset">Template</Label>
+          <Label htmlFor="np-preset">{tr('Template')}</Label>
           <Select id="np-preset" value={form.presetId} onChange={(e) => applyPreset(e.target.value)}>
             {PROJECT_PRESETS.map((p) => (
               <option key={p.id} value={p.id}>
@@ -246,18 +248,18 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div>
-          <Label htmlFor="np-dir">Location</Label>
+          <Label htmlFor="np-dir">{tr('Location')}</Label>
           <div className="flex gap-2">
             <Input
               id="np-dir"
               readOnly
-              placeholder={health?.projectsDefaultDir ?? 'Choose folder…'}
+              placeholder={health?.projectsDefaultDir ?? tr('Choose folder…')}
               value={form.dir}
               className="cursor-pointer text-mirai-faint"
               onClick={() => void browse()}
             />
             <Button variant="outline" onClick={() => void browse()} className="shrink-0">
-              <FolderOpen className="h-4 w-4" /> Browse
+              <FolderOpen className="h-4 w-4" /> {tr('Choose folder…')}
             </Button>
           </div>
           <p className="mt-1 truncate text-[10px] text-mirai-faint">
@@ -267,7 +269,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div>
-          <Label htmlFor="np-title">Work title</Label>
+          <Label htmlFor="np-title">{tr('Work title')}</Label>
           <Input
             id="np-title"
             placeholder="Sakura Chronicles"
@@ -278,7 +280,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div>
-          <Label htmlFor="np-genre">Genre (free text)</Label>
+          <Label htmlFor="np-genre">{tr('Genre (free text)')}</Label>
           <Input
             id="np-genre"
             placeholder="Romance, Fantasy, Drama"
@@ -329,7 +331,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div>
-          <Label htmlFor="np-lang">Language</Label>
+          <Label htmlFor="np-lang">{tr('Language')}</Label>
           <Select id="np-lang" value={form.language} onChange={(e) => set('language', e.target.value)}>
             {LANGUAGES.map((l) => (
               <option key={l.value} value={l.value}>
@@ -340,7 +342,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div>
-          <Label htmlFor="np-eps">Episodes</Label>
+          <Label htmlFor="np-eps">{tr('Episodes')}</Label>
           <Input
             id="np-eps"
             inputMode="numeric"
@@ -352,7 +354,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div>
-          <Label htmlFor="np-aspect">Aspect ratio</Label>
+          <Label htmlFor="np-aspect">{tr('Aspect ratio')}</Label>
           <Select
             id="np-aspect"
             value={form.aspectRatio}
@@ -367,7 +369,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div>
-          <Label htmlFor="np-res">Resolution</Label>
+          <Label htmlFor="np-res">{tr('Resolution')}</Label>
           <Select
             id="np-res"
             value={form.resolution}
@@ -382,7 +384,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div>
-          <Label htmlFor="np-fps">FPS</Label>
+          <Label htmlFor="np-fps">{tr('FPS')}</Label>
           <Select id="np-fps" value={form.fps} onChange={(e) => set('fps', e.target.value)}>
             {FPS_OPTIONS.map((f) => (
               <option key={f} value={String(f)}>
@@ -396,20 +398,20 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
           <Label htmlFor="np-rating">
             Content rating
             {form.contentRating === '18+' && (
-              <span className="ml-2 font-bold text-mirai-danger">18+ — adult content enabled for this production</span>
+              <span className="ml-2 font-bold text-mirai-danger">{tr('18+ — adult content enabled for this production')}</span>
             )}
           </Label>
           <Select id="np-rating" value={form.contentRating} onChange={(e) => set('contentRating', e.target.value)}>
             {CONTENT_RATINGS.map((r) => (
               <option key={r} value={r}>
-                {r === 'ALL' ? 'All ages' : r === '18+' ? '18+ — adults only (Mature Mode)' : r}
+                {r === 'ALL' ? tr('All ages') : r === '18+' ? tr('18+ — adults only (Mature Mode)') : r}
               </option>
             ))}
           </Select>
           <FieldError message={fieldErrors.config} />
           {matureEnabled && form.genres.some(isMatureGenre) && (
             <p className="mt-1 text-[10px] font-semibold text-mirai-danger">
-              Mature genre selected — rating locked to 18+ by the adults-only policy.
+              {tr('Mature genre selected — rating locked to 18+ by the adults-only policy.')}
             </p>
           )}
         </div>

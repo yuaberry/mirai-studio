@@ -2,7 +2,7 @@
  * Mirai Studio — main process entry.
  * Window management, app lifecycle, crash-safe shutdown.
  */
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, screen } from 'electron'
 import { join } from 'node:path'
 import { bootstrap, type Container } from './bootstrap'
 import { registerIpcHandlers } from './ipc/register'
@@ -52,11 +52,19 @@ if (!gotLock) {
 }
 
 function createWindow(c: Container): void {
+  // ADAPTIVE WINDOW: fit the user's actual screen. On laptops (1366×768 etc.)
+  // the old fixed 1440×900 exceeded the display — the window was literally
+  // larger than the screen. Now we clamp to the work area and lower minimums.
+  const workArea = screen.getPrimaryDisplay().workAreaSize
+  const maxWidth = Math.max(720, workArea.width - 40)
+  const maxHeight = Math.max(520, workArea.height - 40)
+  const smallScreen = workArea.width < 1180 || workArea.height < 800
+
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1080,
-    minHeight: 720,
+    width: Math.min(1440, maxWidth),
+    height: Math.min(900, maxHeight),
+    minWidth: Math.min(1080, Math.min(940, maxWidth)),
+    minHeight: Math.min(720, Math.min(600, maxHeight)),
     show: false,
     backgroundColor: '#0a0c10',
     title: 'Mirai Studio',
@@ -71,6 +79,10 @@ function createWindow(c: Container): void {
       webSecurity: true,
     },
   })
+
+  if (smallScreen) {
+    mainWindow.maximize()
+  }
 
   c.emitter.attach(mainWindow)
 

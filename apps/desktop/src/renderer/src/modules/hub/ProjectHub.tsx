@@ -20,12 +20,16 @@ import { EmptyState, ErrorState } from '../../system/EmptyState'
 import { ConfirmModal } from '../../system/Modal'
 import { formatWhen } from '../../lib/utils'
 import { invoke } from '../../lib/ipc'
-import { useProjectAction, useProjects, useOpenProject } from '../../lib/queries'
+import { useProjectAction, useProjects, useOpenProject, useSettings } from '../../lib/queries'
+import { t } from '../../lib/i18n'
 import { useAppStore, toast } from '../../store/appStore'
 import { NewProjectModal } from './NewProjectModal'
 
 export function ProjectHub() {
   const { data: projects, isLoading, isError, error, refetch } = useProjects(true)
+  const { data: settings } = useSettings()
+  const locale = settings?.general.locale ?? 'en'
+  const tr = (key: string) => t(locale, key)
   const newProjectOpen = useAppStore((s) => s.newProjectOpen)
   const setNewProjectOpen = useAppStore((s) => s.setNewProjectOpen)
 
@@ -34,7 +38,7 @@ export function ProjectHub() {
 
   return (
     <div className="min-h-full">
-      <Hero onCreate={() => setNewProjectOpen(true)} onOpen={() => void openFolderFlow()} />
+      <Hero tr={tr} onCreate={() => setNewProjectOpen(true)} onOpen={() => void openFolderFlow()} />
       <div className="mx-auto w-full max-w-5xl px-8 pb-10">
         {isLoading ? (
           <div className="flex h-40 items-center justify-center">
@@ -50,11 +54,11 @@ export function ProjectHub() {
           <Card className="border-dashed">
             <EmptyState
               icon={<Plus className="h-5 w-5" />}
-              title="No productions yet"
+              title={tr('No productions yet')}
               description="Start your first anime, manga or visual novel — Mirai sets up the full folder structure, database, story bible and a professional manga prompt library."
               action={
                 <Button variant="primary" onClick={() => setNewProjectOpen(true)}>
-                  <Plus className="h-4 w-4" /> Create your first project
+                  <Plus className="h-4 w-4" /> {tr('Create your first project')}
                 </Button>
               }
             />
@@ -64,11 +68,11 @@ export function ProjectHub() {
             {active.length > 0 && (
               <section>
                 <h2 className="mb-3 font-display text-[11px] font-bold tracking-[0.18em] text-mirai-faint uppercase">
-                  Active productions
+                  {tr('Active productions')}
                 </h2>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {active.map((project) => (
-                    <ProjectCard key={project.id} project={project} />
+                    <ProjectCard key={project.id} project={project} tr={tr} />
                   ))}
                 </div>
               </section>
@@ -76,11 +80,11 @@ export function ProjectHub() {
             {archived.length > 0 && (
               <section className="mt-10">
                 <h2 className="mb-3 font-display text-[11px] font-bold tracking-[0.18em] text-mirai-faint uppercase">
-                  Archived
+                  {tr('Archived')}
                 </h2>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {archived.map((project) => (
-                    <ProjectCard key={project.id} project={project} dimmed />
+                    <ProjectCard key={project.id} project={project} tr={tr} dimmed />
                   ))}
                 </div>
               </section>
@@ -93,7 +97,7 @@ export function ProjectHub() {
   )
 }
 
-function Hero({ onCreate, onOpen }: { onCreate: () => void; onOpen: () => void }) {
+function Hero({ tr, onCreate, onOpen }: { tr: (k: string) => string; onCreate: () => void; onOpen: () => void }) {
   return (
     <div className="hero-glow relative overflow-hidden border-b border-mirai-border">
       <div className="grid-overlay pointer-events-none absolute inset-0 opacity-30" />
@@ -101,24 +105,23 @@ function Hero({ onCreate, onOpen }: { onCreate: () => void; onOpen: () => void }
         <div>
           <p className="mb-2 flex items-center gap-2 font-display text-[10px] font-bold tracking-[0.28em] text-mirai-faint uppercase">
             <span className="inline-block h-px w-8 bg-gradient-mirai" />
-            Mirai Studio · Project Hub
+            {tr('Mirai Studio · Project Hub')}
           </p>
           <h1 className="font-display text-4xl leading-tight font-bold text-mirai-text">
-            Your <span className="text-gradient-mirai">stories</span>,
+            {tr('Your stories,')} <span className="text-gradient-mirai">{tr('stories')}</span>,
             <br />
-            ready to become anime.
+            {tr('ready to become anime.')}
           </h1>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-mirai-dim">
-            From story bible to export — characters, scenes, screenplay and a curated
-            manga prompt library. Everything stays on your machine.
+            {tr('From story bible to export — characters, scenes, screenplay and a curated manga prompt library. Everything stays on your machine.')}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button variant="outline" size="lg" onClick={onOpen}>
-            <FolderOpen className="h-4 w-4" /> Open Folder…
+            <FolderOpen className="h-4 w-4" /> {tr('Open Folder…')}
           </Button>
           <Button variant="primary" size="lg" onClick={onCreate}>
-            <Plus className="h-4 w-4" /> New Project
+            <Plus className="h-4 w-4" /> {tr('New Project')}
           </Button>
         </div>
       </div>
@@ -127,7 +130,7 @@ function Hero({ onCreate, onOpen }: { onCreate: () => void; onOpen: () => void }
       <div className="relative mx-auto mt-8 w-full max-w-5xl px-8 pb-2">
         <div className="flex flex-wrap items-center gap-1.5 border-t border-mirai-border pt-5">
           <span className="mr-1 font-display text-[9px] font-bold tracking-[0.2em] text-mirai-faint uppercase">
-            Inside every project
+            {tr('Inside every project')}
           </span>
           {[
             'Story Bible',
@@ -173,7 +176,7 @@ async function openFolderFlow(): Promise<void> {
   }
 }
 
-function ProjectCard({ project, dimmed = false }: { project: ProjectSummary; dimmed?: boolean }) {
+function ProjectCard({ project, tr, dimmed = false }: { project: ProjectSummary; tr: (k: string) => string; dimmed?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const action = useProjectAction()
@@ -232,25 +235,25 @@ function ProjectCard({ project, dimmed = false }: { project: ProjectSummary; dim
               <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
               <div className="absolute right-0 z-30 mt-1 w-52 animate-scale-in rounded-lg border border-mirai-border-strong bg-mirai-panel py-1 shadow-xl shadow-black/50">
                 <MenuItem icon={<FolderOpen className="h-3.5 w-3.5" />} onClick={openIt}>
-                  Open Project
+                  {tr('Open Project')}
                 </MenuItem>
                 <MenuItem
                   icon={<Package className="h-3.5 w-3.5" />}
                   onClick={() => run('Project duplicated', { kind: 'duplicate', id: project.id })}
                 >
-                  Duplicate
+                  {tr('Duplicate')}
                 </MenuItem>
                 <MenuItem
                   icon={<HardDrive className="h-3.5 w-3.5" />}
                   onClick={() => run('Backup created', { kind: 'backup', id: project.id })}
                 >
-                  Back Up Now
+                  {tr('Back Up Now')}
                 </MenuItem>
                 <MenuItem
                   icon={<Package className="h-3.5 w-3.5" />}
                   onClick={() => run('Revealed in file manager', { kind: 'revealInFolder', id: project.id })}
                 >
-                  Reveal in Folder
+                  {tr('Reveal in Folder')}
                 </MenuItem>
                 {project.status === 'ACTIVE' ? (
                   <MenuItem
@@ -276,7 +279,7 @@ function ProjectCard({ project, dimmed = false }: { project: ProjectSummary; dim
                     setConfirmRemove(true)
                   }}
                 >
-                  Remove from List…
+                  {tr('Remove from List…')}
                 </MenuItem>
               </div>
             </>
@@ -287,7 +290,7 @@ function ProjectCard({ project, dimmed = false }: { project: ProjectSummary; dim
       {project.description ? (
         <p className="line-clamp-2 text-xs leading-relaxed text-mirai-dim">{project.description}</p>
       ) : (
-        <p className="text-xs italic text-mirai-faint">No description</p>
+        <p className="text-xs italic text-mirai-faint">{tr('No description')}</p>
       )}
 
       <p className="truncate text-[10px] text-mirai-faint" title={project.path}>
@@ -296,7 +299,7 @@ function ProjectCard({ project, dimmed = false }: { project: ProjectSummary; dim
 
       <div className="flex items-center justify-between">
         <Badge tone={project.status === 'ACTIVE' ? 'success' : 'neutral'}>
-          {project.status === 'ACTIVE' ? '● Active' : 'Archived'}
+          {tr(project.status === 'ACTIVE' ? '● Active' : 'Archived')}
         </Badge>
         {openProject.isPending && openProject.variables === project.path ? (
           <Spinner className="h-3.5 w-3.5" />

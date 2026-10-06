@@ -52,11 +52,11 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          'relative z-10 w-full animate-scale-in rounded-xl border border-mirai-border-strong bg-mirai-raise shadow-2xl shadow-black/50 outline-none',
+          'relative z-10 flex max-h-[calc(100vh-3rem)] w-full animate-scale-in flex-col rounded-xl border border-mirai-border-strong bg-mirai-raise shadow-2xl shadow-black/50 outline-none',
           width,
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-mirai-border px-5 py-4">
+        <div className="flex flex-none items-start justify-between gap-4 border-b border-mirai-border px-5 py-4">
           <div>
             <h2 className="font-display text-base font-semibold text-mirai-text">{title}</h2>
             {description && <p className="mt-0.5 text-xs text-mirai-dim">{description}</p>}
@@ -65,9 +65,9 @@ export function Modal({
             <X className="h-4 w-4" />
           </IconButton>
         </div>
-        <div className="px-5 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-mirai-border px-5 py-3.5">
+          <div className="flex flex-none items-center justify-end gap-2 border-t border-mirai-border px-5 py-3.5">
             {footer}
           </div>
         )}
