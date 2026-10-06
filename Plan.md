@@ -413,6 +413,8 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 36. **User-reported UI scale issues** = density/uiScale settings; the default (comfortable × 100%) may look oversized on small/laptop screens — direct users to Settings → General → UI scale.
 37. **Bump tests with tier upgrades**: when changing encoding defaults (CRF/preset), builder unit tests assert the OLD values — update expectations in the same commit (the CINEMA integration test catches what unit tests miss).
 38. **image-to-video is the consistency unlock**: passing the storyboard keyframe as `input_reference` keeps character design locked from board to clip — default ON; text-only fallback when the shot has no frame.
+39. **NEVER hardcode window dimensions**: a fixed 1440×900 BrowserWindow was literally larger than laptop screens (1366×768) — the user's "app is off my screen" report. ALWAYS clamp to `screen.getPrimaryDisplay().workAreaSize` and maximize on small displays. Same class of bug: modals must be `max-h-[calc(100vh-…)] overflow-y-auto`, never assume viewport height.
+40. **i18n with English-source keys** (`t(locale, 'Project Hub')`): wiring is a one-line wrap per string; the dictionary lives in `lib/i18n.ts`; no code-splitting of translations needed. JSX replace pitfalls: `placeholder={x ?? tr('…')}` is valid, but sed-style replaces inside JSX braces produce nested quotes — always re-typecheck immediately after scripted label swaps.
 
 ---
 
@@ -472,6 +474,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.9.0 | Phase 9 | Plugin system (strict manifests, enforced permissions, bundled examples), Provider SDK (declarative, user-applied), marketplace foundation, palette/prompt/preset deep integration, timeline undo/redo — ROADMAP COMPLETE |
 | v0.10.0 | Pro features | Mature Content Mode (Ed25519 license keys, conscientization, adults-only enforcement in code, mature genres), Blender bridge (attach .blend → headless render → shot video), Producer Agent (idea → full episode end-to-end) |
 | v0.10.1 | Polish | Website professional redesign (CSS app mockup, producer terminal, 12-card studio grid, full pipeline, Pro section, changelog; FIXED broken v0.2.1 download links), Hub capabilities strip, header genre/rating chips + Produce Episode CTA, sidebar version footer, richer EmptyStates, ambient gradients |
+| v0.12.1 | pt-BR + adaptive window | ROOT-CAUSE fix: window was FIXED 1440×900 (bigger than laptop screens!) — now clamped to workArea + auto-maximize on small screens; scrollable modals (sticky header/footer, overflow content); i18n foundation with pt-BR translation (nav, Hub, New Project, Settings; t(locale,key) with English-source keys in lib/i18n.ts) |
 | v0.12.0 | POST-MVP | CINEMA archival render tier (CRF 14 + slower + aq3 params; MASTER upgraded to CRF16/slow), 7 new presets (Cinema 4K DCI 4096×2160, Cinemascope 2.39:1, Action 60fps, 8K, Vertical 4K, Square), IMAGE-TO-VIDEO (input_reference = storyboard keyframe), fps/quality options for AI video (HD default), batch keyframes, 170+ genres |
 | v0.11.0 | Adaptability + Pro expansion | CRITICAL fix: native selects opened system-white (color-scheme:dark + option painting); RESPONSIVENESS: appearance.uiScale (85–140%) + density wired to root font-size (whole rem-based UI adapts); genres expanded to 140+ industry tags incl. 24-tag mature block; MATURE_PROMPT_PACK (8 Pro entries in Prompt Library, gated); New Project content-rating select + AUTO-18+ rating on mature genres; ContentCard unlock list |
 
@@ -523,6 +526,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.12.0 — POST-MVP: CINEMA archival encoding, 4K DCI/Cinemascope presets, image-to-video, 170+ genres. The vision is complete; see §13 for what 'finished' means and the frontiers ahead. Compact freely.*
+*Last updated: v0.12.1 — pt-BR i18n + adaptive window (off-screen bug root-caused and fixed) + scrollable modals. POST-MVP. Compact freely: this file carries the full state.*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
