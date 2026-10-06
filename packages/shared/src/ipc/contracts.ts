@@ -585,6 +585,11 @@ export const ipcContracts = {
     request: z.object({ sceneId: zEntityId }),
     response: z.object({ jobId: zEntityId }),
   },
+  /** Batch: generates keyframes for every frameless shot in a scene (job). */
+  'ai:generateAllFrames': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ jobId: zEntityId }),
+  },
   /** Generates a real video for a shot via the configured video-gen endpoint (job-based). */
   'ai:generateVideo': {
     request: z.object({

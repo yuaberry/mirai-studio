@@ -135,13 +135,28 @@ export class AiHost {
   }
 
   /** Video provider (OpenAI-videos-compatible) — null when not configured. */
-  resolveVideoProvider(): { apiKey: string; baseUrl: string; model: string; size: string } | null {
+  resolveVideoProvider(): {
+    apiKey: string
+    baseUrl: string
+    model: string
+    size: string
+    fps: number
+    quality: 'standard' | 'hd' | 'ultra'
+    useReferenceFrame: boolean
+  } | null {
     const settings = this.deps.settings.get()
     const apiKey = this.deps.credentials.get('videogen')
-    const baseUrl = settings.ai.video?.baseUrl
-    const model = settings.ai.video?.model
-    if (!apiKey || !baseUrl || !model) return null
-    return { apiKey, baseUrl, model, size: settings.ai.video.size || '1344x768' }
+    const video = settings.ai.video
+    if (!apiKey || !video?.baseUrl || !video.model) return null
+    return {
+      apiKey,
+      baseUrl: video.baseUrl,
+      model: video.model,
+      size: video.size || '1920x1080',
+      fps: video.fps ?? 24,
+      quality: video.quality ?? 'hd',
+      useReferenceFrame: video.useReferenceFrame ?? true,
+    }
   }
 
   /**
@@ -176,6 +191,19 @@ export class AiHost {
       assertExplicitCastAllowed(
         ctx.creative.listCharacters().filter((c) => scene.characterIds.includes(c.id)),
       )
+    }
+    // IMAGE-TO-VIDEO: the shot's storyboard keyframe becomes the reference —
+    // the provider animates YOUR art (character design + composition stay
+    // consistent from board to clip). Falls back to text-only when absent.
+    let imageB64: string | undefined
+    if (videoProvider.useReferenceFrame && shot.frameAssetId) {
+      try {
+        const framePath = ctx.storyboard.assetAbsolutePath(shot.frameAssetId)
+        const frameBytes = await import('node:fs').then((fs) => fs.readFileSync(framePath))
+        imageB64 = frameBytes.toString('base64')
+      } catch (err) {
+        this.deps.logger.warn('AI', `Reference frame unavailable: ${(err as Error).message}`)
+      }
     }
     const prompt = [
       buildImagePrompt({
@@ -213,6 +241,9 @@ export class AiHost {
       prompt,
       seconds,
       size: videoProvider.size,
+      fps: videoProvider.fps,
+      quality: videoProvider.quality,
+      ...(imageB64 !== undefined ? { imageB64 } : {}),
       signal,
     })
     progress(80)
@@ -221,6 +252,9 @@ export class AiHost {
       shotId,
       assetId: asset.id,
       bytes: result.bytes.length,
+      referenceFrame: imageB64 !== undefined,
+      fps: videoProvider.fps,
+      quality: videoProvider.quality,
     })
     return { assetId: asset.id, prompt }
   }

@@ -4,13 +4,14 @@
  */
 import { z } from 'zod'
 
-export const RENDER_QUALITIES = ['PREVIEW', 'MASTER'] as const
+export const RENDER_QUALITIES = ['PREVIEW', 'MASTER', 'CINEMA'] as const
 export type RenderQuality = (typeof RENDER_QUALITIES)[number]
 export const zRenderQuality = z.enum(RENDER_QUALITIES)
 
 export const QUALITY_LABEL: Record<RenderQuality, string> = {
-  PREVIEW: 'Preview (fast, low size)',
-  MASTER: 'Master (full quality)',
+  PREVIEW: 'Preview — fast draft (CRF 30, ultrafast)',
+  MASTER: 'Master — professional delivery (CRF 16, slow)',
+  CINEMA: 'Cinema — archival studio master (CRF 14, slower, aq3)',
 }
 
 export interface ExportPreset {
@@ -49,16 +50,6 @@ export const EXPORT_PRESETS: readonly ExportPreset[] = [
     audioKbps: 192,
   },
   {
-    id: 'tv-broadcast',
-    label: 'TV Broadcast',
-    description: 'High-bitrate master for broadcasters and festivals.',
-    width: 1920,
-    height: 1080,
-    fps: 24,
-    videoKbps: 20_000,
-    audioKbps: 256,
-  },
-  {
     id: 'web',
     label: 'Web (efficient)',
     description: 'Light files for websites and previews.',
@@ -70,12 +61,82 @@ export const EXPORT_PRESETS: readonly ExportPreset[] = [
   },
   {
     id: 'cinema',
-    label: 'Cinema Master',
+    label: 'Cinema Master 4K',
     description: '4K archival master with maximum bitrate.',
     width: 3840,
     height: 2160,
     fps: 24,
-    videoKbps: 80_000,
+    videoKbps: 100_000,
+    audioKbps: 320,
+  },
+  {
+    id: 'cinema-dci',
+    label: 'Cinema 4K DCI',
+    description: 'The theatrical distribution standard (4096×2160) used by film festivals.',
+    width: 4096,
+    height: 2160,
+    fps: 24,
+    videoKbps: 120_000,
+    audioKbps: 320,
+  },
+  {
+    id: 'cinemascope',
+    label: 'Cinemascope 2.39:1',
+    description: 'Anamorphic theatrical widescreen — the anime film festival look.',
+    width: 1920,
+    height: 804,
+    fps: 24,
+    videoKbps: 25_000,
+    audioKbps: 256,
+  },
+  {
+    id: 'action-60',
+    label: 'Action 60fps',
+    description: '60fps fluid motion for fight choreography and sports sequences.',
+    width: 1920,
+    height: 1080,
+    fps: 60,
+    videoKbps: 24_000,
+    audioKbps: 192,
+  },
+  {
+    id: 'ultra-8k',
+    label: '8K Master',
+    description: '8K archival — for remastering pipelines and future-proof delivery.',
+    width: 7680,
+    height: 4320,
+    fps: 24,
+    videoKbps: 160_000,
+    audioKbps: 320,
+  },
+  {
+    id: 'vertical-4k',
+    label: 'Social Vertical 4K',
+    description: '2160×3840 vertical master for Shorts/TikTok/Reels pro channels.',
+    width: 2160,
+    height: 3840,
+    fps: 24,
+    videoKbps: 20_000,
+    audioKbps: 192,
+  },
+  {
+    id: 'square',
+    label: 'Square 1:1',
+    description: '1080×1080 for feed posts and promotional loops.',
+    width: 1080,
+    height: 1080,
+    fps: 24,
+    videoKbps: 10_000,
+    audioKbps: 192,
+  },
+  {
+    id: 'tv-broadcast',
+    label: 'TV Broadcast',
+    description: 'High-bitrate master for broadcasters and festivals.',
+    width: 1920,
+    height: 1080,
+    fps: 24,
+    videoKbps: 25_000,
     audioKbps: 256,
   },
   {

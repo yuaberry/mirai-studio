@@ -61,6 +61,38 @@ describe('OpenAIVideoProvider', () => {
     expect(polls).toBeGreaterThanOrEqual(2)
   })
 
+  it('sends fps, quality and the reference frame (image-to-video) when provided', async () => {
+    let capturedBody: Record<string, unknown> | null = null
+    const provider = new OpenAIVideoProvider({
+      apiKey: 'k',
+      baseUrl: 'https://video.test/v1',
+      fetchFn: async (_url: string, init?: { body?: string }): Promise<FetchResponse> => {
+        capturedBody = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
+        return {
+          ok: true,
+          status: 200,
+          body: null,
+          text: async () => JSON.stringify({ data: [{ b64_json: videoBytes.toString('base64') }] }),
+        }
+      },
+      timeoutMs: 0,
+    })
+    await provider.generate({
+      model: 'v/model',
+      prompt: 'sky',
+      seconds: 4,
+      size: '1920x1080',
+      fps: 24,
+      quality: 'ultra',
+      imageB64: 'cmVhbC1mcmFtZQ==',
+    })
+    expect(capturedBody).toMatchObject({
+      fps: 24,
+      quality: 'ultra',
+      input_reference: 'cmVhbC1mcmFtZQ==',
+    })
+  })
+
   it('surfaces friendly 401 errors', async () => {
     const provider = new OpenAIVideoProvider({
       apiKey: 'bad',

@@ -19,8 +19,18 @@ export interface VideoOptions {
   prompt: string
   /** Clip length in seconds (1–20). */
   seconds: number
-  /** e.g. '1344x768' (wide). */
+  /** e.g. '1344x768' (wide) | '1920x1080' (HD) | '3840x2160' (4K). */
   size: string
+  /** Frame rate — 24 (cinema), 30, 60 (action). */
+  fps?: number
+  /** Provider quality hint: 'standard' | 'hd' | 'ultra'. */
+  quality?: 'standard' | 'hd' | 'ultra'
+  /**
+   * REFERENCE FRAME (image-to-video): base64 of the storyboard keyframe.
+   * Sent as `input_reference` — the provider animates YOUR frame, which
+   * keeps character design + composition consistent end-to-end.
+   */
+  imageB64?: string
   signal?: AbortSignal
 }
 
@@ -74,6 +84,9 @@ export class OpenAIVideoProvider {
           seconds: options.seconds,
           size: options.size,
           n: 1,
+          ...(options.fps !== undefined ? { fps: options.fps } : {}),
+          ...(options.quality !== undefined ? { quality: options.quality } : {}),
+          ...(options.imageB64 !== undefined ? { input_reference: options.imageB64 } : {}),
         }),
         signal: options.signal ?? AbortSignal.timeout(this.opts.timeoutMs ?? 120_000),
       })

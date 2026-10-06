@@ -481,6 +481,21 @@ async function main(): Promise<void> {
     if (manifest.config.genres.length !== 5 || !manifest.config.genres.includes('Ecchi')) {
       throw new Error('genre taxonomy not persisted')
     }
+    // v0.12: expanded taxonomy round-trips incl. mature tags + 18+ rating.
+    const matureManifest = projects.updateActiveConfig(
+      ProjectConfig.parse({
+        ...ctx.manifest.config,
+        genres: ['Hentai', 'Adult Romance', 'Cultivation', 'Iyashikei', 'Kaiju'],
+        contentRating: '18+',
+      }),
+    )
+    if (!matureManifest.config.genres.includes('Adult Romance')) {
+      throw new Error('mature genre lost in round-trip')
+    }
+    if (matureManifest.config.contentRating !== '18+') throw new Error('18+ rating lost')
+    if (!isMatureGenre('Adult Harem') || isMatureGenre('Isekai')) {
+      throw new Error('isMatureGenre classification broken')
+    }
   })
 
   await step('VOICE: real audio import attaches to a shot', () => {

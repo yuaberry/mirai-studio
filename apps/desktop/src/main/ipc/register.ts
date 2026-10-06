@@ -818,6 +818,39 @@ export function registerIpcHandlers(c: Container): void {
     return { jobId: job.id }
   })
 
+  handleIpc('ai:generateAllFrames', async (req) => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('ai.generateAllFrames', async (job, jobCtx) => {
+      const payload = (job.payload ?? {}) as { sceneId?: string }
+      if (!payload.sceneId) throw new MiraiError('VALIDATION_ERROR', 'generateAllFrames payload missing sceneId.')
+      const shots = ctx.storyboard.listShots(payload.sceneId).filter((s) => !s.frameAssetId)
+      const controller = new AbortController()
+      const watcher = setInterval(() => {
+        if (jobCtx.signal.aborted) controller.abort()
+      }, 100)
+      let generated = 0
+      try {
+        for (const [i, shot] of shots.entries()) {
+          if (jobCtx.signal.aborted) throw new MiraiError('CANCELLED', 'Batch cancelled.')
+          try {
+            await c.ai.generateFrame(shot.id, undefined, controller.signal, (p) =>
+              jobCtx.reportProgress(Math.round(5 + (i / Math.max(1, shots.length)) * 85 + (p / 100) * (85 / Math.max(1, shots.length)))),
+            )
+            generated++
+          } catch (err) {
+            c.logger.warn('AI', `Batch frame failed for shot ${shot.id}: ${(err as Error).message}`)
+            break // provider issue — stop hammering; report partial
+          }
+        }
+        return { generated, total: shots.length }
+      } finally {
+        clearInterval(watcher)
+      }
+    })
+    const job = await ctx.jobs.enqueue('ai.generateAllFrames', { sceneId: req.sceneId }, { priority: 8, maxAttempts: 1 })
+    return { jobId: job.id }
+  })
+
   handleIpc('ai:generateVideo', async (req) => {
     const ctx = requireActive(c)
     ctx.jobs.register('ai.generateVideo', async (job, jobCtx) => {

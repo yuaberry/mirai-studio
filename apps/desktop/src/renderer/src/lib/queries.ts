@@ -672,12 +672,16 @@ export function useRenderMutations() {
   }
   return {
     renderScene: useMutation({
-      mutationFn: (input: { sceneId: string; presetId?: string; quality?: 'PREVIEW' | 'MASTER' }) =>
+      mutationFn: (
+      input: { sceneId: string; presetId?: string; quality?: 'PREVIEW' | 'MASTER' | 'CINEMA' },
+    ) =>
         invoke('render:scene', input).then((r) => r.jobId),
       onSuccess: invalidate,
     }),
     renderEpisode: useMutation({
-      mutationFn: (input: { episodeId: string; presetId?: string; quality?: 'PREVIEW' | 'MASTER' }) =>
+      mutationFn: (
+      input: { episodeId: string; presetId?: string; quality?: 'PREVIEW' | 'MASTER' | 'CINEMA' },
+    ) =>
         invoke('render:episode', input).then((r) => r.jobId),
       onSuccess: invalidate,
     }),
@@ -1094,6 +1098,18 @@ export function useProductionReview() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.jobs })
       void queryClient.invalidateQueries({ queryKey: ['ai', 'decisions'] })
+    },
+  })
+}
+
+export function useGenerateAllFrames() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sceneId: string) =>
+      invoke('ai:generateAllFrames', { sceneId }).then((r) => r.jobId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs })
+      void queryClient.invalidateQueries({ queryKey: ['shots'] })
     },
   })
 }

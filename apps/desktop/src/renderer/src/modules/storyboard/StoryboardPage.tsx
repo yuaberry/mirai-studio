@@ -44,6 +44,7 @@ import {
   useShots,
   useShotMutations,
   useAiStatus,
+  useGenerateAllFrames,
   useGenerateFrame,
   useGenerateVideo,
   useBlenderActions,
@@ -60,6 +61,8 @@ import { toast } from '../../store/appStore'
 export function StoryboardPage() {
   const { data: episodes, isLoading, isError, error, refetch } = useEpisodes()
   const shotMutations = useShotMutations()
+  const generateAllFrames = useGenerateAllFrames()
+  const { data: ai } = useAiStatus()
   const [episodeId, setEpisodeId] = useState<string | null>(null)
   const { data: scenes } = useScenes(episodeId ?? undefined)
   const [sceneId, setSceneId] = useState<string | null>(null)
@@ -208,6 +211,33 @@ export function StoryboardPage() {
               >
                 <Plus className="h-3.5 w-3.5" /> New Shot
               </Button>
+              {(shots ?? []).some((sh) => !sh.frameAssetId) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-mirai-violet/40 text-mirai-violet"
+                  loading={generateAllFrames.isPending}
+                  disabled={!ai?.imageConfigured}
+                  title={
+                    ai?.imageConfigured
+                      ? `Generate AI keyframes for the ${(shots ?? []).filter((sh) => !sh.frameAssetId).length} frameless shot(s) — Style Bible canon applies to every frame`
+                      : 'Configure an image provider in Settings → Providers first'
+                  }
+                  onClick={() =>
+                    generateAllFrames.mutate(sceneId!, {
+                      onSuccess: (jobId) =>
+                        toast({
+                          kind: 'success',
+                          title: 'Batch keyframes queued',
+                          description: `Job ${jobId.slice(-6)} — every frame lands on its shot automatically.`,
+                        }),
+                      onError: (err) => toast({ kind: 'error', title: 'Batch failed', description: err.message }),
+                    })
+                  }
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> Generate All Frames
+                </Button>
+              )}
             </div>
 
             {shotsLoading ? (

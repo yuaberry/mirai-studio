@@ -463,17 +463,36 @@ export function buildSceneRenderSpec(
     '-map', `[${audioLabel}]`,
   )
 
-  // ---- codec settings
-  const master = quality === 'MASTER'
+  // ---- codec settings — STUDIO TIERS
+  // PREVIEW: ultrafast CRF 30 (draft checks)
+  // MASTER:  slow, CRF 16 (professional delivery — Blu-ray-grade)
+  // CINEMA:  slower, CRF 14 + adaptive-quantization params (archival
+  //          studio master: aq-mode 3, stronger aq, 8 b-frames — the
+  //          settings real anime encoders ship to festivals)
+  const tier =
+    quality === 'CINEMA'
+      ? { preset: 'slower', crf: '14', premium: true }
+      : quality === 'MASTER'
+        ? { preset: 'slow', crf: '16', premium: false }
+        : { preset: 'ultrafast', crf: '30', premium: false }
   args.push(
     '-c:v', 'libx264',
     '-tune', 'animation',
-    '-preset', master ? 'medium' : 'ultrafast',
-    '-crf', master ? '18' : '30',
+    '-preset', tier.preset,
+    '-crf', tier.crf,
+    '-profile:v', 'high',
     '-pix_fmt', 'yuv420p',
     '-b:v', `${preset.videoKbps}k`,
     '-maxrate', `${Math.round(preset.videoKbps * 1.5)}k`,
     '-bufsize', `${preset.videoKbps * 2}k`,
+  )
+  if (tier.premium) {
+    args.push(
+      '-x264-params',
+      'aq-mode=3:aq-strength=1.15:bframes=8:rc-lookahead=60:ref=5:direct=auto',
+    )
+  }
+  args.push(
     '-r', String(fps),
     '-c:a', 'aac',
     '-b:a', `${preset.audioKbps}k`,

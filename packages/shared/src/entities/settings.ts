@@ -42,8 +42,15 @@ export const AppSettings = z.object({
         .object({
           baseUrl: z.string().optional(),
           model: z.string().optional(),
-          /** e.g. '1344x768'. */
-          size: z.string().default('1344x768'),
+          /** e.g. '1344x768' | '1920x1080' (HD) | '3840x2160' (4K). */
+          size: z.string().default('1920x1080'),
+          /** Generation frame rate — 24 (cinema) | 30 | 60 (action). */
+          fps: z.number().int().min(12).max(60).default(24),
+          /** Generation quality hint. */
+          quality: z.enum(['standard', 'hd', 'ultra']).default('hd'),
+          /** Animate the shot's storyboard frame (image-to-video) — the
+           *  single biggest consistency win for anime pipelines. */
+          useReferenceFrame: z.boolean().default(true),
         })
         .default({}),
       temperature: z.number().min(0).max(2).default(0.7),

@@ -181,12 +181,18 @@ describe('sceneRenderBuilder (pure)', () => {
     expect(args).toContain('anullsrc=channel_layout=stereo')
     // Master codec settings with the anime tune.
     expect(args).toContain('-tune animation')
-    expect(args).toContain('-crf 18')
+    expect(args).toContain('-crf 16')
     expect(args).toContain('-movflags +faststart')
     // PREVIEW switches to the fast profile.
     const preview = buildSceneRenderSpec(bundle, new Map(), new Map(), { preset, quality: 'PREVIEW' })
     expect(preview.args.join(' ')).toContain('-crf 30')
     expect(preview.args.join(' ')).toContain('ultrafast')
+    // CINEMA tier: CRF 14 + slower + archival x264 params.
+    const cinema = buildSceneRenderSpec(bundle, new Map(), new Map(), { preset, quality: 'CINEMA' })
+    const cinemaArgs = cinema.args.join(' ')
+    expect(cinemaArgs).toContain('-crf 14')
+    expect(cinemaArgs).toContain('slower')
+    expect(cinemaArgs).toContain('aq-mode=3')
   })
 
   it('bakes camera curves into zoompan piecewise expressions', () => {
@@ -414,6 +420,30 @@ describe('RenderService scene/episode renders (REAL FFmpeg)', () => {
     expect(probed!).toBeLessThan(2.6)
     expect(statSync(result.outputPath).size).toBeGreaterThan(1_000)
   }, 180_000)
+
+  it.skipIf(!ffmpeg.available)('CINEMA tier renders an archival-grade MP4 (CRF 14 + aq3)', async () => {
+    const env = makeEnv('cinema')
+    const frameFile = join(env.dir, 'frame.png')
+    writeFileSync(frameFile, makePng(32, 32, [200, 120, 240]))
+    const shot = env.storyboard.createShot(env.scene.id, { title: 'Cinema shot', durationSeconds: 1.5 })
+    env.storyboard.importFrame(shot.id, frameFile)
+    env.timeline.buildFromScene(env.scene.id)
+    const result = await env.render.renderScene({
+      sceneId: env.scene.id,
+      presetId: 'cinema-dci',
+      quality: 'CINEMA',
+      reportProgress: noProgress,
+      signal: noAbort,
+    })
+    expect(existsSync(result.outputPath)).toBe(true)
+    expect(result.resolution).toBe('4096x2160')
+    const probed = env.render.probeDuration(result.outputPath)
+    expect(probed).toBeGreaterThan(1)
+    expect(probed).toBeLessThan(2.2)
+    // Archival bitrate: 4096x2160 CRF 14 must produce a substantial file.
+    const stats = statSync(result.outputPath)
+    expect(stats.size).toBeGreaterThan(20_000)
+  }, 120_000)
 
   it.skipIf(!ffmpeg.available)('refuses to render scenes/episodes without timelines', async () => {
     const env = makeEnv('guards')
