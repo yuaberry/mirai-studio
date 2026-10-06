@@ -146,7 +146,7 @@ mirai-studio/
 
 ---
 
-## 5. IPC CONTRACTS (152 channels)
+## 5. IPC CONTRACTS (153 channels)
 
 All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests AND responses.
 
@@ -166,6 +166,7 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 - **phase 8 AI (v0.8):** 5 channels — ai:analyzeScreenplay/directorNotes/continuityCheck/productionReview/generateVideo
 - **plugins (Phase 9):** 5 channels — plugins:list/setEnabled/installFromFolder/delete/runCommand
 - **v0.10:** 7 channels — license:activate/status, content:setMature, blender:status/attachBlend/renderShot, ai:autoproduce
+- **v0.12:** +1 — ai:generateAllFrames (batch keyframes per scene)
 - **jobs:** 5 channels (list, retry, cancel, resumeInterrupted, discardInterrupted)
 - **settings/credentials:** 5 channels
 - **logs:** 3 channels
@@ -410,6 +411,8 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 34. **Native `<select>` popups ignore the app theme on Linux**: without `color-scheme: dark` on html + explicit `option { background/color }`, dropdown lists render system-white and become unreadable. Test select-heavy screens (Settings, New Project) on every styling change.
 35. **The whole UI is rem-based — the root font-size is the responsiveness knob**: setting `document.documentElement.style.fontSize` (density 14/16px × uiScale) rescales EVERYTHING cleanly; no per-page responsive work needed.
 36. **User-reported UI scale issues** = density/uiScale settings; the default (comfortable × 100%) may look oversized on small/laptop screens — direct users to Settings → General → UI scale.
+37. **Bump tests with tier upgrades**: when changing encoding defaults (CRF/preset), builder unit tests assert the OLD values — update expectations in the same commit (the CINEMA integration test catches what unit tests miss).
+38. **image-to-video is the consistency unlock**: passing the storyboard keyframe as `input_reference` keeps character design locked from board to clip — default ON; text-only fallback when the shot has no frame.
 
 ---
 
@@ -469,6 +472,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.9.0 | Phase 9 | Plugin system (strict manifests, enforced permissions, bundled examples), Provider SDK (declarative, user-applied), marketplace foundation, palette/prompt/preset deep integration, timeline undo/redo — ROADMAP COMPLETE |
 | v0.10.0 | Pro features | Mature Content Mode (Ed25519 license keys, conscientization, adults-only enforcement in code, mature genres), Blender bridge (attach .blend → headless render → shot video), Producer Agent (idea → full episode end-to-end) |
 | v0.10.1 | Polish | Website professional redesign (CSS app mockup, producer terminal, 12-card studio grid, full pipeline, Pro section, changelog; FIXED broken v0.2.1 download links), Hub capabilities strip, header genre/rating chips + Produce Episode CTA, sidebar version footer, richer EmptyStates, ambient gradients |
+| v0.12.0 | POST-MVP | CINEMA archival render tier (CRF 14 + slower + aq3 params; MASTER upgraded to CRF16/slow), 7 new presets (Cinema 4K DCI 4096×2160, Cinemascope 2.39:1, Action 60fps, 8K, Vertical 4K, Square), IMAGE-TO-VIDEO (input_reference = storyboard keyframe), fps/quality options for AI video (HD default), batch keyframes, 170+ genres |
 | v0.11.0 | Adaptability + Pro expansion | CRITICAL fix: native selects opened system-white (color-scheme:dark + option painting); RESPONSIVENESS: appearance.uiScale (85–140%) + density wired to root font-size (whole rem-based UI adapts); genres expanded to 140+ industry tags incl. 24-tag mature block; MATURE_PROMPT_PACK (8 Pro entries in Prompt Library, gated); New Project content-rating select + AUTO-18+ rating on mature genres; ContentCard unlock list |
 
 ---
@@ -491,13 +495,14 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 
 ---
 
-## 13. NEXT IMMEDIATE ACTIONS
+## 13. IS MIRAI STUDIO "FINISHED"? — STATUS ANSWER (v0.12.0)
 
-1. **Mature Mode polish**: mature-rated QC checks (age disclaimer in exports?), mature style-guide presets, provider-compat notes per provider in Settings.
-2. **Producer polish**: multi-episode arcs, "continue producing" (respects existing work), batch keyframe queue with concurrency, keyframe style options.
-3. **Blender polish**: custom binary path setting, render presets (cycles/eevee), image-sequence imports.
-4. **UI backlog**: real screenshots on the website (once a showcase project exists), app onboarding tour for first-run users.
-5. **Long-term**: multi-user/cloud, remote marketplace, dubbing pipeline.
+**The original vision (Phases 0-9) is COMPLETE and the MVP box was left at v0.12.0**: the app is a full AI-native anime production studio — idea → episode → studio-grade MP4 — with production management, extensibility, licensing (Pro), adult-content discipline, adaptive UI and world-class render encoding. What remains are NEW FRONTIERS, not missing pieces:
+
+1. **Showcase production**: the app needs a real anime produced END-TO-END with it (a full episode published as the flagship demo) — content work, not code.
+2. **Distribution frontiers**: multi-user/cloud sync (real team permissions), remote marketplace (one-click plugin install), dubbing/translation pipeline, web-companion for approvals.
+3. **Production-grade polish**: keyframe batch concurrency, Blender custom path/presets, mature QC extras (age disclaimer burn-in), onboarding tour.
+4. **Maintenance**: OS updates (Electron/node), provider API drift, community plugins.
 
 ## 14. RULES FOR THE NEXT SESSION
 
@@ -518,6 +523,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.11.0 — Selects fixed (dark), UI fully adaptive (scale/density), 140+ genres, Pro mature toolset expanded. Compact freely: this file carries the full state.*
+*Last updated: v0.12.0 — POST-MVP: CINEMA archival encoding, 4K DCI/Cinemascope presets, image-to-video, 170+ genres. The vision is complete; see §13 for what 'finished' means and the frontiers ahead. Compact freely.*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
