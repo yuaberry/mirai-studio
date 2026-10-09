@@ -943,7 +943,10 @@ export function registerIpcHandlers(c: Container): void {
     entries: requireActive(c).production.diffVersions(req.fromVersionId, req.toVersionId),
   }))
 
-  handleIpc('qc:run', () => ({ report: requireActive(c).production.runQc() }))
+  handleIpc('qc:run', () => {
+    const ctx = requireActive(c)
+    return { report: ctx.production.runQc(ctx.manifest.config.contentRating ?? null) }
+  })
 
   handleIpc('analytics:overview', () => ({ analytics: requireActive(c).production.overview() }))
 

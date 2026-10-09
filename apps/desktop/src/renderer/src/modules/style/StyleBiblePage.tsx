@@ -12,6 +12,56 @@ import { useSettings, useStyleBible, useUpdateStyleBible } from '../../lib/queri
 
 type SaveState = 'saved' | 'dirty' | 'saving'
 
+/** Mature art-direction presets (Pro) — adult-rated visual identities used by
+ *  late-night anime studios. Visible only while Mature Content Mode is on. */
+const MATURE_STYLE_PRESETS: Array<{ id: string; label: string; style: StyleBible }> = [
+  {
+    id: 'sensual-bishoujo',
+    label: 'Sensual Bishoujo (late-night)',
+    style: {
+      artDirection: 'Late-night bishoujo aesthetic — sensual but composed, luminous skin rendering, tasteful framing, romantic atmosphere over explicitness.',
+      lineart: 'Fine, confident shoujo-influenced ink with soft tapering; delicate eyelashes and hair strands.',
+      shading: 'Two-tone cel with a third ambient gradient on skin; soft blush shading at cheeks and joints.',
+      palette: 'Sakura pink, warm ivory skin tones, dusk violet shadows, champagne highlights.',
+      lighting: 'Warm rim light on hair and shoulders; candle/lamp key lights; moonlight cool cast for night scenes.',
+      proportions: 'Stylized adult bishoujo — long eyelashes, expressive eyes, mature facial structure, elegant neck and shoulders.',
+      eyesAndHair: 'Large glossy eyes with dual highlights; flowing hair with per-strand shine bands.',
+      backgrounds: 'Soft-focus bokeh interiors; satin and lace texture rendering; painterly window light.',
+      cameraLanguage: 'Intimate close-ups, over-shoulder glances, slow push-ins on hands and eyes, 85mm portrait language.',
+    },
+  },
+  {
+    id: 'seinen-erotic',
+    label: 'Seinen Erotic Drama',
+    style: {
+      artDirection: 'Seinen erotic drama — mature, restrained sensuality grounded in realistic adult bodies and lived-in spaces.',
+      lineart: 'Bold seinen ink with visible weight variation; textured linework on skin.',
+      shading: 'Dense screentone gradients; realistic directional shadows; dramatic chiaroscuro in night scenes.',
+      palette: 'Desaturated crimsons, ash greys, warm ambers; smoke-haze atmospheric perspective.',
+      lighting: 'Hard single-source practicals (neon, streetlamps, bedside lamps); strong cast shadows across bodies.',
+      proportions: 'Realistic adult anatomy — seinen proportions, natural body weight, believable musculature.',
+      eyesAndHair: 'Sharper adult eyes with subtle highlights; hair with volume and physical behavior.',
+      backgrounds: 'Detailed urban apartments, rain-streaked windows, cigarette smoke; cinematic clutter.',
+      cameraLanguage: 'Handheld intimacy, Dutch angles for tension, reflections in mirrors/glass, static locked wide shots before emotional beats.',
+    },
+  },
+  {
+    id: 'fantasy-succubus',
+    label: 'Dark Fantasy Succubus',
+    style: {
+      artDirection: 'Dark fantasy sensuality — gothic elegance, demonic allure with regal composition.',
+      lineart: 'Ornate dark-fantasy linework; filigree detail on horns, wings and costume seams.',
+      shading: 'Deep cel shadows with crimson ambient bounce; glowing rune accents.',
+      palette: 'Deep crimson, blackened violet, ash grey; glowing magenta accents.',
+      lighting: 'Underlighting from demonic glow; candlelit chandeliers; silhouette-first compositions.',
+      proportions: 'Tall elegant adult figures; wingspan drama; expressive tail and horn silhouettes.',
+      eyesAndHair: 'Slit-pupil glowing eyes; long hair with floating magical definance.',
+      backgrounds: 'Cathedral gothic interiors, throne halls, floating embers and silk drapery.',
+      cameraLanguage: 'Low-angle power shots, wing-spanning wides, slow reveal cranes, dutch tilts on temptation beats.',
+    },
+  },
+]
+
 const FIELDS: Array<{ key: keyof StyleBible; label: string; hint: string; rows: number; wide?: boolean }> = [
   { key: 'artDirection', label: 'Art direction', hint: 'The overall visual thesis of the work.', rows: 3, wide: true },
   { key: 'lineart', label: 'Lineart', hint: 'Weight, confidence, tapering — e.g. fine shoujo ink vs bold action.', rows: 3 },
@@ -45,6 +95,13 @@ export function StyleBiblePage() {
       onSuccess: () => setSaveState('saved'),
       onError: () => setSaveState('dirty'),
     })
+  }
+
+  const matureOn = settings?.content?.matureEnabled ?? false
+  const applyPreset = (preset: (typeof MATURE_STYLE_PRESETS)[number]) => {
+    const next = { ...draft, ...preset.style }
+    setDraft(next)
+    save(next)
   }
 
   const onChange = (key: keyof StyleBible, value: string) => {
@@ -107,6 +164,30 @@ export function StyleBiblePage() {
           </Button>
         </div>
       </div>
+
+      {matureOn && (
+        <div className="mb-5 rounded-xl border border-mirai-danger/30 bg-mirai-danger/5 p-4">
+          <p className="mb-2 flex items-center gap-2 text-[11px] font-bold tracking-wider text-mirai-danger uppercase">
+            Mature style presets (Pro)
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {MATURE_STYLE_PRESETS.map((preset) => (
+              <Button
+                key={preset.id}
+                size="sm"
+                variant="outline"
+                className="border-mirai-danger/40 text-mirai-danger hover:bg-mirai-danger/10"
+                onClick={() => applyPreset(preset)}
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </div>
+          <p className="mt-2 text-[10px] text-mirai-faint">
+            One click fills the Style Bible with a professional adult-rated visual identity — edit freely afterwards.
+          </p>
+        </div>
+      )}
 
       <Card className="p-6">
         <div className="grid grid-cols-2 gap-5">

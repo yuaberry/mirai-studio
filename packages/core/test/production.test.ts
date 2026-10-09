@@ -191,6 +191,27 @@ describe('entity versioning', () => {
 })
 
 describe('quality control', () => {
+  it('mature QC flags non-adult cast on 18+ productions (and stays quiet otherwise)', () => {
+    const env = makeEnv('mature-qc')
+    env.creative.createCharacter({
+      name: 'Adult Lead',
+      role: 'PROTAGONIST',
+      age: '21',
+      appearance: 'Silver hair, amber eyes — described so appearance QC stays quiet.',
+    })
+    env.creative.createCharacter({ name: 'Ambiguous One', role: 'SUPPORTING' }) // no age
+    env.creative.createCharacter({ name: 'Teen Side', role: 'SUPPORTING', age: '16' })
+
+    const safe = env.production.runQc('13+')
+    expect(safe.findings.some((f) => f.checkId === 'mature-cast-not-adult')).toBe(false)
+
+    const mature = env.production.runQc('18+')
+    const flagged = mature.findings.filter((f) => f.checkId === 'mature-cast-not-adult')
+    expect(flagged.length).toBe(2) // ambiguous + minor
+    expect(mature.findings.some((f) => f.title.includes('Adult Lead'))).toBe(false)
+    expect(mature.errorCount).toBeGreaterThanOrEqual(2)
+  })
+
   it('flags every production gap with actionable hints', () => {
     const env = makeEnv('qc')
     // Episode with one scene; scene has a shot with dialogue but no frame/voice.

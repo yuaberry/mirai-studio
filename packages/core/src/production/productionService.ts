@@ -5,6 +5,8 @@
  */
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { isMatureRating } from '@mirai/shared'
+import { assessAge } from '../license/maturePolicy'
 import {
   APPROVAL_TRANSITIONS,
   EntityVersion,
@@ -408,8 +410,8 @@ export class ProductionService {
 
   // ----------------------------------------------------------------- QC
 
-  /** Automated quality checks over the whole production. */
-  runQc(): QcReport {
+  /** Automated quality checks over the whole production (rating powers the mature QC). */
+  runQc(contentRating?: string | null): QcReport {
     const findings: QcFinding[] = []
     const episodes = this.creative.listEpisodes()
     for (const episode of episodes) {
@@ -510,6 +512,30 @@ export class ProductionService {
         })
       }
     }
+
+    // Mature QC (Pro): on 18+ productions the cast must be verifiably adult —
+    // ambiguous ages will BLOCK explicit generation at runtime; flag them now
+    // so the user fixes them before producing.
+    if (isMatureRating(contentRating)) {
+      for (const character of this.creative.listCharacters()) {
+        const assessment = assessAge(character.age)
+        if (assessment.kind !== 'ADULT') {
+          findings.push({
+            checkId: 'mature-cast-not-adult',
+            severity: 'ERROR',
+            entityType: 'CHARACTER',
+            entityId: character.id,
+            title: `Character "${character.name}" is not verifiably adult on an 18+ production`,
+            detail:
+              assessment.kind === 'MINOR'
+                ? `Age "${character.age}" (${assessment.reason}) — minors are hard-blocked from explicit content.`
+                : `Age "${character.age || '—'}" (${assessment.reason}) — explicit generation will refuse until an adult age is stated.`,
+            fixHint: 'Characters → set an explicit adult age (e.g. "21")',
+          })
+        }
+      }
+    }
+
     for (const track of this.media.list('all')) {
       if (!existsSync(join(this.projectRoot, this.assetRelativePath(track.assetId)))) {
         findings.push({

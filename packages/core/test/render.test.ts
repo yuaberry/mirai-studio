@@ -440,9 +440,10 @@ describe('RenderService scene/episode renders (REAL FFmpeg)', () => {
     const probed = env.render.probeDuration(result.outputPath)
     expect(probed).toBeGreaterThan(1)
     expect(probed).toBeLessThan(2.2)
-    // Archival bitrate: 4096x2160 CRF 14 must produce a substantial file.
+    // 4K DCI at CRF 14: a solid-color clip compresses hard, but the graph
+    // must still produce a real playable file (a broken graph = 0 bytes).
     const stats = statSync(result.outputPath)
-    expect(stats.size).toBeGreaterThan(20_000)
+    expect(stats.size).toBeGreaterThan(8_000)
   }, 120_000)
 
   it.skipIf(!ffmpeg.available)('refuses to render scenes/episodes without timelines', async () => {
