@@ -415,6 +415,9 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 38. **image-to-video is the consistency unlock**: passing the storyboard keyframe as `input_reference` keeps character design locked from board to clip — default ON; text-only fallback when the shot has no frame.
 39. **NEVER hardcode window dimensions**: a fixed 1440×900 BrowserWindow was literally larger than laptop screens (1366×768) — the user's "app is off my screen" report. ALWAYS clamp to `screen.getPrimaryDisplay().workAreaSize` and maximize on small displays. Same class of bug: modals must be `max-h-[calc(100vh-…)] overflow-y-auto`, never assume viewport height.
 40b. **Solid-color clips compress brutally**: a 4K CRF-14 render of a solid-color frame can be < 20KB — size floors in render tests must account for content trivially compressible (8KB floor), not bitrate expectations.
+41. **"Still too big" reports usually mean an OLD BUILD**: screen fixes land only after the user installs the new release — always tell them WHICH version to download, and make the fix self-acting (autoFit) so no setting hunt is needed. When clamping windows, ALSO hard-clamp after ready-to-show (WMs restore session sizes) and use useContentSize (title bars steal height otherwise).
+42. **Genre taxonomy = TWO lists**: ANIME_GENRES (genres.ts) holds the tags; MATURE_GENRES (license.ts) gates the adult block via filterGenres — add mature tags to BOTH or the filter and QC classification drift. Currently 293/41.
+43. **Invisible scrollbars on dark UIs**: #2a3040 on #0a0c10 is invisible to many users — thumbs need ~#4a5478 minimum, with hover/active states; test scroll containers visually on every theme change.
 40. **i18n with English-source keys** (`t(locale, 'Project Hub')`): wiring is a one-line wrap per string; the dictionary lives in `lib/i18n.ts`; no code-splitting of translations needed. JSX replace pitfalls: `placeholder={x ?? tr('…')}` is valid, but sed-style replaces inside JSX braces produce nested quotes — always re-typecheck immediately after scripted label swaps.
 
 ---
@@ -475,6 +478,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.9.0 | Phase 9 | Plugin system (strict manifests, enforced permissions, bundled examples), Provider SDK (declarative, user-applied), marketplace foundation, palette/prompt/preset deep integration, timeline undo/redo — ROADMAP COMPLETE |
 | v0.10.0 | Pro features | Mature Content Mode (Ed25519 license keys, conscientization, adults-only enforcement in code, mature genres), Blender bridge (attach .blend → headless render → shot video), Producer Agent (idea → full episode end-to-end) |
 | v0.10.1 | Polish | Website professional redesign (CSS app mockup, producer terminal, 12-card studio grid, full pipeline, Pro section, changelog; FIXED broken v0.2.1 download links), Hub capabilities strip, header genre/rating chips + Produce Episode CTA, sidebar version footer, richer EmptyStates, ambient gradients |
+| v0.12.3 | Auto-fit + genres | appearance.autoFit (ON default): root font-size adapts to WINDOW HEIGHT on resize (12.5/13.5/14.5/16px breakpoints) — the UI shrinks itself on small screens; window double-clamped (useContentSize+center, post-ready-to-show hard clamp); visible scrollbars (#4a5478 thumbs); genres: 293 total (41 mature) |
 | v0.12.2 | Mature Mode advanced | QC adults-only on 18+ productions (ambiguous/minor cast = QC ERROR before runtime block), 3 adult style presets in the Style Bible (Sensual Bishoujo/Seinen Erotic/Dark Fantasy Succubus, Pro-gated), provider compatibility notes in ContentCard; FOUNDER LICENSE minted for yuaberry (10-year, features [mature], receipt at ~/MIRAI-STUDIO-PRO-KEY.txt) |
 | v0.12.1 | pt-BR + adaptive window | ROOT-CAUSE fix: window was FIXED 1440×900 (bigger than laptop screens!) — now clamped to workArea + auto-maximize on small screens; scrollable modals (sticky header/footer, overflow content); i18n foundation with pt-BR translation (nav, Hub, New Project, Settings; t(locale,key) with English-source keys in lib/i18n.ts) |
 | v0.12.0 | POST-MVP | CINEMA archival render tier (CRF 14 + slower + aq3 params; MASTER upgraded to CRF16/slow), 7 new presets (Cinema 4K DCI 4096×2160, Cinemascope 2.39:1, Action 60fps, 8K, Vertical 4K, Square), IMAGE-TO-VIDEO (input_reference = storyboard keyframe), fps/quality options for AI video (HD default), batch keyframes, 170+ genres |
@@ -528,6 +532,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.12.2 — Mature Mode avançado (QC adults-only, style presets, provider notes) + founder license minted. POST-MVP. Compact freely: this file carries the full state.*
+*Last updated: v0.12.3 — auto-fit UI + bulletproof window + visible scrollbars + 293 genres. POST-MVP. Compact freely: this file carries the full state; after compaction ask 'read the Plan.md in the mirai-studio repo'.*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
