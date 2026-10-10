@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mirai Studio — AI-Native Anime Production Studio · Idea to Episode</title>
+  <meta name="description" content="Mirai Studio: send your anime idea, the studio makes the rest. Local-first AI-native production suite — Story Bible, Storyboard, Timeline Editor, Audio Mixer, Keyframes, FFmpeg Render, Producer Agent, Blender bridge, Plugins. Your keys, your machine, your story." />
+  <meta property="og:title" content="Mirai Studio — From imagination to animation" />
+  <meta property="og:description" content="Local-first AI-native anime production studio: idea → episode → MP4. 100% on your machine." />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="sakura" aria-hidden="true"></canvas>
+  <div class="grid-overlay" aria-hidden="true"></div>
+
+  <!-- ------------------------------------------------------------- NAV -->
+  <header class="hero">
+    <nav class="nav">
+      <div class="brand">
+        <svg viewBox="0 0 32 32" class="brand-mark" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="g-mark" x1="0" y1="0" x2="32" y2="32">
+              <stop offset="0" stop-color="#f472b6"/><stop offset=".5" stop-color="#a78bfa"/><stop offset="1" stop-color="#22d3ee"/>
+            </linearGradient>
+          </defs>
+          <path d="M16 1.5 20.2 11.8 30.5 16 20.2 20.2 16 30.5 11.8 20.2 1.5 16 11.8 11.8Z" fill="url(#g-mark)"/>
+          <path d="M16 8.5 18 14l5.5 2-5.5 2-2 5.5-2-5.5L8.5 16 14 14Z" fill="#0a0c10" fill-opacity=".55"/>
+        </svg>
+        <span class="brand-name">MIRAI <em>STUDIO</em></span>
+      </div>
+      <div class="nav-links">
+        <a href="#studio">Studio</a>
+        <a href="#producer">Producer Agent</a>
+        <a href="#flow">Pipeline</a>
+        <a href="#pro">Pro</a>
+        <a href="#changelog">Changelog</a>
+        <a href="#download" class="nav-cta">Download</a>
+      </div>
+    </nav>
+
+    <!-- ---------------------------------------------------------- HERO -->
+    <div class="hero-inner reveal">
+      <div class="hero-badge">v0.12.3 · Linux x64 · Local-first · Your keys, your machine</div>
+      <h1>
+        Send the idea.<br />
+        The studio <span class="grad-text">makes the episode.</span>
+      </h1>
+      <p class="hero-sub">
+        An AI-native, local-first anime production suite — from Story Bible to Storyboard,
+        Timeline Editing to FFmpeg render, exported as a real <strong>MP4</strong>.
+        Bring your own AI: <strong>OpenRouter</strong>, <strong>NVIDIA NIM (GLM)</strong>, or any
+        OpenAI-compatible provider. Even plug in <strong>Blender</strong>.
+      </p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="#download">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M12 3v12m0 0 5-5m-5 5-5-5M4 21h16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Download Mirai Studio
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/yuaberry/mirai-studio" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.1.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.6 1.03 2.69 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" fill="currentColor"/></svg>
+          Star on GitHub
+        </a>
+      </div>
+
+      <div class="hero-stats">
+        <div class="stat"><strong>10</strong><span>releases shipped</span></div>
+        <div class="stat"><strong>166</strong><span>tests green</span></div>
+        <div class="stat"><strong>45</strong><span>E2E smoke steps</span></div>
+        <div class="stat"><strong>100%</strong><span>local-first</span></div>
+      </div>
+    </div>
+
+    <!-- --------------------------------------------------- APP MOCKUP -->
+    <div class="hero-mock reveal" aria-hidden="true">
+      <div class="mock-window">
+        <div class="mock-titlebar">
+          <span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span>
+          <span class="mock-title">Mirai Studio — Sakura Chronicles · Timeline</span>
+        </div>
+        <div class="mock-body">
+          <div class="mock-sidebar">
+            <span class="mock-item active"></span>
+            <span class="mock-item"></span>
+            <span class="mock-item"></span>
+            <span class="mock-item"></span>
+            <span class="mock-item"></span>
+            <span class="mock-item"></span>
+            <span class="mock-item"></span>
+          </div>
+          <div class="mock-main">
+            <div class="mock-stage">
+              <div class="mock-badge">PREVIEW · 00:12.4 / 00:45.0</div>
+            </div>
+            <div class="mock-mixer">
+              <div class="mock-fader"><i></i></div>
+              <div class="mock-fader"><i></i></div>
+              <div class="mock-fader"><i></i></div>
+              <div class="mock-fader master"><i></i></div>
+            </div>
+            <div class="mock-timeline">
+              <div class="mock-ruler"></div>
+              <div class="mock-lane"><span class="mock-clip" style="--w:26%"></span><span class="mock-clip pink" style="--w:34%"></span><span class="mock-clip" style="--w:20%"></span></div>
+              <div class="mock-lane"><span class="mock-clip teal" style="--w:12%"></span><span class="mock-clip teal" style="--w:18%; --d:20%"></span></div>
+              <div class="mock-lane"><span class="mock-clip violet" style="--w:46%"></span></div>
+              <div class="mock-lane"><span class="mock-clip amber" style="--w:30%; --d:8%"></span></div>
+              <span class="mock-playhead"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-glow" aria-hidden="true"></div>
+  </header>
+
+  <!-- --------------------------------------------------------- STUDIO -->
+  <section id="studio" class="section">
+    <h2 class="section-title reveal">Built like a <span class="grad-text">real studio</span></h2>
+    <p class="section-sub reveal">Every module is functional — no fake buttons, no dead UI. The whole pipeline runs on your machine.</p>
+    <div class="cards">
+      <article class="card reveal"><div class="card-ico">📖</div>
+        <h3>Story Bible & Style Bible</h3>
+        <p>Premise, themes, narrative rules — plus the full visual identity: lineart, shading, palette, lighting. Your canon is baked into every AI call.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🎬</div>
+        <h3>Storyboard with camera language</h3>
+        <p>Shots with framing, lens, movement and duration. Import frames, or generate them with studio-consistency prompts. Attach real voice lines.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🎛️</div>
+        <h3>Timeline Editor & Mixer</h3>
+        <p>Canvas timeline with magnetic snapping, trim/split/ripple, undo/redo — and a REAL Web Audio mixer: volume, pan, fades, mute & solo per track.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">📷</div>
+        <h3>Camera System & Keyframes</h3>
+        <p>Ken Burns done right: position, zoom, rotation and opacity curves per shot, with linear, ease and cubic-bézier easing — previewed live, rendered for real.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">💬</div>
+        <h3>Subtitles with burn-in</h3>
+        <p>Import & export real SRT/VTT, edit per-cue timing — and scene renders burn them into the MP4 automatically.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🎞️</div>
+        <h3>FFmpeg Render & Export Center</h3>
+        <p>Scenes and full episodes render to real H.264 MP4 (<code>-tune animation</code>) with camera moves, effects, subtitle burn-in and the full audio mixdown. 7 delivery presets.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">📋</div>
+        <h3>Production Suite</h3>
+        <p>Kanban task board with crew roles, governed approval pipeline with an audit trail, entity versioning (snapshot/restore/diff), automated QC and analytics.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🤖</div>
+        <h3>Advanced AI workflows</h3>
+        <p>Screenplay analysis, Continuity Engine, AI Director notes, multi-agent personas in AI Assist — JSON-validated, consent-scoped, logged as decisions.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🧩</div>
+        <h3>Plugins & Provider SDK</h3>
+        <p>Local-first plugins with a permission model (READ/SUGGEST/EDIT/…), community provider adapters for chat/image/video, curated marketplace registry.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🧊</div>
+        <h3>Blender bridge</h3>
+        <p>Attach a .blend to any shot — headless Blender renders it into the shot's real video, used seamlessly by preview, timeline and scene render.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">💾</div>
+        <h3>Local-first & portable</h3>
+        <p>SQLite per project, atomic manifests, ULID identity, backups that never destroy your only copy. Move the folder anywhere — it just works.</p>
+      </article>
+      <article class="card reveal"><div class="card-ico">🛡️</div>
+        <h3>Consent & security</h3>
+        <p>API keys encrypted with your OS keychain. Only the context you explicitly enable ever leaves the machine. Crash-proof persistent jobs with retry & cancel.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------- PRODUCER -->
+  <section id="producer" class="section section-producer">
+    <h2 class="section-title reveal">The <span class="grad-text">Producer Agent</span></h2>
+    <p class="section-sub reveal">Describe your anime idea. The Producer builds the episode inside the project — every step a real service call, the model only plans.</p>
+    <div class="producer-grid reveal">
+      <div class="producer-terminal">
+        <div class="term-title">producer agent</div>
+        <div class="term-body">
+          <p class="term-in">▸ <span>Your idea:</span> "Two rival idol groups share the same haunted rehearsal hall at midnight…"</p>
+          <p class="term-ok">✓ Story Bible — premise, themes, tone drafted</p>
+          <p class="term-ok">✓ Cast — 2 characters designed (adults, per policy)</p>
+          <p class="term-ok">✓ Episode structure — 2 scenes, locations linked</p>
+          <p class="term-ok">✓ Screenplays — written by the Scene Writer</p>
+          <p class="term-ok">✓ Storyboard — 4 shots with camera language</p>
+          <p class="term-ok">✓ Keyframes — generated with Style Bible canon</p>
+          <p class="term-ok">✓ Timelines — assembled, ready to render</p>
+          <p class="term-done">▸ Episode produced. Open the Timeline and direct it.</p>
+        </div>
+      </div>
+      <div class="producer-points">
+        <div class="producer-point">
+          <strong>Never overwrites the author.</strong>
+          <span>Existing bible premises and character names are preserved and deduped — the Producer collaborates, it doesn't bulldoze.</span>
+        </div>
+        <div class="producer-point">
+          <strong>You direct afterwards.</strong>
+          <span>Everything lands in the real editors: rewrite scenes, re-board shots, retime the timeline, re-render.</span>
+        </div>
+        <div class="producer-point">
+          <strong>Story-first, every rating.</strong>
+          <span>SFW by default; on rated-18+ projects with Pro enabled it writes adult material under the enforced adults-only policy.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ----------------------------------------------------------- GENRES -->
+  <section id="genres" class="section section-genres">
+    <h2 class="section-title reveal">Every genre. <span class="grad-text">Your story.</span></h2>
+    <p class="section-sub reveal">The full anime taxonomy — tag your production from Isekai to Psychological, Slice of Life to Yuri.</p>
+    <div class="marquee reveal" aria-label="Anime genres">
+      <div class="marquee-track" id="genreTrack"></div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ FLOW -->
+  <section id="flow" class="section">
+    <h2 class="section-title reveal">Idea → <span class="grad-text">MP4</span> — the complete pipeline</h2>
+    <p class="section-sub reveal">This is not a roadmap. It shipped — verified end-to-end by the test suite.</p>
+    <div class="pipeline reveal">
+      <div class="pipe-step"><span>Bible</span><i>→</i></div>
+      <div class="pipe-step"><span>Characters</span><i>→</i></div>
+      <div class="pipe-step"><span>Scenes</span><i>→</i></div>
+      <div class="pipe-step"><span>Screenplay</span><i>→</i></div>
+      <div class="pipe-step"><span>Storyboard</span><i>→</i></div>
+      <div class="pipe-step"><span>Frames</span><i>→</i></div>
+      <div class="pipe-step"><span>Voice</span><i>→</i></div>
+      <div class="pipe-step"><span>Music</span><i>→</i></div>
+      <div class="pipe-step"><span>Subtitles</span><i>→</i></div>
+      <div class="pipe-step"><span>Timeline</span><i>→</i></div>
+      <div class="pipe-step"><span>Approvals</span><i>→</i></div>
+      <div class="pipe-step"><span class="pipe-final">MP4 ✓</span></div>
+    </div>
+    <div class="flow-notes reveal">
+      <div class="flow-note"><strong>Q:</strong> Does it really render a playable file?</div>
+      <div class="flow-note"><strong>A:</strong> Yes — the smoke suite renders a real 7s MP4 from a scene timeline with camera moves, voice mix and burned subtitles, verified by ffprobe. <a href="https://github.com/yuaberry/mirai-studio/releases" target="_blank" rel="noopener">See it in the releases →</a></div>
+    </div>
+  </section>
+
+  <!-- -------------------------------------------------------------- PRO -->
+  <section id="pro" class="section section-pro">
+    <h2 class="section-title reveal">Mirai Studio <span class="grad-text">Pro</span></h2>
+    <p class="section-sub reveal">The core studio is free forever. Pro adds a storytelling toolset for adult-rated narratives — with the position stated plainly.</p>
+    <div class="pro-grid reveal">
+      <article class="pro-card">
+        <div class="pro-badge">Pro license</div>
+        <h3>Mature Content Mode</h3>
+        <p>Unlocks R-18 storytelling: mature genres (Hentai, Erotica, Adult Drama), mature-rated projects and explicit artistic direction in generation prompts.</p>
+        <ul class="pro-list">
+          <li><strong>Adults-only, enforced in code.</strong> Explicit generation requires every cast character to have an explicitly adult age — minors and unstated ages are hard-blocked. Not a policy page: a runtime rule.</li>
+          <li><strong>Story-first, by design.</strong> A conscientization flow states it before activation: this is a storytelling studio with adult-rated tools — not an adult-content generator, and never one.</li>
+          <li><strong>Offline license keys.</strong> Ed25519-signed, validated locally — no account, no server, no telemetry. The private key never touches the app.</li>
+        </ul>
+        <p class="pro-fine">SFW remains the default. The mode only affects projects you rate 18+, and you own the legality of what you produce.</p>
+      </article>
+      <article class="pro-card">
+        <div class="pro-badge">Included free</div>
+        <h3>Everything else</h3>
+        <p>The full production pipeline is free and open source — no gated core features:</p>
+        <ul class="pro-list">
+          <li>Producer Agent, Storyboard, Timeline, Mixer, Keyframes, Render & Export</li>
+          <li>Production suite (board, approvals, versions, QC, analytics)</li>
+          <li>AI workflows, plugins & Provider SDK, Blender bridge</li>
+          <li>Bring your own AI keys — OpenRouter, NVIDIA NIM, any OpenAI-compatible endpoint</li>
+        </ul>
+        <p class="pro-fine">Local-first forever: your projects, keys and files never leave your machine.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- -------------------------------------------------------- DOWNLOAD -->
+  <section id="download" class="section section-download">
+    <h2 class="section-title reveal">Download <span class="grad-text">v0.12.3</span></h2>
+    <p class="section-sub reveal">Linux x64 · every release is test-gated and boot-tested before shipping.</p>
+    <div class="dl-grid">
+      <a class="dl-card reveal" href="https://github.com/yuaberry/mirai-studio/releases/download/v0.12.3/mirai-studio_0.10.0_amd64.deb" download>
+        <div class="dl-ico">🐧</div>
+        <h3>.deb <span class="dl-tag">recommended</span></h3>
+        <p>Debian · Ubuntu · Mint & friends</p>
+        <code>sudo apt install ./mirai-studio_0.10.0_amd64.deb</code>
+      </a>
+      <a class="dl-card reveal" href="https://github.com/yuaberry/mirai-studio/releases/download/v0.12.3/mirai-studio_0.10.0_x86_64.AppImage" download>
+        <div class="dl-ico">📦</div>
+        <h3>AppImage <span class="dl-tag">portable</span></h3>
+        <p>No install — runs anywhere with FUSE</p>
+        <code>chmod +x mirai-studio*.AppImage && ./mirai-studio*.AppImage</code>
+      </a>
+      <a class="dl-card reveal" href="https://github.com/yuaberry/mirai-studio" target="_blank" rel="noopener">
+        <div class="dl-ico">⌨️</div>
+        <h3>Build from source</h3>
+        <p>Bun ≥ 1.1 · Node ≥ 18 · FFmpeg & Blender optional</p>
+        <code>git clone …/mirai-studio && bun install && bun run dev</code>
+      </a>
+    </div>
+    <p class="dl-note reveal">FFmpeg on PATH unlocks rendering · Blender on PATH unlocks the 3D bridge · both are detected gracefully.</p>
+  </section>
+
+  <!-- -------------------------------------------------------- CHANGELOG -->
+  <section id="changelog" class="section section-changelog">
+    <h2 class="section-title reveal">Ten releases, <span class="grad-text">one studio</span></h2>
+    <div class="changelog-list reveal">
+      <div class="cl-item"><span class="cl-ver">v0.12.3</span><p><strong>Mature Content Mode (Pro)</strong> with offline Ed25519 licensing & adults-only enforcement · <strong>Blender bridge</strong> · <strong>Producer Agent</strong> (idea → episode, end-to-end)</p></div>
+      <div class="cl-item"><span class="cl-ver">v0.9.0</span><p><strong>Plugin system</strong> (permission model, Provider SDK, marketplace foundation) · timeline <strong>undo/redo</strong></p></div>
+      <div class="cl-item"><span class="cl-ver">v0.8.0</span><p><strong>Subtitle Studio</strong> with render burn-in · <strong>video generation</strong> provider · blend modes & animated opacity in render · <strong>AI Screenplay Analysis, Continuity Engine, AI Director</strong>, personas & Workflows</p></div>
+      <div class="cl-item"><span class="cl-ver">v0.7.0</span><p><strong>Production suite</strong>: kanban board, governed approvals with audit, entity versioning, QC, analytics</p></div>
+      <div class="cl-item"><span class="cl-ver">v0.6.0</span><p><strong>Timeline → real MP4</strong> (FFmpeg bakes camera, effects, audio mixdown) · episode stitching · Export Center with delivery presets</p></div>
+      <div class="cl-item"><span class="cl-ver">v0.5.0</span><p><strong>Master Timeline</strong> (canvas, waveforms, trim/split/ripple) · <strong>Web Audio mixer</strong> · Camera keyframes with bézier easing · configurable shortcuts · dockable panels</p></div>
+      <div class="cl-item"><span class="cl-ver">v0.4.0</span><p><strong>Media library</strong> (music/SFX/ambience) · first <strong>FFmpeg shot render</strong></p></div>
+      <div class="cl-item"><span class="cl-ver">v0.3.0</span><p><strong>Scene Writer agent</strong> (human-in-the-loop) · NVIDIA NIM (GLM) · AI frame generation with studio-consistency prompts · voice lines · full genre taxonomy</p></div>
+      <div class="cl-item"><span class="cl-ver">v0.2.x</span><p><strong>Storyboard Studio</strong> with Style Bible · AI Assist streaming · Prompt Library · cinematic UI</p></div>
+      <div class="cl-item"><span class="cl-ver">v0.1.0</span><p>Foundation: typed IPC, SQLite projects, crash-proof jobs, encrypted keys, diagnostics</p></div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ FOOTER -->
+  <footer class="footer">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" class="brand-mark sm" fill="none" aria-hidden="true">
+        <path d="M16 1.5 20.2 11.8 30.5 16 20.2 20.2 16 30.5 11.8 20.2 1.5 16 11.8 11.8Z" fill="url(#g-mark)"/>
+      </svg>
+      <span class="brand-name">MIRAI <em>STUDIO</em></span>
+    </div>
+    <p class="footer-tag">From imagination to animation.</p>
+    <nav class="footer-links">
+      <a href="https://github.com/yuaberry/mirai-studio">GitHub</a>
+      <a href="https://github.com/yuaberry/mirai-studio/releases">Releases</a>
+      <a href="https://github.com/yuaberry/mirai-studio/blob/main/docs/roadmap.md">Roadmap</a>
+      <a href="https://github.com/yuaberry/mirai-studio/blob/main/docs/setup.md">Setup</a>
+      <a href="https://github.com/yuaberry/mirai-studio/blob/main/docs/plugins/README.md">Plugin SDK</a>
+      <a href="https://github.com/yuaberry/mirai-studio/blob/main/Plan.md">Plan</a>
+    </nav>
+    <p class="footer-fine">© 2026 Mirai Studio · Made with 🌸 · Linux build tested end-to-end: 166 tests · 45 smoke steps · ffprobe-verified renders.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+{
+  "name": "@mirai/desktop",
+  "version": "0.12.3",
+  "private": true,
+  "description": "Mirai Studio \u2014 desktop application (Electron + React)",
+  "author": "Mirai Studio Developers",
+  "homepage": "https://mirai-studio.app",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "icons": "bun run scripts/make-icons.ts",
+    "package:linux": "electron-vite build && electron-builder --linux deb AppImage",
+    "package:dir": "electron-vite build && electron-builder --linux dir"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "bindings": "^1.5.0",
+    "file-uri-to-path": "^1.0.0"
+  },
+  "devDependencies": {
+    "@fontsource-variable/inter": "^5.1.0",
+    "@fontsource-variable/space-grotesk": "^5.1.0",
+    "@mirai/ai": "workspace:*",
+    "@mirai/core": "workspace:*",
+    "@mirai/shared": "workspace:*",
+    "@tanstack/react-query": "^5.59.16",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^20.17.6",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.0.4",
+    "electron": "^33.2.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "lucide-react": "^0.460.0",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.4",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.9",
+    "zustand": "^5.0.1"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@mirai/ai",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Mirai Studio \u2014 AI core: provider layer (OpenRouter), model registry, context builder.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mirai/shared": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.6",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
+  }
+}

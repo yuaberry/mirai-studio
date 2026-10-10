@@ -1,0 +1,42 @@
+{
+  "name": "mirai-studio",
+  "private": true,
+  "version": "0.4.0",
+  "description": "Mirai Studio \u2014 AI-Native Anime & Animation Production Studio",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "scripts": {
+    "dev": "bun run --filter '@mirai/desktop' dev",
+    "build": "bun run --filter '@mirai/desktop' build",
+    "start": "bun run --filter '@mirai/desktop' start",
+    "typecheck": "bun run --filter '@mirai/shared' typecheck && bun run --filter '@mirai/core' typecheck && bun run --filter '@mirai/ai' typecheck && bun run --filter '@mirai/desktop' typecheck",
+    "test": "bun run --filter '@mirai/shared' test && bun run --filter '@mirai/ai' test",
+    "test:core": "bun run --filter '@mirai/core' test",
+    "rebuild:native": "cd apps/desktop && bunx @electron/rebuild -f -w better-sqlite3",
+    "lint": "eslint .",
+    "format": "prettier --write \"apps/*/src/**/*.{ts,tsx,css}\" \"packages/*/src/**/*.ts\"",
+    "package:linux": "bun run --filter '@mirai/desktop' package:linux",
+    "icons": "bun run --filter '@mirai/desktop' icons",
+    "verify": "bun run typecheck && bun run test && bun run test:core && bun run build && bun run smoke",
+    "smoke": "cd apps/desktop && bun build scripts/smoke-backend.ts --target=node --format=cjs --external=better-sqlite3 --outfile=out/smoke/smoke-backend.cjs && ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron out/smoke/smoke-backend.cjs",
+    "package:dir": "bun run --filter '@mirai/desktop' package:dir"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "@eslint/js": "^9.14.0",
+    "eslint": "^9.14.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "prettier": "^3.3.3",
+    "sharp": "^0.35.5",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.14.0",
+    "vitest": "^2.1.9"
+  }
+}
