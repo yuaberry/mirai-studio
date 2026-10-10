@@ -57,19 +57,23 @@
   }
 
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--border-strong);
+    /* Clearly visible against every surface — users reported invisible bars. */
+    background: #4a5478;
     border-radius: 8px;
     border: 2px solid var(--bg-base);
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #39415a;
+    background: #5d688f;
+  }
+  ::-webkit-scrollbar-thumb:active {
+    background: var(--accent);
   }
   ::-webkit-scrollbar-track {
-    background: transparent;
+    background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
   }
 
   :focus-visible {

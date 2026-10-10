@@ -141,14 +141,28 @@ export function AppShell() {
   const { data: settings } = useSettings()
 
   // RESPONSIVENESS: the whole suite is rem-based — scaling the root font-size
-  // resizes every panel, text and spacing to fit any screen. Density drops
-  // the base a notch; uiScale is the user's multiplier on top.
+  // resizes every panel, text and spacing to fit any screen.
+  // Layers: density (comfortable/compact) × autoFit (window-height adaptive
+  // base) × uiScale (the user's multiplier). Auto-fit makes the app shrink
+  // ITSELF on small screens — the user never has to hunt for a setting.
   useEffect(() => {
-    const density = settings?.appearance.density ?? 'comfortable'
-    const scale = settings?.appearance.uiScale ?? 1
-    const base = density === 'compact' ? 14 : 16
-    document.documentElement.style.fontSize = `${base * scale}px`
-  }, [settings?.appearance.density, settings?.appearance.uiScale])
+    const apply = () => {
+      const density = settings?.appearance.density ?? 'comfortable'
+      const scale = settings?.appearance.uiScale ?? 1
+      const autoFit = settings?.appearance.autoFit ?? true
+      let base = density === 'compact' ? 14 : 16
+      if (autoFit) {
+        const vh = window.innerHeight
+        if (vh < 640) base = Math.min(base, 12.5)
+        else if (vh < 740) base = Math.min(base, 13.5)
+        else if (vh < 860) base = Math.min(base, 14.5)
+      }
+      document.documentElement.style.fontSize = `${base * scale}px`
+    }
+    apply()
+    window.addEventListener('resize', apply)
+    return () => window.removeEventListener('resize', apply)
+  }, [settings?.appearance.density, settings?.appearance.uiScale, settings?.appearance.autoFit])
 
   // The FULL configurable shortcut system (Phase 5): defaults ⊕ user overrides.
   useShortcutDispatcher(settings)
@@ -205,7 +219,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                v0.12.2
+                v0.12.3
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio"

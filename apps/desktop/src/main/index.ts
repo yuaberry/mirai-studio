@@ -65,6 +65,8 @@ function createWindow(c: Container): void {
     height: Math.min(900, maxHeight),
     minWidth: Math.min(1080, Math.min(940, maxWidth)),
     minHeight: Math.min(720, Math.min(600, maxHeight)),
+    useContentSize: true,
+    center: true,
     show: false,
     backgroundColor: '#0a0c10',
     title: 'Mirai Studio',
@@ -83,6 +85,17 @@ function createWindow(c: Container): void {
   if (smallScreen) {
     mainWindow.maximize()
   }
+
+  // HARD CLAMP: re-assert the bounds after creation — some window managers
+  // restore previous-session sizes; this guarantees the window fits, always.
+  mainWindow.once('ready-to-show', () => {
+    const wa = screen.getPrimaryDisplay().workAreaSize
+    const [w = 0, h = 0] = mainWindow!.getSize()
+    if (w > wa.width || h > wa.height) {
+      mainWindow!.setSize(Math.min(w, Math.max(720, wa.width - 24)), Math.min(h, Math.max(520, wa.height - 24)))
+      mainWindow!.center()
+    }
+  })
 
   c.emitter.attach(mainWindow)
 

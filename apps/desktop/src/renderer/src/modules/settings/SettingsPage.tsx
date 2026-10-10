@@ -70,6 +70,7 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
   const [confirmDestructive, setConfirmDestructive] = useState(settings.general.confirmDestructive)
   const [density, setDensity] = useState(settings.appearance.density)
   const [uiScale, setUiScale] = useState(String(settings.appearance.uiScale ?? 1))
+  const [autoFit, setAutoFit] = useState(settings.appearance.autoFit ?? true)
 
   const save = () =>
     update.mutate(
@@ -84,6 +85,7 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
           ...settings.appearance,
           density: density as AppSettings['appearance']['density'],
           uiScale: Number(uiScale) || 1,
+          autoFit,
         },
       },
       {
@@ -131,6 +133,21 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
             <option value="1.4">140% — reading comfort</option>
           </Select>
           <p className="mt-1 text-[10px] text-mirai-faint">Rescales the entire interface — the window adapts to any screen size.</p>
+        </div>
+        <div className="col-span-2 flex items-center justify-between rounded-lg border border-mirai-border bg-mirai-panel px-4 py-3">
+          <div>
+            <p className="text-xs font-semibold text-mirai-text">Auto-fit small screens</p>
+            <p className="text-[11px] text-mirai-dim">
+              The interface shrinks itself automatically on short windows — recommended ON. Uncheck if you prefer the fixed scale above.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant={autoFit ? 'primary' : 'outline'}
+            onClick={() => setAutoFit((v) => !v)}
+          >
+            {autoFit ? 'ON' : 'OFF'}
+          </Button>
         </div>
         <div className="col-span-2 flex items-center justify-between rounded-lg border border-mirai-border bg-mirai-panel px-4 py-3">
           <div>

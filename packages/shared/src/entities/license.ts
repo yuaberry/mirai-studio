@@ -87,6 +87,23 @@ export const MATURE_GENRES = [
   'Biseinen',
   'Succubus',
   'Vampiric Romance',
+  'Adult Ecchi',
+  'Adult Comedy Romance',
+  'Erotic Isekai',
+  'Adult Office Romance',
+  'Adult Fantasy Harem',
+  'Adult Yandere',
+  'Mature Romance Drama',
+  'Forbidden Romance',
+  'Temptation',
+  'Adult Night Life',
+  'Adult Onsen',
+  'Erotic Cosplay',
+  'Adult Fantasy Yuri',
+  'Adult Fantasy Yaoi',
+  'Sensual Fantasy',
+  'Adult Netorare',
+  'Mature Isekai',
 ] as const
 
 /** Genres that require Mature Content Mode — filter against the setting. */

@@ -67,6 +67,8 @@ export const AppSettings = z.object({
       density: z.enum(['comfortable', 'compact']).default('comfortable'),
       /** Global UI scale multiplier — adapts the whole suite to any screen. */
       uiScale: z.number().min(0.8).max(1.4).default(1),
+      /** Auto-fit: shrink the base UI on small windows automatically. */
+      autoFit: z.boolean().default(true),
     })
     .default({}),
   editing: z
