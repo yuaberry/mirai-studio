@@ -9,6 +9,7 @@ import { Check, Loader2, PencilLine } from 'lucide-react'
 import type { StyleBible } from '@mirai/shared'
 import { Button, Card, Label, Textarea, Spinner } from '../../system/ui'
 import { useSettings, useStyleBible, useUpdateStyleBible } from '../../lib/queries'
+import { T } from '../../system/T'
 
 type SaveState = 'saved' | 'dirty' | 'saving'
 
@@ -132,7 +133,7 @@ export function StyleBiblePage() {
     <div className="mx-auto w-full max-w-4xl px-8 py-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="font-display text-xl font-bold text-mirai-text">Style Bible</h1>
+          <h1 className="font-display text-xl font-bold text-mirai-text"><T k="Style Bible" /></h1>
           <p className="mt-1 text-xs text-mirai-dim">
             The visual identity of the work — every generation and every artist must honor it.
           </p>

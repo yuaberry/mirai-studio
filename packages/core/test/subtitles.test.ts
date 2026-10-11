@@ -10,6 +10,7 @@ import {
   MiraiError,
   parseSrt,
   parseVtt,
+  parseAss,
   writeSrt,
   writeVtt,
   parseTimecode,
@@ -160,6 +161,41 @@ describe('SubtitleService', () => {
       { title: 'Empty' },
     )
     expect(() => env.service.exportFile(emptyScene.id, 'srt')).toThrow(MiraiError)
+  })
+
+  it('imports and exports the ASS (V4+) format end-to-end', () => {
+    const env = makeEnv('ass')
+    const file = join(env.dir, 'subs.ass')
+    writeFileSync(
+      file,
+      [
+        '[Script Info]',
+        'ScriptType: v4.00+',
+        '',
+        '[Events]',
+        'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+        'Dialogue: 0,0:00:01.00,0:00:02.50,Default,,0,0,0,,{\\i1}Styled line{\\i0}',
+        'Dialogue: 0,0:00:03.00,0:00:04.00,Default,,0,0,0,,Plain with, comma',
+      ].join('\n'),
+      'utf8',
+    )
+    const imported = env.service.importFile(env.scene.id, file)
+    expect(imported).toBe(2)
+    const list = env.service.list(env.scene.id)
+    expect(list[0]!.text).toBe('Styled line')
+    expect(list[0]!.endSec).toBe(2.5)
+    expect(list[1]!.text).toBe('Plain with, comma')
+
+    // Round-trip: export ASS → parse back with the pure codec.
+    const out = env.service.exportFile(env.scene.id, 'ass')
+    expect(out.path.endsWith('.ass')).toBe(true)
+    const reparsed = parseAss(readFileSync(out.path, 'utf8'))
+    expect(reparsed).toHaveLength(2)
+    for (const [i, cue] of reparsed.entries()) {
+      expect(cue.startSec).toBe(list[i]!.startSec)
+      expect(cue.endSec).toBe(list[i]!.endSec)
+      expect(cue.text).toBe(list[i]!.text)
+    }
   })
 
   it('rejects unreadable files and empty cue files', () => {

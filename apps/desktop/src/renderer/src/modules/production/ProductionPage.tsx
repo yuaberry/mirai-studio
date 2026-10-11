@@ -52,6 +52,7 @@ import { Button, Input, Label, Select, Spinner } from '../../system/ui'
 import { ConfirmModal, Modal } from '../../system/Modal'
 import { EmptyState } from '../../system/EmptyState'
 import { cn } from '../../lib/utils'
+import { T } from '../../system/T'
 
 type Tab = 'dashboard' | 'tasks' | 'approvals'
 
@@ -61,7 +62,7 @@ export function ProductionPage() {
     <div className="mx-auto w-full max-w-7xl px-8 py-8">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <h1 className="font-display text-xl font-bold text-mirai-text">Production</h1>
+          <h1 className="font-display text-xl font-bold text-mirai-text"><T k="Production" /></h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-mirai-dim">
             The studio side: track work on the task board, govern approvals with an audited
             pipeline, run quality control and watch the numbers.
@@ -352,6 +353,17 @@ function TasksTab() {
                         <span className={cn('text-[9px] font-bold', PRIORITY_TONE[task.priority])}>
                           {PRIORITY_LABEL[task.priority]}
                         </span>
+                        {task.dueDate &&
+                          task.dueDate < new Date().toISOString().slice(0, 10) &&
+                          task.status !== 'APPROVED' &&
+                          task.status !== 'FINAL' && (
+                            <span
+                              className="rounded bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold text-red-400"
+                              title={`Due ${task.dueDate}`}
+                            >
+                              overdue
+                            </span>
+                          )}
                         {assignee && (
                           <span
                             className="max-w-24 truncate rounded bg-mirai-hover px-1.5 py-0.5 text-[9px] text-mirai-dim"

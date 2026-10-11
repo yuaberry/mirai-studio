@@ -20,6 +20,7 @@ import { EmptyState, ErrorState } from '../../system/EmptyState'
 import { ConfirmModal, Modal } from '../../system/Modal'
 import { copyText, usePromptMutations, usePrompts } from '../../lib/queries'
 import { useAppStore, toast } from '../../store/appStore'
+import { T } from '../../system/T'
 
 export function PromptLibraryPage() {
   const { data: prompts, isLoading, isError, error, refetch } = usePrompts()
@@ -98,7 +99,7 @@ export function PromptLibraryPage() {
     <div className="mx-auto w-full max-w-5xl px-8 py-8">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-xl font-bold text-mirai-text">Prompt Library</h1>
+          <h1 className="font-display text-xl font-bold text-mirai-text"><T k="Prompt Library" /></h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-mirai-dim">
             The studio's generation toolbox — manga panels, character sheets, anime keyframes,
             style anchors and negatives. Built-ins are curated craft prompts; edit them to make

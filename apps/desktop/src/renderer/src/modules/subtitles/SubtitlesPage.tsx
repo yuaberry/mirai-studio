@@ -19,6 +19,7 @@ import { toast } from '../../store/appStore'
 import { Button, Input, Select, Spinner } from '../../system/ui'
 import { EmptyState } from '../../system/EmptyState'
 import { ConfirmModal } from '../../system/Modal'
+import { T } from '../../system/T'
 
 export function SubtitlesPage() {
   const { data: episodes } = useEpisodes()
@@ -43,7 +44,7 @@ export function SubtitlesPage() {
     <div className="mx-auto w-full max-w-4xl px-8 py-8">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-xl font-bold text-mirai-text">Subtitles</h1>
+          <h1 className="font-display text-xl font-bold text-mirai-text"><T k="Subtitles" /></h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-mirai-dim">
             Per-scene subtitle cues. Import real .srt/.vtt/.ass files, fine-tune timing,
             export delivery files — and scene renders burn them in automatically.

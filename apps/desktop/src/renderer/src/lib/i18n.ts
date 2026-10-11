@@ -6,7 +6,9 @@
  * dictionary covers the app shell, Hub, New Project modal and the most
  * common actions — extend it string by string as modules are touched.
  */
+import { useCallback } from 'react'
 import type { AppSettings } from '@mirai/shared'
+import { useSettings } from './queries'
 
 export type Locale = AppSettings['general']['locale']
 
@@ -83,16 +85,24 @@ const PT_BR: Record<string, string> = {
   'UI scale': 'Escala da interface',
   '85% — small screens': '85% — telas pequenas',
   '100% — default': '100% — padrão',
+  '110%': '110%',
+  '125% — large screens': '125% — telas grandes',
+  '140% — reading comfort': '140% — conforto de leitura',
+  'Auto-fit small screens': 'Auto-ajuste para telas pequenas',
+  'The interface shrinks itself automatically on short windows — recommended ON. Uncheck if you prefer the fixed scale above.':
+    'A interface encolhe sozinha em janelas baixas — recomendado LIGADO. Desligue se prefere a escala fixa acima.',
+  'ON': 'LIGADO',
+  'OFF': 'DESLIGADO',
   'Confirm destructive actions': 'Confirmar ações destrutivas',
   'Ask before anything irreversible.': 'Perguntar antes de qualquer coisa irreversível.',
   'Save Settings': 'Salvar Configurações',
   'Settings saved': 'Configurações salvas',
 
   // np extras
+  'Episodes': 'Episódios',
   'Description': 'Descrição',
   'Location': 'Local',
   'Template': 'Modelo',
-  'Episodes': 'Episódios',
   'Resolution': 'Resolução',
 
   // ------------------------------------------------------------- actions
@@ -118,4 +128,14 @@ export function t(locale: Locale, key: string): string {
 /** Curried helper: `const tr = useT(locale)` then `tr('nav.hub')`. */
 export function makeT(locale: Locale) {
   return (key: string) => t(locale, key)
+}
+
+/**
+ * React hook: `const tr = useT()` — resolves the active locale from settings.
+ * Components stay declarative; new keys fall back to English automatically.
+ */
+export function useT(): (key: string) => string {
+  const { data: settings } = useSettings()
+  const locale = settings?.general.locale ?? 'en'
+  return useCallback((key: string) => t(locale, key), [locale])
 }

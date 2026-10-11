@@ -16,6 +16,7 @@ import { ConfirmModal } from '../../system/Modal'
 import { VersionHistoryButton, VersionHistoryModal } from '../production/VersionHistoryModal'
 import { useCharacters, useCharacterMutations, useApprovalTransition } from '../../lib/queries'
 import { toast } from '../../store/appStore'
+import { T } from '../../system/T'
 
 const ROLE_LABEL: Record<string, string> = {
   PROTAGONIST: 'Protagonist',
@@ -58,7 +59,7 @@ export function CharactersPage() {
     <div className="mx-auto flex h-full w-full max-w-6xl gap-0">
       <div className="flex w-72 shrink-0 flex-col border-r border-mirai-border px-4 py-6">
         <div className="mb-3 flex items-center justify-between">
-          <h1 className="font-display text-sm font-bold text-mirai-text">Characters</h1>
+          <h1 className="font-display text-sm font-bold text-mirai-text"><T k="Characters" /></h1>
           <Button size="sm" variant="primary" loading={mutations.create.isPending} onClick={createDraft}>
             <Plus className="h-3.5 w-3.5" /> New
           </Button>

@@ -516,6 +516,50 @@ export class ProductionService {
       }
     }
 
+    // Schedule discipline: overdue tasks — CRITICAL ones are errors (they
+    // block the production), the rest are schedule-risk warnings.
+    const today = this.clock.isoNow().slice(0, 10)
+    for (const task of this.listTasks()) {
+      if (!task.dueDate) continue
+      if (task.dueDate >= today) continue
+      if (task.status === 'APPROVED' || task.status === 'FINAL') continue
+      findings.push({
+        checkId: 'task-overdue',
+        severity: task.priority === 'CRITICAL' ? 'ERROR' : 'WARNING',
+        entityType: 'TASK',
+        entityId: task.id,
+        title: `Task "${task.title}" is overdue (due ${task.dueDate})`,
+        detail: `The task is still ${task.status.replace('_', ' ').toLowerCase()} past its due date.`,
+        fixHint: 'Production → Tasks — finish it, or move the due date',
+      })
+    }
+
+    // Subtitle timing discipline: overlapping cues burn illegibly when
+    // rendered (both lines fight for the same frames).
+    const overlapStmt = this.db.prepare(
+      'SELECT start_sec, end_sec FROM subtitles WHERE scene_id = ? ORDER BY start_sec ASC',
+    )
+    for (const episode of episodes) {
+      for (const scene of this.creative.listScenes(episode.id)) {
+        const cues = overlapStmt.all(scene.id) as Array<{ start_sec: number; end_sec: number }>
+        let overlaps = 0
+        for (let i = 1; i < cues.length; i++) {
+          if (cues[i]!.start_sec < cues[i - 1]!.end_sec) overlaps++
+        }
+        if (overlaps > 0) {
+          findings.push({
+            checkId: 'scene-subtitle-overlap',
+            severity: 'WARNING',
+            entityType: 'SCENE',
+            entityId: scene.id,
+            title: `Scene "${scene.title}" has ${overlaps} overlapping subtitle cue${overlaps > 1 ? 's' : ''}`,
+            detail: 'Overlapping cues fight for the same frames when burned into the render.',
+            fixHint: 'Subtitles → adjust the timings so cues do not overlap',
+          })
+        }
+      }
+    }
+
     // Mature QC (Pro): on 18+ productions the cast must be verifiably adult —
     // ambiguous ages will BLOCK explicit generation at runtime; flag them now
     // so the user fixes them before producing.

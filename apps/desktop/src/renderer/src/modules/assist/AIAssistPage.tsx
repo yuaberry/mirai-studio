@@ -24,6 +24,7 @@ import {
 import { useAppStore, toast } from '../../store/appStore'
 import { MiniMarkdown } from './MiniMarkdown'
 import { PERSONA_PRESETS, type PersonaId } from './personas'
+import { T } from '../../system/T'
 
 interface UIMessage extends ChatMessage {
   id: string
@@ -224,7 +225,7 @@ export function AIAssistPage() {
       <div className="border-b border-mirai-border px-8 py-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-lg font-bold text-mirai-text">AI Assist</h1>
+            <h1 className="font-display text-lg font-bold text-mirai-text"><T k="AI Assist" /></h1>
             <Badge tone="violet">OpenRouter</Badge>
             {ai?.defaultModel && (
               <Badge tone={ai.defaultModel.includes(':free') ? 'success' : 'neutral'}>

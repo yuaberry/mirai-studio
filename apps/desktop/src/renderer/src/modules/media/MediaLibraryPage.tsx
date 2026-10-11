@@ -16,6 +16,7 @@ import { EmptyState, ErrorState } from '../../system/EmptyState'
 import { ConfirmModal, Modal } from '../../system/Modal'
 import { useMediaLibrary, useMediaMutations, assetUrl } from '../../lib/queries'
 import { toast } from '../../store/appStore'
+import { T } from '../../system/T'
 
 const KIND_ICON: Record<string, typeof Music> = {
   MUSIC: Music,
@@ -48,7 +49,7 @@ export function MediaLibraryPage() {
     <div className="mx-auto w-full max-w-5xl px-8 py-8">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-xl font-bold text-mirai-text">Media Library</h1>
+          <h1 className="font-display text-xl font-bold text-mirai-text"><T k="Media Library" /></h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-mirai-dim">
             Music, sound effects and ambience for your production. Import real audio files —
             they're stored inside the project and available for every scene.

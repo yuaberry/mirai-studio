@@ -30,6 +30,7 @@ import { toast } from '../../store/appStore'
 import { Badge, Button, Spinner } from '../../system/ui'
 import { ConfirmModal } from '../../system/Modal'
 import { EmptyState } from '../../system/EmptyState'
+import { T } from '../../system/T'
 
 export function PluginsPage() {
   const { data: plugins, isLoading } = usePlugins()
@@ -42,7 +43,7 @@ export function PluginsPage() {
     <div className="mx-auto w-full max-w-5xl px-8 py-8">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-xl font-bold text-mirai-text">Plugins</h1>
+          <h1 className="font-display text-xl font-bold text-mirai-text"><T k="Plugins" /></h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-mirai-dim">
             Local-first extensions: commands, prompt packs, export presets and provider
             adapters (Provider SDK). Every capability is gated by the permissions the

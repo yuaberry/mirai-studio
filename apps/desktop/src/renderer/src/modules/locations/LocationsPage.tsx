@@ -9,6 +9,7 @@ import { EmptyState, ErrorState } from '../../system/EmptyState'
 import { ConfirmModal } from '../../system/Modal'
 import { useLocations, useLocationMutations } from '../../lib/queries'
 import { toast } from '../../store/appStore'
+import { T } from '../../system/T'
 
 export function LocationsPage() {
   const { data: locations, isLoading, isError, error, refetch } = useLocations()
@@ -42,7 +43,7 @@ export function LocationsPage() {
     <div className="mx-auto flex h-full w-full max-w-6xl">
       <div className="flex w-72 shrink-0 flex-col border-r border-mirai-border px-4 py-6">
         <div className="mb-3 flex items-center justify-between">
-          <h1 className="font-display text-sm font-bold text-mirai-text">Locations</h1>
+          <h1 className="font-display text-sm font-bold text-mirai-text"><T k="Locations" /></h1>
           <Button size="sm" variant="primary" loading={mutations.create.isPending} onClick={createDraft}>
             <Plus className="h-3.5 w-3.5" /> New
           </Button>

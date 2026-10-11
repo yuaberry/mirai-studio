@@ -7,6 +7,7 @@ import { Check, Loader2, PencilLine } from 'lucide-react'
 import type { StoryBible } from '@mirai/shared'
 import { Button, Card, Label, Textarea, Spinner } from '../../system/ui'
 import { useSettings, useStoryBible, useUpdateStoryBible } from '../../lib/queries'
+import { T } from '../../system/T'
 
 type SaveState = 'saved' | 'dirty' | 'saving'
 
@@ -71,7 +72,7 @@ export function StoryBiblePage() {
     <div className="mx-auto w-full max-w-4xl px-8 py-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="font-display text-xl font-bold text-mirai-text">Story Bible</h1>
+          <h1 className="font-display text-xl font-bold text-mirai-text"><T k="Story Bible" /></h1>
           <p className="mt-1 text-xs text-mirai-dim">
             The DNA of the work. The AI Assist consults this before generating anything.
           </p>

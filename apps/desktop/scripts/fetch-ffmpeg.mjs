@@ -26,7 +26,19 @@ if (existsSync(BIN_FFMPEG) && existsSync(BIN_FFPROBE)) {
   process.exit(0)
 }
 
-const URL = process.env['MIRAI_FFMPEG_URL'] ?? 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz'
+// Platform URLs (config-ready for ports — only linux is built/tested today).
+// NOTE: win/mac archives have DIFFERENT layouts; the tar flags and the
+// strip-components below are linux-specific — adjust at port time.
+const PLATFORM_URLS = {
+  linux: 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz',
+  win: 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip',
+  mac: 'https://www.osxexperts.net/ffmpeg-7-0-2-arm.zip', // arm64; Intel builds exist per release
+}
+const platform = process.env['MIRAI_FFMPEG_PLATFORM'] ?? process.platform
+const URL = process.env['MIRAI_FFMPEG_URL'] ?? PLATFORM_URLS[platform] ?? PLATFORM_URLS.linux
+if (platform !== 'linux') {
+  console.warn('[fetch-ffmpeg] NOTE: win/mac downloads are config-ready but UNTESTED — verify the archive layout at port time.')
+}
 const TMP = join(HERE, '..', 'resources', 'ffmpeg-download.tar.xz')
 mkdirSync(RES, { recursive: true })
 

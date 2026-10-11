@@ -29,6 +29,7 @@ import { Badge, Button, Select, Spinner } from '../../system/ui'
 import { ConfirmModal } from '../../system/Modal'
 import { EmptyState } from '../../system/EmptyState'
 import { cn } from '../../lib/utils'
+import { T } from '../../system/T'
 
 export function RenderPage() {
   const queryClient = useQueryClient()
@@ -108,7 +109,7 @@ export function RenderPage() {
   return (
     <div className="mx-auto w-full max-w-6xl px-8 py-8">
       <div className="mb-6">
-        <h1 className="font-display text-xl font-bold text-mirai-text">Render & Export</h1>
+        <h1 className="font-display text-xl font-bold text-mirai-text"><T k="Render & Export" /></h1>
         <p className="mt-1 max-w-2xl text-xs leading-relaxed text-mirai-dim">
           FFmpeg bakes your timeline into a real MP4 — camera moves, effects and the full audio mix.
           Scenes render individually; episodes render every scene in order and stitch losslessly.

@@ -22,6 +22,7 @@ import { toast } from '../../store/appStore'
 import { Badge, Button, Select, Spinner } from '../../system/ui'
 import { EmptyState } from '../../system/EmptyState'
 import { cn } from '../../lib/utils'
+import { T } from '../../system/T'
 
 type NodeId = 'analysis' | 'continuity' | 'director'
 
@@ -116,7 +117,7 @@ export function WorkflowsPage() {
     <div className="mx-auto w-full max-w-6xl px-8 py-8">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-xl font-bold text-mirai-text">AI Workflows</h1>
+          <h1 className="font-display text-xl font-bold text-mirai-text"><T k="AI Workflows" /></h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-mirai-dim">
             The orchestrated production review pipeline. Run steps individually or the
             full flow — the model uses the same governed context as the rest of the studio

@@ -259,6 +259,43 @@ describe('quality control', () => {
     expect(after.warningCount).toBeGreaterThan(0)
     expect(after.ranAt).toBeTruthy()
   })
+
+  it('flags overdue tasks (CRITICAL = error, normal = warning)', () => {
+    const env = makeEnv('qc-overdue')
+    // Fake clock "today" is 2024-12-24 — anything before it is overdue.
+    env.production.createTask({ title: 'Late critical', priority: 'CRITICAL', dueDate: '2024-12-01' })
+    env.production.createTask({ title: 'Late normal', priority: 'NORMAL', dueDate: '2024-12-23' })
+    env.production.createTask({ title: 'Not due yet', dueDate: '2025-06-01' })
+    const finished = env.production.createTask({ title: 'Late but FINAL', dueDate: '2024-12-01' })
+    env.production.setTaskStatus(finished.id, 'FINAL')
+
+    const findings = env.production.runQc().findings.filter((f) => f.checkId === 'task-overdue')
+    const titles = findings.map((f) => f.title)
+    expect(titles).toHaveLength(2)
+    expect(titles.some((t) => t.includes('Late critical'))).toBe(true)
+    expect(titles.some((t) => t.includes('Late normal'))).toBe(true)
+    expect(findings.find((f) => f.title.includes('critical'))?.severity).toBe('ERROR')
+    expect(findings.find((f) => f.title.includes('normal'))?.severity).toBe('WARNING')
+  })
+
+  it('flags scenes with overlapping subtitle cues', () => {
+    const env = makeEnv('qc-subtitle-overlap')
+    // Direct cue inserts: 0-2s and 1-3s overlap; 3-4s is clean.
+    const db = (env as unknown as { db: ReturnType<typeof openDatabase> }).db
+    const now = new Date().toISOString()
+    const ins = db.prepare(
+      'INSERT INTO subtitles (id, scene_id, start_sec, end_sec, text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    )
+    const n = Date.now()
+    ins.run(`a${n}`, env.scene.id, 0, 2, 'first', now, now)
+    ins.run(`b${n}`, env.scene.id, 1, 3, 'overlaps first', now, now)
+    ins.run(`c${n}`, env.scene.id, 3, 4, 'clean', now, now)
+
+    const findings = env.production.runQc().findings.filter((f) => f.checkId === 'scene-subtitle-overlap')
+    expect(findings).toHaveLength(1)
+    expect(findings[0]!.title).toContain('1 overlapping subtitle cue')
+    expect(findings[0]!.severity).toBe('WARNING')
+  })
 })
 
 describe('production analytics', () => {

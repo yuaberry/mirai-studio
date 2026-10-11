@@ -35,6 +35,7 @@ import {
 } from '../../lib/queries'
 import { invoke } from '../../lib/ipc'
 import { toast } from '../../store/appStore'
+import { T } from '../../system/T'
 
 const TIME_LABEL: Record<TimeOfDay, string> = {
   DAY: '☀ Day',
@@ -64,7 +65,7 @@ export function EpisodesPage() {
     <div className="flex h-full min-h-0">
       <div className="flex w-64 shrink-0 flex-col border-r border-mirai-border px-4 py-6">
         <div className="mb-3 flex items-center justify-between">
-          <h1 className="font-display text-sm font-bold text-mirai-text">Episodes</h1>
+          <h1 className="font-display text-sm font-bold text-mirai-text"><T k="Episodes" /></h1>
           <Button size="sm" variant="primary" onClick={() => setNewEpisodeOpen(true)}>
             <Plus className="h-3.5 w-3.5" /> New
           </Button>

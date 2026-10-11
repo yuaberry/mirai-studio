@@ -15,6 +15,7 @@ import {
 } from '@mirai/shared'
 import { comboFromEvent } from '../../lib/shortcuts'
 import { cn } from '../../lib/utils'
+import { useT } from '../../lib/i18n'
 import { ContentCard } from './ContentCard'
 import { Badge, Button, Card, Input, Label, SectionTitle, Select, Spinner } from '../../system/ui'
 import { ErrorState } from '../../system/EmptyState'
@@ -31,6 +32,7 @@ import {
 import { toast } from '../../store/appStore'
 
 export function SettingsPage() {
+  const tr = useT()
   const { data: settings, isLoading, isError, error, refetch } = useSettings()
 
   if (isLoading) {
@@ -52,7 +54,7 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-8 py-10">
-      <h1 className="mb-8 font-display text-2xl font-bold text-mirai-text">Settings</h1>
+      <h1 className="mb-8 font-display text-2xl font-bold text-mirai-text">{tr('Settings')}</h1>
       <div className="space-y-6">
         <GeneralCard settings={settings} />
         <ProvidersCard />
@@ -64,6 +66,7 @@ export function SettingsPage() {
 }
 
 function GeneralCard({ settings }: { settings: AppSettings }) {
+  const tr = useT()
   const update = useUpdateSettings()
   const [locale, setLocale] = useState<string>(settings.general.locale)
   const [autosave, setAutosave] = useState(String(settings.general.autosaveIntervalMs))
@@ -89,17 +92,17 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
         },
       },
       {
-        onSuccess: () => toast({ kind: 'success', title: 'Settings saved' }),
+        onSuccess: () => toast({ kind: 'success', title: tr('Settings saved') }),
         onError: (err) => toast({ kind: 'error', title: 'Save failed', description: err.message }),
       },
     )
 
   return (
     <Card className="p-5">
-      <SectionTitle>General</SectionTitle>
+      <SectionTitle>{tr('General')}</SectionTitle>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="st-locale">Interface language</Label>
+          <Label htmlFor="st-locale">{tr('Interface language')}</Label>
           <Select id="st-locale" value={locale} onChange={(e) => setLocale(e.target.value)}>
             <option value="en">English</option>
             <option value="pt-BR">Português (BR)</option>
@@ -107,7 +110,7 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
           </Select>
         </div>
         <div>
-          <Label htmlFor="st-autosave">Autosave interval (ms)</Label>
+          <Label htmlFor="st-autosave">{tr('Autosave interval (ms)')}</Label>
           <Input
             id="st-autosave"
             inputMode="numeric"
@@ -117,28 +120,28 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
           <p className="mt-1 text-[10px] text-mirai-faint">Editors autosave draft state (Story Bible today, more in Phase 1+).</p>
         </div>
         <div>
-          <Label htmlFor="st-density">Interface density</Label>
+          <Label htmlFor="st-density">{tr('Interface density')}</Label>
           <Select id="st-density" value={density} onChange={(e) => setDensity(e.target.value as 'comfortable' | 'compact')}>
-            <option value="comfortable">Comfortable</option>
-            <option value="compact">Compact (smaller text & spacing)</option>
+            <option value="comfortable">{tr('Comfortable')}</option>
+            <option value="compact">{tr('Compact (smaller text & spacing)')}</option>
           </Select>
         </div>
         <div>
-          <Label htmlFor="st-scale">UI scale</Label>
+          <Label htmlFor="st-scale">{tr('UI scale')}</Label>
           <Select id="st-scale" value={uiScale} onChange={(e) => setUiScale(e.target.value)}>
-            <option value="0.85">85% — small screens</option>
-            <option value="1">100% — default</option>
-            <option value="1.1">110%</option>
-            <option value="1.25">125% — large screens</option>
-            <option value="1.4">140% — reading comfort</option>
+            <option value="0.85">{tr('85% — small screens')}</option>
+            <option value="1">{tr('100% — default')}</option>
+            <option value="1.1">{tr('110%')}</option>
+            <option value="1.25">{tr('125% — large screens')}</option>
+            <option value="1.4">{tr('140% — reading comfort')}</option>
           </Select>
           <p className="mt-1 text-[10px] text-mirai-faint">Rescales the entire interface — the window adapts to any screen size.</p>
         </div>
         <div className="col-span-2 flex items-center justify-between rounded-lg border border-mirai-border bg-mirai-panel px-4 py-3">
           <div>
-            <p className="text-xs font-semibold text-mirai-text">Auto-fit small screens</p>
+            <p className="text-xs font-semibold text-mirai-text">{tr('Auto-fit small screens')}</p>
             <p className="text-[11px] text-mirai-dim">
-              The interface shrinks itself automatically on short windows — recommended ON. Uncheck if you prefer the fixed scale above.
+              {tr('The interface shrinks itself automatically on short windows — recommended ON. Uncheck if you prefer the fixed scale above.')}
             </p>
           </div>
           <Button
@@ -146,13 +149,13 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
             variant={autoFit ? 'primary' : 'outline'}
             onClick={() => setAutoFit((v) => !v)}
           >
-            {autoFit ? 'ON' : 'OFF'}
+            {autoFit ? tr('ON') : tr('OFF')}
           </Button>
         </div>
         <div className="col-span-2 flex items-center justify-between rounded-lg border border-mirai-border bg-mirai-panel px-4 py-3">
           <div>
-            <p className="text-xs font-semibold text-mirai-text">Confirm destructive actions</p>
-            <p className="text-[11px] text-mirai-dim">Ask before anything irreversible.</p>
+            <p className="text-xs font-semibold text-mirai-text">{tr('Confirm destructive actions')}</p>
+            <p className="text-[11px] text-mirai-dim">{tr('Ask before anything irreversible.')}</p>
           </div>
           <Button
             size="sm"
@@ -165,7 +168,7 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
       </div>
       <div className="mt-4 flex justify-end">
         <Button variant="primary" loading={update.isPending} onClick={save}>
-          <Save className="h-4 w-4" /> Save General
+          <Save className="h-4 w-4" /> {tr('Save Settings')}
         </Button>
       </div>
     </Card>

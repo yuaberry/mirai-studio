@@ -57,6 +57,7 @@ import {
 } from '../../lib/queries'
 import { VersionHistoryButton, VersionHistoryModal } from '../production/VersionHistoryModal'
 import { toast } from '../../store/appStore'
+import { T } from '../../system/T'
 
 export function StoryboardPage() {
   const { data: episodes, isLoading, isError, error, refetch } = useEpisodes()
@@ -115,7 +116,7 @@ export function StoryboardPage() {
     <div className="flex h-full min-h-0">
       {/* ---------------------------------------------- episodes ▸ scenes */}
       <div className="flex w-64 shrink-0 flex-col border-r border-mirai-border px-4 py-6">
-        <h1 className="mb-3 font-display text-sm font-bold text-mirai-text">Storyboard</h1>
+        <h1 className="mb-3 font-display text-sm font-bold text-mirai-text"><T k="Storyboard" /></h1>
         <div className="-mx-1 min-h-0 flex-1 overflow-y-auto">
           {(episodes ?? []).length === 0 ? (
             <EmptyState

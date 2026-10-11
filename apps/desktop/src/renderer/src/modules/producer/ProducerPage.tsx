@@ -10,6 +10,7 @@ import { useAutoproduce, useCurrentProject, useJobs, useSettings } from '../../l
 import { toast } from '../../store/appStore'
 import { Badge, Button, Label, Select, Textarea } from '../../system/ui'
 import { EmptyState } from '../../system/EmptyState'
+import { T } from '../../system/T'
 
 const IDEAS = [
   'A yuri romance in a magic school where confession letters cast real spells — but hers keeps misfiring.',
@@ -72,7 +73,7 @@ export function ProducerPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-8 py-8">
       <div className="mb-6">
-        <h1 className="font-display text-xl font-bold text-mirai-text">Producer Agent</h1>
+        <h1 className="font-display text-xl font-bold text-mirai-text"><T k="Producer Agent" /></h1>
         <p className="mt-1 max-w-2xl text-xs leading-relaxed text-mirai-dim">
           Send your anime idea — the Producer builds a full episode in the open project: Story Bible
           draft, cast, scene structure, screenplays, storyboard shots, scene timelines and (optionally)
