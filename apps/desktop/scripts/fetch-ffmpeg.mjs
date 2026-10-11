@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 /**
- * Downloads the static LGPL FFmpeg build (John Van Sickle's release — GPL
- * build with libx264 would force GPL on the whole app; the LGPL build links
- * no GPL codecs and is safe to ship) into resources/ffmpeg/.
- * Packaging ships it inside the app: renders work with no system FFmpeg.
+ * Downloads John Van Sickle's static GPL FFmpeg build (with libx264 — the
+ * encoder the render pipeline NEEDS for H.264 MP4s) into resources/ffmpeg/.
+ * The binary is a separate process (spawn, never linked): Mirai Studio calls
+ * it like any other system tool — GPL attaches to FFmpeg itself, and we
+ * comply by shipping its license (GPLv3.txt, inside the archive) and pointing
+ * to the corresponding source (johnvansickle.com provides the source tarball
+ * per release). Packaging ships it inside the app: renders work with no
+ * system FFmpeg at all.
  *
  * Skips the download when the binaries are already present.
  */
