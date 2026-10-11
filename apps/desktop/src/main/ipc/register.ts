@@ -765,9 +765,9 @@ export function registerIpcHandlers(c: Container): void {
     const ctx = requireActive(c)
     const win = c.emitter.window
     const result = await dialog.showOpenDialog(win!, {
-      title: 'Import subtitles (.srt / .vtt)',
+      title: 'Import subtitles (.srt / .vtt / .ass)',
       properties: ['openFile'],
-      filters: [{ name: 'Subtitles', extensions: ['srt', 'vtt'] }],
+      filters: [{ name: 'Subtitles', extensions: ['srt', 'vtt', 'ass'] }],
     })
     if (result.canceled || result.filePaths.length === 0) {
       throw new MiraiError('CANCELLED', 'Subtitle import cancelled.')

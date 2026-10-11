@@ -553,16 +553,16 @@ export const ipcContracts = {
     request: z.object({ id: zEntityId }),
     response: z.object({ ok: z.boolean() }),
   },
-  /** Imports a real .srt/.vtt file's cues into the scene (file picked via dialog). */
+  /** Imports a real .srt/.vtt/.ass file's cues into the scene (file picked via dialog). */
   'subtitles:importFile': {
     request: z.object({ sceneId: zEntityId }),
     response: z.object({ imported: z.number().int() }),
   },
-  /** Exports the scene's subtitles to a real .srt/.vtt file. */
+  /** Exports the scene's subtitles to a real .srt/.vtt/.ass file. */
   'subtitles:exportFile': {
     request: z.object({
       sceneId: zEntityId,
-      format: z.enum(['srt', 'vtt']).default('srt'),
+      format: z.enum(['srt', 'vtt', 'ass']).default('srt'),
     }),
     response: z.object({ path: z.string(), count: z.number().int() }),
   },

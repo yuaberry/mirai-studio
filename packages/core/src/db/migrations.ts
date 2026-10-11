@@ -398,4 +398,12 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0011_task_due_dates',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE tasks ADD COLUMN due_date TEXT;
+      `)
+    },
+  },
 ]

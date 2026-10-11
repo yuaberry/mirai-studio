@@ -5,7 +5,7 @@ import prettier from 'eslint-config-prettier'
 
 export default tseslint.config(
   { ignores: ['**/node_modules/**', 'apps/desktop/out/**', 'apps/desktop/release/**', 'website/**', '**/dist/**', '**/coverage/**'] },
-  { files: ['scripts/**/*.mjs'], languageOptions: { globals: { console: 'readonly', process: 'readonly', Buffer: 'readonly' } } },
+  { files: ['**/scripts/**/*.mjs'], languageOptions: { globals: { console: 'readonly', process: 'readonly', Buffer: 'readonly', fetch: 'readonly' } } },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {

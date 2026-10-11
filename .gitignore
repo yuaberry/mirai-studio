@@ -16,3 +16,7 @@ Thumbs.db
 .idea/
 *.swp
 coverage/
+
+# Bundled LGPL FFmpeg (downloaded at package time — never committed)
+apps/desktop/resources/ffmpeg/
+apps/desktop/resources/ffmpeg-download.tar.xz

@@ -21,7 +21,10 @@ import {
 import {
   AlertTriangle,
   BarChart3,
+  CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   History,
   Info,
@@ -246,6 +249,13 @@ const PRIORITY_TONE: Record<TaskPriority, string> = {
   CRITICAL: 'text-red-400',
 }
 
+const PRIORITY_DOT: Record<TaskPriority, string> = {
+  LOW: 'bg-mirai-faint/50',
+  NORMAL: 'bg-mirai-dim/70',
+  HIGH: 'bg-amber-400',
+  CRITICAL: 'bg-red-400',
+}
+
 function TasksTab() {
   const { data: tasks, isLoading } = useTasks()
   const { data: crew } = useCrew()
@@ -254,6 +264,7 @@ function TasksTab() {
   const [crewOpen, setCrewOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<TaskRecord | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
+  const [view, setView] = useState<'board' | 'calendar'>('board')
 
   const byStatus = useMemo(() => {
     const map: Record<TaskStatus, TaskRecord[]> = { TODO: [], IN_PROGRESS: [], REVIEW: [], APPROVED: [], FINAL: [] }
@@ -273,7 +284,27 @@ function TasksTab() {
         <p className="text-xs text-mirai-dim">
           Drag cards between columns — the board is the single source of truth for production work.
         </p>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex overflow-hidden rounded-md border border-mirai-line">
+            <button
+              className={cn(
+                'px-2.5 py-1 text-[10px] font-semibold transition-colors',
+                view === 'board' ? 'bg-mirai-pink/15 text-mirai-pink' : 'text-mirai-dim hover:text-mirai-text',
+              )}
+              onClick={() => setView('board')}
+            >
+              Board
+            </button>
+            <button
+              className={cn(
+                'flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold transition-colors',
+                view === 'calendar' ? 'bg-mirai-pink/15 text-mirai-pink' : 'text-mirai-dim hover:text-mirai-text',
+              )}
+              onClick={() => setView('calendar')}
+            >
+              <CalendarDays className="h-3 w-3" /> Calendar
+            </button>
+          </div>
           <Button size="sm" variant="outline" onClick={() => setCrewOpen(true)}>
             <UserPlus className="h-3.5 w-3.5" /> Crew
           </Button>
@@ -287,6 +318,8 @@ function TasksTab() {
         <div className="flex h-40 items-center justify-center">
           <Spinner className="h-5 w-5" />
         </div>
+      ) : view === 'calendar' ? (
+        <TaskCalendar tasks={tasks ?? []} crew={crew ?? []} />
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
           {TASK_STATUSES.map((status) => (
@@ -329,8 +362,20 @@ function TasksTab() {
                         )}
                       </div>
                       <div className="mt-1.5 flex items-center gap-1">
+                        <input
+                          type="date"
+                          className="h-5 flex-1 rounded bg-mirai-hover px-1 text-[9px] text-mirai-dim outline-none"
+                          value={task.dueDate ?? ''}
+                          title="Due date"
+                          onChange={(e) =>
+                            mutations.update.mutate({
+                              id: task.id,
+                              patch: { dueDate: e.target.value || null },
+                            })
+                          }
+                        />
                         <Select
-                          className="h-5 flex-1 px-1 text-[9px]"
+                          className="h-5 w-20 px-1 text-[9px]"
                           value={task.assigneeId ?? ''}
                           onChange={(e) =>
                             mutations.update.mutate({
@@ -388,6 +433,7 @@ function TaskCreateModal({ crew, onClose }: { crew: CrewMember[]; onClose: () =>
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<TaskPriority>('NORMAL')
   const [assigneeId, setAssigneeId] = useState('')
+  const [dueDate, setDueDate] = useState('')
   return (
     <Modal open title="New task" onClose={onClose} width="max-w-md">
       <div className="flex flex-col gap-3">
@@ -422,6 +468,10 @@ function TaskCreateModal({ crew, onClose }: { crew: CrewMember[]; onClose: () =>
             </Select>
           </div>
         </div>
+        <div>
+          <Label className="text-[10px]">Due date</Label>
+          <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+        </div>
         <div className="flex justify-end gap-2">
           <Button size="sm" variant="ghost" onClick={onClose}>
             Cancel
@@ -437,6 +487,7 @@ function TaskCreateModal({ crew, onClose }: { crew: CrewMember[]; onClose: () =>
                   description: description.trim() || undefined,
                   priority,
                   assigneeId: assigneeId || undefined,
+                  dueDate: dueDate || undefined,
                 },
                 {
                   onSuccess: () => toast({ kind: 'success', title: 'Task created' }),
@@ -451,6 +502,130 @@ function TaskCreateModal({ crew, onClose }: { crew: CrewMember[]; onClose: () =>
         </div>
       </div>
     </Modal>
+  )
+}
+
+/** Month-grid calendar over task due dates (Phase 7 completion). */
+function TaskCalendar({ tasks, crew }: { tasks: TaskRecord[]; crew: CrewMember[] }) {
+  const [cursor, setCursor] = useState(() => {
+    const now = new Date()
+    return { year: now.getFullYear(), month: now.getMonth() }
+  })
+
+  const first = new Date(cursor.year, cursor.month, 1)
+  const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate()
+  const startOffset = (first.getDay() + 6) % 7 // Monday-first grid
+  const monthKey = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}`
+  const byDay = useMemo(() => {
+    const map = new Map<string, TaskRecord[]>()
+    for (const t of tasks) {
+      if (!t.dueDate) continue
+      const list = map.get(t.dueDate) ?? []
+      list.push(t)
+      map.set(t.dueDate, list)
+    }
+    return map
+  }, [tasks])
+  const undated = tasks.filter((t) => !t.dueDate)
+  const monthLabel = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+  const shift = (delta: number) =>
+    setCursor((c) => {
+      const d = new Date(c.year, c.month + delta, 1)
+      return { year: d.getFullYear(), month: d.getMonth() }
+    })
+
+  const cells: Array<{ day: number | null; key: string }> = []
+  for (let i = 0; i < startOffset; i++) cells.push({ day: null, key: `pad-${i}` })
+  for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, key: `${monthKey}-${d}` })
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="ghost" onClick={() => shift(-1)} aria-label="Previous month">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => shift(1)} aria-label="Next month">
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <p className="ml-2 text-sm font-semibold text-mirai-text">{monthLabel}</p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            const now = new Date()
+            setCursor({ year: now.getFullYear(), month: now.getMonth() })
+          }}
+        >
+          Today
+        </Button>
+      </div>
+      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-mirai-line bg-mirai-line">
+        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
+          <div key={d} className="bg-mirai-panel px-2 py-1.5 text-center text-[9px] font-bold text-mirai-faint uppercase">
+            {d}
+          </div>
+        ))}
+        {cells.map((cell) => {
+          const iso =
+            cell.day !== null
+              ? `${monthKey}-${String(cell.day).padStart(2, '0')}`
+              : null
+          const due = iso ? (byDay.get(iso) ?? []) : []
+          const isToday = iso === new Date().toISOString().slice(0, 10)
+          return (
+            <div
+              key={cell.key}
+              className={cn(
+                'min-h-20 bg-mirai-panel p-1',
+                cell.day === null && 'bg-mirai-base/40',
+                isToday && 'ring-1 ring-mirai-pink/50 ring-inset',
+              )}
+            >
+              {cell.day !== null && (
+                <>
+                  <p className="mb-1 px-1 text-[9px] font-bold text-mirai-faint">{cell.day}</p>
+                  <div className="space-y-1">
+                    {due.slice(0, 3).map((t) => {
+                      const assignee = crew.find((m) => m.id === t.assigneeId)
+                      return (
+                        <div
+                          key={t.id}
+                          title={`${t.title}${assignee ? ` — ${assignee.name}` : ''}`}
+                          className="truncate rounded bg-mirai-hover px-1 py-0.5 text-[9px] text-mirai-dim"
+                        >
+                          <span
+                            className={cn('mr-1 inline-block h-1.5 w-1.5 rounded-full', PRIORITY_DOT[t.priority])}
+                          />
+                          {t.title}
+                        </div>
+                      )
+                    })}
+                    {due.length > 3 && (
+                      <p className="px-1 text-[8px] text-mirai-faint">+{due.length - 3} more</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <div className="rounded-lg border border-mirai-line bg-mirai-panel p-3">
+        <p className="mb-2 text-[10px] font-bold tracking-wider text-mirai-faint uppercase">
+          No due date ({undated.length})
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {undated.length === 0 && <p className="text-[10px] text-mirai-faint">Every task has a due date.</p>}
+          {undated.map((t) => (
+            <span key={t.id} className="rounded bg-mirai-hover px-1.5 py-0.5 text-[9px] text-mirai-dim">
+              {t.title}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 

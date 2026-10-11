@@ -127,11 +127,15 @@ export {
   SubtitlePatch,
   parseSrt,
   parseVtt,
+  parseAss,
   writeSrt,
   writeVtt,
+  writeAss,
   parseTimecode,
   formatSrtTime,
   formatVttTime,
+  formatAssTime,
+  parseAssTime,
   cueAt,
 } from './entities/subtitle'
 export type { SubtitleCue } from './entities/subtitle'

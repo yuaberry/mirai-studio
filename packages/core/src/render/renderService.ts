@@ -23,6 +23,7 @@ import type { TimelineService } from '../timeline/timelineService'
 import type { CreativeService } from '../creative/creativeService'
 import type { SubtitleService } from '../subtitles/subtitleService'
 import { buildSceneRenderSpec } from './sceneRenderBuilder'
+import { ffmpegBin, ffprobeBin } from './ffmpegBin'
 
 export interface RenderOptions {
   shotId: EntityId
@@ -57,7 +58,7 @@ export class RenderService {
   /** Detects FFmpeg availability and version (one-time, sync is fine). */
   static detect(): { available: boolean; version: string | null } {
     try {
-      const result = spawnSync('ffmpeg', ['-version'], {
+      const result = spawnSync(ffmpegBin(), ['-version'], {
         encoding: 'utf8',
         timeout: 5_000,
         windowsHide: true,
@@ -172,7 +173,7 @@ export class RenderService {
 
     // ---- Execute FFmpeg -----------------------------------------------------------
     return new Promise<RenderResult>((resolve, reject) => {
-      const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+      const proc = spawn(ffmpegBin(), args, { stdio: ['ignore', 'pipe', 'pipe'] })
       let stderr = ''
 
       proc.stderr.on('data', (chunk: Buffer) => {
@@ -492,7 +493,7 @@ export class RenderService {
   ): Promise<void> {
     const span = toPct - fromPct
     return new Promise<void>((resolve, reject) => {
-      const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] })
+      const proc = spawn(ffmpegBin(), args, { stdio: ['ignore', 'ignore', 'pipe'] })
       let stderr = ''
       let lastPct = fromPct
       proc.stderr.on('data', (chunk: Buffer) => {
@@ -531,7 +532,7 @@ export class RenderService {
   /** ffprobe duration (null when unavailable). */
   probeDuration(outputPath: string): number | null {
     try {
-      const res = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', outputPath], {
+      const res = spawnSync(ffprobeBin(), ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', outputPath], {
         encoding: 'utf8',
         timeout: 15_000,
         windowsHide: true,
@@ -595,7 +596,7 @@ export class RenderService {
   probeResolution(path: string): string | null {
     try {
       const res = spawnSync(
-        'ffprobe',
+        ffprobeBin(),
         ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', path],
         { encoding: 'utf8', timeout: 15_000, windowsHide: true },
       )

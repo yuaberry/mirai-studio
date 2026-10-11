@@ -17,6 +17,7 @@ import {
   type KeyframeRecord,
   type TimelineBundle,
 } from '@mirai/shared'
+import { ffmpegSource } from '../src/render/ffmpegBin'
 import { CreativeService } from '../src/creative/creativeService'
 import { MediaService } from '../src/media/mediaService'
 import { RenderService } from '../src/render/renderService'
@@ -162,6 +163,15 @@ const noProgress = () => undefined
 const noAbort = { aborted: false }
 
 // ---------------------------------------------------------------- builder
+
+describe('ffmpeg binary resolution', () => {
+  it('prefers the bundled build when present and detects its version', () => {
+    expect(ffmpegSource()).toBe('bundled')
+    const d = RenderService.detect()
+    expect(d.available).toBe(true)
+    expect(d.version).toMatch(/^[0-9a-z.-]+$/)
+  })
+})
 
 describe('sceneRenderBuilder (pure)', () => {
   it('builds inputs, concat and silent-audio fallback for a plain scene', () => {

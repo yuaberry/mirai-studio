@@ -3,6 +3,7 @@
  * Detects: native SQLite, App DB reachability, secure storage, FFmpeg.
  */
 import { spawnSync } from 'node:child_process'
+import { ffmpegBin, ffmpegSource } from '@mirai/core'
 import { app } from 'electron'
 import DatabaseConstructor from 'better-sqlite3'
 import type { HealthReport } from '@mirai/shared'
@@ -19,17 +20,22 @@ interface Deps {
   secure: () => boolean
 }
 
-/** Locate FFmpeg once per session (Phase 0/2: system PATH; bundling arrives with Phase 6). */
+/** Locate FFmpeg once per session — bundled build first, then system PATH. */
 function detectFfmpeg(): HealthReport['ffmpeg'] {
   try {
-    const result = spawnSync('ffmpeg', ['-version'], {
+    const result = spawnSync(ffmpegBin(), ['-version'], {
       encoding: 'utf8',
       timeout: 4_000,
       windowsHide: true,
     })
     if (result.status === 0 && result.stdout) {
       const match = /ffmpeg version (\S+)/.exec(result.stdout)
-      return { found: true, path: 'ffmpeg', version: match?.[1] ?? 'unknown' }
+      const source = ffmpegSource()
+      return {
+        found: true,
+        path: source === 'bundled' ? ffmpegBin() : 'ffmpeg (system PATH)',
+        version: match?.[1] ?? 'unknown',
+      }
     }
   } catch {
     // fallthrough

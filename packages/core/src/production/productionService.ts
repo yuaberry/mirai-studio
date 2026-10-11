@@ -46,6 +46,7 @@ interface TaskRow {
   link_type: string | null
   link_id: string | null
   assignee_id: string | null
+  due_date: string | null
   created_at: string
   updated_at: string
 }
@@ -112,8 +113,8 @@ export class ProductionService {
     this.db
       .prepare(
         `INSERT INTO tasks
-         (id, title, description, status, priority, order_index, link_type, link_id, assignee_id, created_at, updated_at)
-         VALUES (?, ?, ?, 'TODO', ?, ?, ?, ?, ?, ?, ?)`,
+         (id, title, description, status, priority, order_index, link_type, link_id, assignee_id, due_date, created_at, updated_at)
+         VALUES (?, ?, ?, 'TODO', ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -124,6 +125,7 @@ export class ProductionService {
         parsed.linkType ?? null,
         parsed.linkId ?? null,
         parsed.assigneeId ?? null,
+        parsed.dueDate ?? null,
         now,
         now,
       )
@@ -142,7 +144,7 @@ export class ProductionService {
     this.db
       .prepare(
         `UPDATE tasks
-         SET title = ?, description = ?, priority = ?, link_type = ?, link_id = ?, assignee_id = ?, updated_at = ?
+         SET title = ?, description = ?, priority = ?, link_type = ?, link_id = ?, assignee_id = ?, due_date = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -152,6 +154,7 @@ export class ProductionService {
         parsed.linkType !== undefined ? parsed.linkType : task.linkType,
         parsed.linkId !== undefined ? parsed.linkId : task.linkId,
         parsed.assigneeId !== undefined ? parsed.assigneeId : task.assigneeId,
+        parsed.dueDate !== undefined ? parsed.dueDate : task.dueDate,
         this.clock.isoNow(),
         id,
       )
@@ -632,6 +635,7 @@ function rowToTask(row: TaskRow): TaskRecord {
     linkType: (row.link_type ?? null) as TaskRecord['linkType'],
     linkId: (row.link_id ?? null) as TaskRecord['linkId'],
     assigneeId: (row.assignee_id ?? null) as TaskRecord['assigneeId'],
+    dueDate: row.due_date ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

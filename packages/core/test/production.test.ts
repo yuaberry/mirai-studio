@@ -33,6 +33,27 @@ function makeEnv(name: string) {
 }
 
 describe('task board', () => {
+  it('sets, clears and round-trips due dates', () => {
+    const env = makeEnv('due-dates')
+    const task = env.production.createTask({ title: 'Ship episode 1', priority: 'HIGH' })
+    expect(task.dueDate).toBeNull()
+
+    const dated = env.production.updateTask(task.id, { dueDate: '2026-10-31' })
+    expect(dated.dueDate).toBe('2026-10-31')
+
+    // Re-read from the DB — the migration column must persist.
+    expect(env.production.getTask(task.id).dueDate).toBe('2026-10-31')
+
+    // Clearing via null works; other fields survive.
+    const cleared = env.production.updateTask(task.id, { dueDate: null, priority: 'CRITICAL' })
+    expect(cleared.dueDate).toBeNull()
+    expect(cleared.priority).toBe('CRITICAL')
+
+    // Create with a due date from the start.
+    const born = env.production.createTask({ title: 'Calendar entry', dueDate: '2026-11-05' })
+    expect(born.dueDate).toBe('2026-11-05')
+  })
+
   it('creates, patches, moves between columns and deletes', () => {
     const env = makeEnv('tasks')
     const task = env.production.createTask({ title: 'Storyboard the climax', priority: 'HIGH' })

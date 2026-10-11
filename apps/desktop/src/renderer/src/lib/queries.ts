@@ -1063,7 +1063,7 @@ export function useSubtitleMutations(sceneId: string | undefined) {
       onSuccess: invalidate,
     }),
     exportFile: useMutation({
-      mutationFn: (format: 'srt' | 'vtt') =>
+      mutationFn: (format: 'srt' | 'vtt' | 'ass') =>
         invoke('subtitles:exportFile', { sceneId: sceneId!, format }).then((r) => r.path),
       onSuccess: invalidate,
     }),

@@ -118,7 +118,7 @@ export function RenderPage() {
       {!renderStatus?.available && (
         <div className="panel mb-5 border-amber-400/30 bg-amber-400/5">
           <p className="text-xs text-amber-300">
-            FFmpeg wasn't found on this system. Install it (e.g. <code>sudo apt install ffmpeg</code>)
+            FFmpeg wasn't found — this should not happen on the official build (a bundled copy ships with the app). Install it (e.g. <code>sudo apt install ffmpeg</code>)
             and restart the app to enable rendering.
           </p>
         </div>

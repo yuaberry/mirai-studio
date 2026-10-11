@@ -45,7 +45,7 @@ export function SubtitlesPage() {
         <div>
           <h1 className="font-display text-xl font-bold text-mirai-text">Subtitles</h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-mirai-dim">
-            Per-scene subtitle cues. Import real .srt/.vtt files, fine-tune timing,
+            Per-scene subtitle cues. Import real .srt/.vtt/.ass files, fine-tune timing,
             export delivery files — and scene renders burn them in automatically.
           </p>
         </div>
@@ -99,7 +99,7 @@ export function SubtitlesPage() {
               })
             }
           >
-            <Upload className="h-3.5 w-3.5" /> Import .srt/.vtt
+            <Upload className="h-3.5 w-3.5" /> Import .srt/.vtt/.ass
           </Button>
           <Button
             size="sm"
@@ -121,14 +121,33 @@ export function SubtitlesPage() {
             size="sm"
             variant="outline"
             disabled={!sceneId || (subtitles ?? []).length === 0}
+            loading={mutations.exportFile.isPending}
             onClick={() =>
               mutations.exportFile.mutate('vtt', {
                 onSuccess: (path) =>
                   toast({ kind: 'success', title: 'Exported', description: path }),
+                onError: (err) =>
+                  toast({ kind: 'error', title: 'Export failed', description: err.message }),
               })
             }
           >
             VTT
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!sceneId || (subtitles ?? []).length === 0}
+            loading={mutations.exportFile.isPending}
+            onClick={() =>
+              mutations.exportFile.mutate('ass', {
+                onSuccess: (path) =>
+                  toast({ kind: 'success', title: 'ASS exported', description: path }),
+                onError: (err) =>
+                  toast({ kind: 'error', title: 'Export failed', description: err.message }),
+              })
+            }
+          >
+            ASS
           </Button>
           <Button
             size="sm"
@@ -165,7 +184,7 @@ export function SubtitlesPage() {
           <EmptyState
             icon={<Captions className="h-5 w-5" />}
             title="No subtitles in this scene"
-            description="Import an .srt/.vtt file or add cues manually — they overlay in the Timeline preview and burn into scene renders."
+            description="Import an .srt/.vtt/.ass file or add cues manually — they overlay in the Timeline preview and burn into scene renders."
           />
         </div>
       ) : (

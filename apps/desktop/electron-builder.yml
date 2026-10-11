@@ -13,11 +13,14 @@ directories:
 files:
   - out/**
   - package.json
+  - resources/ffmpeg/**
 
 # Native modules must be unpacked from the asar archive to load.
+# The bundled LGPL FFmpeg binaries must also be unpacked to be spawnable.
 asar: true
 asarUnpack:
   - node_modules/better-sqlite3/**
+  - resources/ffmpeg/**
 
 # better-sqlite3 is already compiled against Electron's ABI by
 # `bun run rebuild:native` — skip the builder's own rebuild step.

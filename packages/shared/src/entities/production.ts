@@ -24,6 +24,10 @@ export const TASK_LINK_TYPES = ['SCENE', 'SHOT', 'EPISODE', 'CHARACTER', 'LOCATI
 export type TaskLinkType = (typeof TASK_LINK_TYPES)[number]
 export const zTaskLinkType = z.enum(TASK_LINK_TYPES)
 
+/** Calendar date (YYYY-MM-DD) — distinct from zIsoDate (full timestamp). */
+export const zDueDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD.')
+export type DueDate = z.infer<typeof zDueDate>
+
 export const TaskRecord = z.object({
   id: zEntityId,
   title: z.string().min(1).max(200),
@@ -35,6 +39,8 @@ export const TaskRecord = z.object({
   linkId: zEntityId.nullable(),
   /** Crew member id (or null = unassigned). */
   assigneeId: zEntityId.nullable(),
+  /** Calendar due date (YYYY-MM-DD, null = none). */
+  dueDate: zDueDate.nullable(),
   createdAt: zIsoDate,
   updatedAt: zIsoDate,
 })
@@ -47,6 +53,7 @@ export const TaskCreateInput = z.object({
   linkType: zTaskLinkType.optional(),
   linkId: zEntityId.optional(),
   assigneeId: zEntityId.optional(),
+  dueDate: zDueDate.optional(),
 })
 export type TaskCreateInput = z.infer<typeof TaskCreateInput>
 
@@ -58,6 +65,7 @@ export const TaskPatch = z
     linkType: zTaskLinkType.nullable().optional(),
     linkId: zEntityId.nullable().optional(),
     assigneeId: zEntityId.nullable().optional(),
+    dueDate: zDueDate.nullable().optional(),
   })
   .refine((p) => Object.keys(p).length > 0, { message: 'Patch is empty.' })
 export type TaskPatch = z.infer<typeof TaskPatch>

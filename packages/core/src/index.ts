@@ -41,6 +41,7 @@ export { MediaService } from './media/mediaService'
 
 // render (Phase 4)
 export { RenderService } from './render/renderService'
+export { ffmpegBin, ffprobeBin, ffmpegSource } from './render/ffmpegBin'
 export { buildSceneRenderSpec } from './render/sceneRenderBuilder'
 
 // timeline (Phase 5)

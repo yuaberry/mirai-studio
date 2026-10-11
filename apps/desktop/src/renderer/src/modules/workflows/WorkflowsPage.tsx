@@ -3,13 +3,13 @@
  * production review pipeline (Screenplay Analysis → Continuity Engine →
  * AI Director) with per-node results, plus run-all via the job queue.
  */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type {
   ContinuityFinding,
   DirectorNotes,
   ScreenplayAnalysis,
 } from '@mirai/shared'
-import { CheckCircle2, ChevronRight, Loader2, Play, Sparkles } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, GripHorizontal, Loader2, Play, Plus, Sparkles, X } from 'lucide-react'
 import {
   useAnalyzeScreenplay,
   useContinuityCheck,
@@ -30,6 +30,7 @@ export function WorkflowsPage() {
   const [episodeId, setEpisodeId] = useState('')
   const { data: scenes } = useScenes(episodeId || undefined)
   const [sceneId, setSceneId] = useState('')
+  const [view, setView] = useState<'pipeline' | 'builder'>('pipeline')
 
   useEffect(() => {
     if (!episodeId && episodes && episodes.length > 0) setEpisodeId(episodes[0]!.id)
@@ -122,6 +123,26 @@ export function WorkflowsPage() {
             (Style Bible discipline, consent-scoped scene data).
           </p>
         </div>
+        <div className="flex overflow-hidden rounded-md border border-mirai-line">
+          <button
+            className={cn(
+              'px-3 py-1.5 text-[10px] font-semibold transition-colors',
+              view === 'pipeline' ? 'bg-mirai-pink/15 text-mirai-pink' : 'text-mirai-dim hover:text-mirai-text',
+            )}
+            onClick={() => setView('pipeline')}
+          >
+            Pipeline
+          </button>
+          <button
+            className={cn(
+              'px-3 py-1.5 text-[10px] font-semibold transition-colors',
+              view === 'builder' ? 'bg-mirai-pink/15 text-mirai-pink' : 'text-mirai-dim hover:text-mirai-text',
+            )}
+            onClick={() => setView('builder')}
+          >
+            Node Builder
+          </button>
+        </div>
       </div>
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
@@ -159,6 +180,8 @@ export function WorkflowsPage() {
             description="Create a scene with a screenplay — the workflows analyze real content."
           />
         </div>
+      ) : view === 'builder' ? (
+        <WorkflowBuilder sceneId={sceneId} />
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {nodes.map((node, i) => {
@@ -311,6 +334,288 @@ function DirectorResult({ result }: { result: DirectorNotes }) {
           </ul>
         </div>
       )}
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ node builder
+// Phase 8 completion: drag-and-drop node EDITING beyond the fixed runner.
+// The user composes their own chain (add/remove/reorder/drag), positions are
+// persisted locally, and Run executes the chain sequentially on the scene.
+
+type BuilderNodeType = 'analysis' | 'continuity' | 'director'
+
+interface BuilderNode {
+  key: string
+  type: BuilderNodeType
+  x: number
+  y: number
+}
+
+const BUILDER_LS_KEY = 'mirai-workflow-builder-v1'
+
+const NODE_META: Record<BuilderNodeType, { title: string; desc: string; tone: string }> = {
+  analysis: {
+    title: 'Screenplay Analysis',
+    desc: 'Pacing, dialogue quality, repetition, voice notes.',
+    tone: 'border-mirai-pink/50',
+  },
+  continuity: {
+    title: 'Continuity Engine',
+    desc: 'Costume/location/temporal contradictions.',
+    tone: 'border-emerald-400/50',
+  },
+  director: {
+    title: 'AI Director',
+    desc: 'Narrative, composition, rhythm, camera notes.',
+    tone: 'border-mirai-violet/50',
+  },
+}
+
+const NODE_W = 250
+const NODE_H = 110
+
+function loadNodes(): BuilderNode[] {
+  try {
+    const raw = localStorage.getItem(BUILDER_LS_KEY)
+    if (!raw) throw new Error('empty')
+    const parsed = JSON.parse(raw) as BuilderNode[]
+    if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('empty')
+    return parsed
+  } catch {
+    // Sensible default chain: analysis → continuity → director.
+    return [
+      { key: 'n1', type: 'analysis', x: 40, y: 40 },
+      { key: 'n2', type: 'continuity', x: 360, y: 40 },
+      { key: 'n3', type: 'director', x: 680, y: 40 },
+    ]
+  }
+}
+
+function WorkflowBuilder({ sceneId }: { sceneId: string }) {
+  const [nodes, setNodes] = useState<BuilderNode[]>(loadNodes)
+  const [running, setRunning] = useState(false)
+  const [activeKey, setActiveKey] = useState<string | null>(null)
+  const [results, setResults] = useState<Record<string, 'ok' | 'error' | 'running'>>({})
+  const dragRef = useRef<{ key: string; dx: number; dy: number } | null>(null)
+
+  const analysis = useAnalyzeScreenplay()
+  const continuity = useContinuityCheck()
+  const director = useDirectorNotes()
+  const runners: Record<BuilderNodeType, (id: string) => Promise<unknown>> = {
+    analysis: (id) => analysis.mutateAsync(id),
+    continuity: (id) => continuity.mutateAsync(id),
+    director: (id) => director.mutateAsync(id),
+  }
+
+  useEffect(() => {
+    localStorage.setItem(BUILDER_LS_KEY, JSON.stringify(nodes))
+  }, [nodes])
+
+  const addNode = (type: BuilderNodeType) => {
+    setNodes((ns) => [
+      ...ns,
+      {
+        key: `n${Date.now().toString(36)}`,
+        type,
+        x: 40 + (ns.length % 3) * 320,
+        y: 40 + Math.floor(ns.length / 3) * 180,
+      },
+    ])
+  }
+
+  const removeNode = (key: string) => {
+    setNodes((ns) => ns.filter((n) => n.key !== key))
+    setResults((r) => {
+      const copy = { ...r }
+      delete copy[key]
+      return copy
+    })
+  }
+
+  const moveNode = (key: string, dir: -1 | 1) => {
+    setNodes((ns) => {
+      const idx = ns.findIndex((n) => n.key === key)
+      const target = idx + dir
+      if (idx < 0 || target < 0 || target >= ns.length) return ns
+      const copy = [...ns]
+      const [item] = copy.splice(idx, 1)
+      copy.splice(target, 0, item!)
+      return copy
+    })
+  }
+
+  const onPointerMove = useCallback((e: PointerEvent) => {
+    const d = dragRef.current
+    if (!d) return
+    setNodes((ns) =>
+      ns.map((n) =>
+        n.key === d.key
+          ? { ...n, x: Math.max(0, e.clientX - d.dx), y: Math.max(0, e.clientY - d.dy) }
+          : n,
+      ),
+    )
+  }, [])
+
+  const onPointerUp = useCallback(() => {
+    dragRef.current = null
+    window.removeEventListener('pointermove', onPointerMove)
+    window.removeEventListener('pointerup', onPointerUp)
+  }, [onPointerMove])
+
+  const startDrag = (e: ReactPointerEvent, node: BuilderNode) => {
+    dragRef.current = { key: node.key, dx: e.clientX - node.x, dy: e.clientY - node.y }
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+  }
+
+  const runChain = async () => {
+    if (running || nodes.length === 0) return
+    setRunning(true)
+    try {
+      for (const node of nodes) {
+        setActiveKey(node.key)
+        setResults((r) => ({ ...r, [node.key]: 'running' }))
+        try {
+          await runners[node.type](sceneId)
+          setResults((r) => ({ ...r, [node.key]: 'ok' }))
+        } catch {
+          setResults((r) => ({ ...r, [node.key]: 'error' }))
+          break // stop the chain on the first failure
+        }
+      }
+    } finally {
+      setActiveKey(null)
+      setRunning(false)
+    }
+  }
+
+  const busy = analysis.isPending || continuity.isPending || director.isPending
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {(Object.keys(NODE_META) as BuilderNodeType[]).map((type) => (
+          <Button key={type} size="sm" variant="outline" disabled={running} onClick={() => addNode(type)}>
+            <Plus className="h-3.5 w-3.5" /> {NODE_META[type].title}
+          </Button>
+        ))}
+        <Button size="sm" variant="primary" className="ml-auto" disabled={running || nodes.length === 0} loading={running} onClick={runChain}>
+          <Play className="h-3.5 w-3.5" /> Run chain ({nodes.length})
+        </Button>
+      </div>
+
+      <div
+        className="relative min-h-72 overflow-hidden rounded-lg border border-mirai-line bg-mirai-base"
+        style={{
+          backgroundImage: 'radial-gradient(circle, rgba(138,147,178,0.15) 1px, transparent 1px)',
+          backgroundSize: '18px 18px',
+        }}
+      >
+        {nodes.length > 1 && (
+          <svg className="pointer-events-none absolute inset-0 h-full w-full">
+            {nodes.slice(0, -1).map((node, i) => {
+              const next = nodes[i + 1]!
+              return (
+                <line
+                  key={node.key}
+                  x1={node.x + NODE_W}
+                  y1={node.y + NODE_H / 2}
+                  x2={next.x}
+                  y2={next.y + NODE_H / 2}
+                  stroke="rgba(244,114,182,0.4)"
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                />
+              )
+            })}
+          </svg>
+        )}
+        {nodes.map((node, i) => {
+          const meta = NODE_META[node.type]
+          const state = results[node.key]
+          return (
+            <div
+              key={node.key}
+              className={cn(
+                'absolute w-64 cursor-grab touch-none rounded-lg border bg-mirai-panel p-3 shadow-lg shadow-black/30 select-none active:cursor-grabbing',
+                meta.tone,
+                state === 'running' && 'ring-2 ring-mirai-pink/60',
+              )}
+              style={{ left: node.x, top: node.y }}
+              onPointerDown={(e) => startDrag(e, node)}
+            >
+              <div className="mb-1 flex items-center justify-between gap-1">
+                <span className="flex items-center gap-1 text-[9px] font-bold tracking-widest text-mirai-faint uppercase">
+                  <GripHorizontal className="h-3 w-3" /> step {i + 1}
+                </span>
+                <span className="flex items-center gap-0.5">
+                  <button
+                    className="rounded p-0.5 text-mirai-faint transition-colors hover:text-mirai-text"
+                    title="Move earlier in the chain"
+                    disabled={i === 0 || running}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      moveNode(node.key, -1)
+                    }}
+                  >
+                    <ChevronLeft />
+                  </button>
+                  <button
+                    className="rounded p-0.5 text-mirai-faint transition-colors hover:text-mirai-text"
+                    title="Move later in the chain"
+                    disabled={i === nodes.length - 1 || running}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      moveNode(node.key, 1)
+                    }}
+                  >
+                    <ChevronRight />
+                  </button>
+                  <button
+                    className="rounded p-0.5 text-mirai-faint transition-colors hover:text-red-400"
+                    title="Remove node"
+                    disabled={running}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeNode(node.key)
+                    }}
+                  >
+                    <X />
+                  </button>
+                </span>
+              </div>
+              <p className="text-xs font-bold text-mirai-text">{meta.title}</p>
+              <p className="mt-0.5 text-[10px] leading-snug text-mirai-faint">{meta.desc}</p>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[9px] font-bold tracking-widest text-mirai-faint uppercase">
+                  {state === 'ok' ? (
+                    <span className="text-emerald-300">done</span>
+                  ) : state === 'error' ? (
+                    <span className="text-red-400">failed — chain stopped</span>
+                  ) : state === 'running' || activeKey === node.key ? (
+                    <span className="text-mirai-pink">running…</span>
+                  ) : (
+                    'idle'
+                  )}
+                </span>
+                {state === 'running' && <Loader2 className="h-3.5 w-3.5 animate-spin text-mirai-pink" />}
+                {state === 'ok' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />}
+              </div>
+            </div>
+          )
+        })}
+        {nodes.length === 0 && (
+          <div className="flex h-72 items-center justify-center text-xs text-mirai-faint">
+            Add nodes above to compose your own pipeline — drag to arrange, arrows to reorder.
+          </div>
+        )}
+      </div>
+      <p className="text-[10px] leading-relaxed text-mirai-faint">
+        The chain runs top-to-bottom in step order and stops at the first failure. Node positions are
+        remembered locally. Drag anywhere on a card to move it.
+        {busy && <span className="ml-1 text-mirai-pink">A node is executing…</span>}
+      </p>
     </div>
   )
 }

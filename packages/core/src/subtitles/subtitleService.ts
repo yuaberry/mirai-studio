@@ -8,8 +8,10 @@ import {
   MiraiError,
   parseSrt,
   parseVtt,
+  parseAss,
   writeSrt,
   writeVtt,
+  writeAss,
   SubtitleInput,
   SubtitlePatch,
   SubtitleRecord,
@@ -96,8 +98,11 @@ export class SubtitleService {
     } catch {
       throw new MiraiError('PATH_INVALID', `Subtitle file not readable: ${sourcePath}`)
     }
-    const isVtt = /\.vtt$/i.test(sourcePath)
-    const cues = isVtt ? parseVtt(content) : parseSrt(content)
+    const cues = /\.ass$/i.test(sourcePath)
+      ? parseAss(content)
+      : /\.vtt$/i.test(sourcePath)
+        ? parseVtt(content)
+        : parseSrt(content)
     if (cues.length === 0) {
       throw new MiraiError('VALIDATION_ERROR', 'No cues found in the subtitle file.')
     }
@@ -119,7 +124,7 @@ export class SubtitleService {
   }
 
   /** Export the scene's cues to a real file in the project's exports/ folder. */
-  exportFile(sceneId: EntityId, format: 'srt' | 'vtt'): { path: string; count: number } {
+  exportFile(sceneId: EntityId, format: 'srt' | 'vtt' | 'ass'): { path: string; count: number } {
     this.requireScene(sceneId)
     const cues = this.list(sceneId)
     if (cues.length === 0) {
@@ -131,10 +136,13 @@ export class SubtitleService {
     const sceneTitle = this.sceneTitle(sceneId)
     const safe = sceneTitle.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').toLowerCase() || 'scene'
     const path = join(exportsDir, `subtitles-${safe}-${stamp}.${format}`)
+    const plain = cues.map((c) => ({ startSec: c.startSec, endSec: c.endSec, text: c.text }))
     const payload =
       format === 'srt'
-        ? writeSrt(cues.map((c) => ({ startSec: c.startSec, endSec: c.endSec, text: c.text })))
-        : writeVtt(cues.map((c) => ({ startSec: c.startSec, endSec: c.endSec, text: c.text })))
+        ? writeSrt(plain)
+        : format === 'ass'
+          ? writeAss(plain)
+          : writeVtt(plain)
     writeFileSync(path, payload, 'utf8')
     return { path, count: cues.length }
   }
