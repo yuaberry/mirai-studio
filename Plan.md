@@ -312,6 +312,12 @@ cloud-only infrastructure — explicitly out of scope for local-first v1:
       equivalents: gyan.dev full builds / everbuild — pick at port time and keep
       shipping the license text + source pointer)
 
+### Completed in v0.13.1 (quality pass)
+- [x] QC: task-overdue + scene-subtitle-overlap checks (with tests)
+- [x] i18n: ALL page headers + Settings General wired (pt-BR surface complete)
+- [x] Overdue badge on task cards
+- [x] fetch-ffmpeg platform-aware (win/mac URLs config-ready, marked UNTESTED)
+
 ### Completed in v0.13.0 (the last roadmap gaps)
 - [x] ASS (Advanced SubStation) subtitles — codec in shared, service + UI
 - [x] Task due dates + calendar view — migration 0011 + TasksTab Calendar
@@ -394,6 +400,7 @@ phase, update the checklist in the same session.
 44. **The masquerade corruption**: a `}` silently replaced by `"` inside JSX (`onClick={onClose"`) breaks tsc AND esbuild at a line that LOOKS perfectly clean in sed/cat -A output — because eyes read what they expect. NEVER verify JSX by eyeball: run `bunx esbuild <file> --outfile=/dev/null --loader:.tsx=tsx` (2s) after every scripted edit batch. During the hunt, git stash/checkout/apply cycles MUTATED the file further — after ANY restore cycle, re-verify the whole file parses before debugging content.
 45. **Python heredoc edits on TSX are radioactive**: two silent corruptions in ONE session (SubtitlesPage + ProductionPage), both in re-emitted JSX blocks. Rule: python is fine for .ts/.json/yaml anchors; for TSX use the Edit tool (exact oldString matching fails loudly, no escaping layers).
 46. **`__dirname` depth math**: from packages/core/src/render, THREE `..` = packages/, not the repo root — probe with a temp test printing computed paths instead of assuming; vitest provides __dirname per real file location.
+49. **Dictionary keys silently duplicate**: adding a key that already exists = TS1117 (lucky) — but the SAME key added twice in one dict only errors at typecheck; grep the dict for the key before adding ('Episodes' duplicated within one session). Translation wiring: prefer the `<T k>` component for static JSX — zero hook surgery per page, key falls back to English automatically.
 48. **Verify the LICENSE you actually bundled**: 'download the LGPL build' → the tarball ships GPLv3.txt because libx264 (needed for H.264 encoding!) is GPL — LGPL FFmpeg can't encode H.264. The legal posture is separate-process invocation + shipping the license + source pointer. NEVER write licensing claims in docs/release notes without checking the tarball contents first.
 47. **ELECTRON_RUN_AS_NODE still has process.resourcesPath** (electron dist resources) — resource resolvers must try ALL candidate dirs (asar-unpacked, direct, dev repo), never return on the first dir found.
 43. **Invisible scrollbars on dark UIs**: #2a3040 on #0a0c10 is invisible to many users — thumbs need ~#4a5478 minimum, with hover/active states; test scroll containers visually on every theme change.
@@ -457,6 +464,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.9.0 | Phase 9 | Plugin system (strict manifests, enforced permissions, bundled examples), Provider SDK (declarative, user-applied), marketplace foundation, palette/prompt/preset deep integration, timeline undo/redo — ROADMAP COMPLETE |
 | v0.10.0 | Pro features | Mature Content Mode (Ed25519 license keys, conscientization, adults-only enforcement in code, mature genres), Blender bridge (attach .blend → headless render → shot video), Producer Agent (idea → full episode end-to-end) |
 | v0.10.1 | Polish | Website professional redesign (CSS app mockup, producer terminal, 12-card studio grid, full pipeline, Pro section, changelog; FIXED broken v0.2.1 download links), Hub capabilities strip, header genre/rating chips + Produce Episode CTA, sidebar version footer, richer EmptyStates, ambient gradients |
+| v0.13.1 | Quality pass | QC: task-overdue (CRITICAL=ERROR) + scene-subtitle-overlap checks; i18n now covers ALL visible surfaces (17 page h1s via new `<T>` component in system/T.tsx + SettingsPage General card wired — keys existed but were never called); overdue badge on board cards; fetch-ffmpeg platform-aware (win/mac config-ready, UNTESTED flag); 179 tests (core 131) |
 | v0.13.0 | Backlog complete | ASS subtitles (V4+ codec, import/export, 5 tests), task due dates + Calendar view (migration 0011), BUNDLED GPL FFmpeg 7.0.2 (libx264, separate-process, license included) (fetch-ffmpeg.mjs at package time, ffmpegBin resolver: env → asar.unpacked → resources → dev → PATH; renders work with no system FFmpeg), Workflows Node Builder (drag-drop canvas, chain reorder, sequential run, localStorage positions) |
 | v0.12.3 | Auto-fit + genres | appearance.autoFit (ON default): root font-size adapts to WINDOW HEIGHT on resize (12.5/13.5/14.5/16px breakpoints) — the UI shrinks itself on small screens; window double-clamped (useContentSize+center, post-ready-to-show hard clamp); visible scrollbars (#4a5478 thumbs); genres: 293 total (41 mature) |
 | v0.12.2 | Mature Mode advanced | QC adults-only on 18+ productions (ambiguous/minor cast = QC ERROR before runtime block), 3 adult style presets in the Style Bible (Sensual Bishoujo/Seinen Erotic/Dark Fantasy Succubus, Pro-gated), provider compatibility notes in ContentCard; FOUNDER LICENSE minted for yuaberry (10-year, features [mature], receipt at ~/MIRAI-STUDIO-PRO-KEY.txt) |
@@ -512,6 +520,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.13.0 — roadmap backlog COMPLETE (ASS subtitles, due dates + calendar, bundled FFmpeg, node builder). All original phases shipped; remaining items are cloud-only (out of local-first scope). Compact freely: this file carries the full state; after compaction ask 'read the Plan.md in the mirai-studio repo'.*
+*Last updated: v0.13.1 — quality pass done (QC checks, full pt-BR surface, overdue badge). Roadmap + backlog COMPLETE; remaining items are cloud-only (out of local-first scope) and win/mac builds (config-ready, untested). 179 tests green. Compact freely: this file carries the full state; after compaction ask 'read the Plan.md in the mirai-studio repo'.*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
