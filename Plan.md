@@ -301,55 +301,28 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 
 ---
 
-## 7. WHAT REMAINS (by phase)
+## 7. WHAT REMAINS (true state as of v0.13.0)
 
-### Phase 4 — Media (COMPLETE in v0.8.0)
-- [x] Subtitle Studio: SRT/VTT import/export + render burn-in — DONE
-- [x] Video generation provider contract + shot attach + preview + render — DONE
-- [x] Music assignment UI on scene editor — DONE
-- [ ] ASS (Advanced SubStation) format support — future polish
+Everything from the original roadmap phases is DONE. What remains is
+cloud-only infrastructure — explicitly out of scope for local-first v1:
 
-### Phase 6 — Render (DONE in v0.6.0 — remaining polish)
-- [x] Timeline → MP4 with camera/effects/audio mixdown — DONE (sceneRenderBuilder + FFmpeg)
-- [x] Episode render (lossless concat stitch) — DONE
-- [x] Export Center with professional presets — DONE
-- [x] Preview vs Master quality — DONE
-- [x] Render queue (JobQueue integration, progress, cancel) — DONE
-- [ ] Animated camera opacity curves in render (currently constant/fade-style only — zoompan/rotate fully animated)
-- [ ] Blend modes in render (preview-only for now — `blend` filter needs matched streams)
-- [ ] Render subtitle tracks (needs Phase 4 subtitle studio first)
-- [ ] Bundled FFmpeg (LGPL build licensing decision) — currently requires system FFmpeg with clear guidance
-- [x] **GATE: master flow END-TO-END** — PASSED (smoke step 31 renders a real 7s MP4)
+- [ ] Permission enforcement across MULTI-USER teams (needs cloud sync + auth)
+- [ ] Remote marketplace install with hosted registry (needs hosting infra)
+- [ ] Bundled FFmpeg for Windows/macOS builds (linux LGPL build done; Win/mac
+      equivalents: gyan.dev LGPL / everbuild — decide at port time)
 
-### Phase 7 — Production (DONE in v0.7.0 — remaining polish)
-- [x] Task board — DONE (kanban, drag, priorities, links, crew)
-- [x] Approval pipeline with audit — DONE (governed transitions + log)
-- [x] Entity versioning — DONE (snapshot/restore/diff, safety snapshots)
-- [x] QC automated checks — DONE (10 checks with fix hints)
-- [x] Production analytics dashboard — DONE
-- [x] Team roster — DONE (crew + assignment + audit actors)
-- [ ] Permission ENFORCEMENT per role (needs multi-user/cloud — Phase 9)
-- [ ] Task due dates + calendar view (future polish)
+### Completed in v0.13.0 (the last roadmap gaps)
+- [x] ASS (Advanced SubStation) subtitles — codec in shared, service + UI
+- [x] Task due dates + calendar view — migration 0011 + TasksTab Calendar
+- [x] Bundled FFmpeg (LGPL static) — no system FFmpeg needed anymore
+- [x] Visual Workflow Builder node editing — drag-drop canvas in Workflows
 
-### Phase 8 — Advanced AI
-- [ ] AI Director: analyzes narrative, composition, rhythm, emotion, camera — suggests changes
-- [ ] Continuity Engine: detects wrong costume, impossible location, temporal inconsistencies, etc.
-- [ ] Multi-agent orchestration (Director, Writer, Character Designer, Background Artist, etc.)
-- [ ] Visual Workflow Builder: connected nodes (Input → Writer → Continuity → Storyboard → Image Gen → Video Gen → Voice → Render)
-- [ ] AI Screenplay Analyzer: pacing, dialogue quality, repetition, character voice consistency
-
-### Phase 9 — Extensibility (DONE in v0.9.0)
-- [x] Plugin API with permission model — DONE (enforced end-to-end)
-- [x] Provider SDK for community adapters — DONE (declarative, user-applied)
-- [x] Marketplace foundation — DONE (curated registry + docs)
-- [ ] Drag-and-drop marketplace browser with remote install (needs hosting infra — beyond local-first v1)
-- [ ] Permission enforcement across MULTI-USER teams (needs cloud sync)
-
-### Post-roadmap polish backlog (all optional)
-- [ ] ASS (Advanced SubStation) subtitle format
-- [ ] Drag-and-drop workflow builder (node EDITING beyond the v0.8 runner)
-- [ ] Bundled FFmpeg (LGPL licensing decision)
-- [ ] Task due dates + calendar view
+### Historical note (was STALE before v0.13.0)
+Phase 8 AI (Director notes, Continuity Engine, Screenplay Analyzer, personas,
+production review orchestration, workflows runner) and render polish (animated
+camera opacity curves, blend-mode compositing) shipped in v0.8.0 — but this
+file's old WHAT-REMAINS checklist still listed them. Lesson: when finishing a
+phase, update the checklist in the same session.
 
 ## 8. KEY ARCHITECTURAL DECISIONS (ADRs)
 
@@ -417,6 +390,10 @@ All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests 
 40b. **Solid-color clips compress brutally**: a 4K CRF-14 render of a solid-color frame can be < 20KB — size floors in render tests must account for content trivially compressible (8KB floor), not bitrate expectations.
 41. **"Still too big" reports usually mean an OLD BUILD**: screen fixes land only after the user installs the new release — always tell them WHICH version to download, and make the fix self-acting (autoFit) so no setting hunt is needed. When clamping windows, ALSO hard-clamp after ready-to-show (WMs restore session sizes) and use useContentSize (title bars steal height otherwise).
 42. **Genre taxonomy = TWO lists**: ANIME_GENRES (genres.ts) holds the tags; MATURE_GENRES (license.ts) gates the adult block via filterGenres — add mature tags to BOTH or the filter and QC classification drift. Currently 293/41.
+44. **The masquerade corruption**: a `}` silently replaced by `"` inside JSX (`onClick={onClose"`) breaks tsc AND esbuild at a line that LOOKS perfectly clean in sed/cat -A output — because eyes read what they expect. NEVER verify JSX by eyeball: run `bunx esbuild <file> --outfile=/dev/null --loader:.tsx=tsx` (2s) after every scripted edit batch. During the hunt, git stash/checkout/apply cycles MUTATED the file further — after ANY restore cycle, re-verify the whole file parses before debugging content.
+45. **Python heredoc edits on TSX are radioactive**: two silent corruptions in ONE session (SubtitlesPage + ProductionPage), both in re-emitted JSX blocks. Rule: python is fine for .ts/.json/yaml anchors; for TSX use the Edit tool (exact oldString matching fails loudly, no escaping layers).
+46. **`__dirname` depth math**: from packages/core/src/render, THREE `..` = packages/, not the repo root — probe with a temp test printing computed paths instead of assuming; vitest provides __dirname per real file location.
+47. **ELECTRON_RUN_AS_NODE still has process.resourcesPath** (electron dist resources) — resource resolvers must try ALL candidate dirs (asar-unpacked, direct, dev repo), never return on the first dir found.
 43. **Invisible scrollbars on dark UIs**: #2a3040 on #0a0c10 is invisible to many users — thumbs need ~#4a5478 minimum, with hover/active states; test scroll containers visually on every theme change.
 40. **i18n with English-source keys** (`t(locale, 'Project Hub')`): wiring is a one-line wrap per string; the dictionary lives in `lib/i18n.ts`; no code-splitting of translations needed. JSX replace pitfalls: `placeholder={x ?? tr('…')}` is valid, but sed-style replaces inside JSX braces produce nested quotes — always re-typecheck immediately after scripted label swaps.
 
@@ -478,6 +455,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.9.0 | Phase 9 | Plugin system (strict manifests, enforced permissions, bundled examples), Provider SDK (declarative, user-applied), marketplace foundation, palette/prompt/preset deep integration, timeline undo/redo — ROADMAP COMPLETE |
 | v0.10.0 | Pro features | Mature Content Mode (Ed25519 license keys, conscientization, adults-only enforcement in code, mature genres), Blender bridge (attach .blend → headless render → shot video), Producer Agent (idea → full episode end-to-end) |
 | v0.10.1 | Polish | Website professional redesign (CSS app mockup, producer terminal, 12-card studio grid, full pipeline, Pro section, changelog; FIXED broken v0.2.1 download links), Hub capabilities strip, header genre/rating chips + Produce Episode CTA, sidebar version footer, richer EmptyStates, ambient gradients |
+| v0.13.0 | Backlog complete | ASS subtitles (V4+ codec, import/export, 5 tests), task due dates + Calendar view (migration 0011), BUNDLED LGPL FFmpeg 7.0.2 (fetch-ffmpeg.mjs at package time, ffmpegBin resolver: env → asar.unpacked → resources → dev → PATH; renders work with no system FFmpeg), Workflows Node Builder (drag-drop canvas, chain reorder, sequential run, localStorage positions) |
 | v0.12.3 | Auto-fit + genres | appearance.autoFit (ON default): root font-size adapts to WINDOW HEIGHT on resize (12.5/13.5/14.5/16px breakpoints) — the UI shrinks itself on small screens; window double-clamped (useContentSize+center, post-ready-to-show hard clamp); visible scrollbars (#4a5478 thumbs); genres: 293 total (41 mature) |
 | v0.12.2 | Mature Mode advanced | QC adults-only on 18+ productions (ambiguous/minor cast = QC ERROR before runtime block), 3 adult style presets in the Style Bible (Sensual Bishoujo/Seinen Erotic/Dark Fantasy Succubus, Pro-gated), provider compatibility notes in ContentCard; FOUNDER LICENSE minted for yuaberry (10-year, features [mature], receipt at ~/MIRAI-STUDIO-PRO-KEY.txt) |
 | v0.12.1 | pt-BR + adaptive window | ROOT-CAUSE fix: window was FIXED 1440×900 (bigger than laptop screens!) — now clamped to workArea + auto-maximize on small screens; scrollable modals (sticky header/footer, overflow content); i18n foundation with pt-BR translation (nav, Hub, New Project, Settings; t(locale,key) with English-source keys in lib/i18n.ts) |
@@ -532,6 +510,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.12.3 — auto-fit UI + bulletproof window + visible scrollbars + 293 genres. POST-MVP. Compact freely: this file carries the full state; after compaction ask 'read the Plan.md in the mirai-studio repo'.*
+*Last updated: v0.13.0 — roadmap backlog COMPLETE (ASS subtitles, due dates + calendar, bundled FFmpeg, node builder). All original phases shipped; remaining items are cloud-only (out of local-first scope). Compact freely: this file carries the full state; after compaction ask 'read the Plan.md in the mirai-studio repo'.*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
