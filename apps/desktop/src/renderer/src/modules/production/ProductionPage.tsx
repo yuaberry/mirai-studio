@@ -52,12 +52,13 @@ import { Button, Input, Label, Select, Spinner } from '../../system/ui'
 import { ConfirmModal, Modal } from '../../system/Modal'
 import { EmptyState } from '../../system/EmptyState'
 import { cn } from '../../lib/utils'
+import { usePersistedState } from '../../lib/usePersistedState'
 import { T } from '../../system/T'
 
 type Tab = 'dashboard' | 'tasks' | 'approvals'
 
 export function ProductionPage() {
-  const [tab, setTab] = useState<Tab>('dashboard')
+  const [tab, setTab] = usePersistedState<Tab>('production.tab', 'dashboard')
   return (
     <div className="mx-auto w-full max-w-7xl px-8 py-8">
       <div className="mb-5 flex items-end justify-between">

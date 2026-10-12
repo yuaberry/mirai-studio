@@ -977,7 +977,7 @@ export function registerIpcHandlers(c: Container): void {
   // ---------------------------------------------------------------- settings
   handleIpc('settings:get', () => ({ settings: c.settings.get() }))
 
-  handleIpc('settings:update', (req) => ({ settings: c.settings.update(req.settings) }))
+  handleIpc('settings:update', (req) => ({ settings: c.settings.patch(req.settings) }))
 
   // -------------------------------------------------------------- credentials
   handleIpc('credentials:set', (req) => {

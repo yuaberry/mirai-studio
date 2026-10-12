@@ -4,6 +4,7 @@
  * AI Director) with per-node results, plus run-all via the job queue.
  */
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { usePersistedState } from '../../lib/usePersistedState'
 import type {
   ContinuityFinding,
   DirectorNotes,
@@ -28,9 +29,9 @@ type NodeId = 'analysis' | 'continuity' | 'director'
 
 export function WorkflowsPage() {
   const { data: episodes } = useEpisodes()
-  const [episodeId, setEpisodeId] = useState('')
+  const [episodeId, setEpisodeId] = usePersistedState('workflows.episode', '')
   const { data: scenes } = useScenes(episodeId || undefined)
-  const [sceneId, setSceneId] = useState('')
+  const [sceneId, setSceneId] = usePersistedState('workflows.scene', '')
   const [view, setView] = useState<'pipeline' | 'builder'>('pipeline')
 
   useEffect(() => {

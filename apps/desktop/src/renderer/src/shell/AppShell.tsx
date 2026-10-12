@@ -3,6 +3,7 @@
  * Global shortcuts are registered here (spec §12).
  */
 import { useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { LucideIcon } from 'lucide-react'
 import {
   Activity,
@@ -27,7 +28,9 @@ import {
   Users,
   Wand2,
 } from 'lucide-react'
-import { isProjectView, useAppStore, type MainView } from '../store/appStore'
+import { isProjectView, PROJECT_VIEWS, useAppStore, type MainView, type ProjectView } from '../store/appStore'
+import type { AppSettingsPatch } from '@mirai/shared'
+import { invoke } from '../lib/ipc'
 import { cn } from '../lib/utils'
 import { Wordmark } from '../system/Logo'
 import { Kbd } from '../system/ui'
@@ -139,6 +142,7 @@ export function AppShell() {
   const setPaletteOpen = useAppStore((s) => s.setPaletteOpen)
   const { data: current } = useCurrentProject()
   const { data: settings } = useSettings()
+  const queryClient = useQueryClient()
 
   // RESPONSIVENESS: the whole suite is rem-based — scaling the root font-size
   // resizes every panel, text and spacing to fit any screen.
@@ -185,11 +189,65 @@ export function AppShell() {
     }
   }, [setPaletteOpen, setView])
 
-  // Opening a project navigates to its overview; closing returns to the hub.
+  // Opening a project navigates to its LAST ACTIVE VIEW when we have one
+  // recorded (session persistence — the user never loses their place);
+  // a fresh project lands on overview. Closing returns to the hub.
   useEffect(() => {
-    if (current && !isProjectView(view)) setView('overview')
+    if (current && !isProjectView(view)) {
+      const remembered = settings?.session.lastViewByProject[current.id]
+      const valid = remembered && (PROJECT_VIEWS as readonly string[]).includes(remembered)
+      setView(valid ? (remembered as ProjectView) : 'overview')
+    }
     if (!current && isProjectView(view)) setView('hub')
-  }, [current?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id])
+
+  // SESSION PERSISTENCE (v0.14): record the active view per project and the
+  // last opened project path so the next launch resumes where the user was.
+  // Debounced — rapid navigation only writes the final destination.
+  useEffect(() => {
+    if (!settings) return
+    const timer = setTimeout(() => {
+      const patch: AppSettingsPatch = { session: { ...settings.session, lastProjectPath: current?.path ?? settings.session.lastProjectPath } }
+      if (current && isProjectView(view)) {
+        patch.session = {
+          ...patch.session!,
+          lastViewByProject: { ...settings.session.lastViewByProject, [current.id]: view },
+        }
+      }
+      void invoke('settings:update', { settings: patch }).catch(() => {
+        /* session state is best-effort — never block navigation on it */
+      })
+    }, 600)
+    return () => clearTimeout(timer)
+    // `current` is read via current?.id/current?.path — the full object is
+    // intentionally not a dependency (no re-fire on unrelated refreshes).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, current?.id, current?.path, settings])
+
+  // RESUME ON LAUNCH: quietly reopen the last project so the user picks up
+  // exactly where they left off instead of starting from the Hub.
+  useEffect(() => {
+    const lastPath = settings?.session.lastProjectPath
+    if (!lastPath || current) return
+    let cancelled = false
+    void invoke('projects:open', { path: lastPath })
+      .then(() => {
+        if (!cancelled) {
+          void queryClient.invalidateQueries({ queryKey: ['project'] })
+          void queryClient.invalidateQueries({ queryKey: ['projects'] })
+        }
+      })
+      .catch(() => {
+        /* the project may have moved/deleted — stay on the Hub quietly */
+      })
+    return () => {
+      cancelled = true
+    }
+    // Run once per launch, after settings load. `current` is intentionally
+    // NOT a dependency: re-running on project load would reopen in a loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings?.session.lastProjectPath])
 
   return (
     <div className="flex h-screen flex-col bg-mirai-base">
@@ -219,7 +277,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                v0.13.1
+                v0.14.0
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio"

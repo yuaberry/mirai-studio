@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { MiraiError } from '@mirai/shared'
+import { MiraiError, AppSettingsPatch } from '@mirai/shared'
 import { openDatabase } from '../src/db/connection'
 import { runMigrations } from '../src/db/migrator'
 import { APP_DB_MIGRATIONS } from '../src/db/migrations'
@@ -54,6 +54,71 @@ describe('SettingsService', () => {
     expect(() =>
       service.update({ ...current, general: { ...current.general, autosaveIntervalMs: 1 } }),
     ).toThrow()
+    db.close()
+  })
+
+  it('patch() never clobbers sections it does not touch (license survival)', () => {
+    const db = makeDb('patch-protects')
+    const service = new SettingsService(db)
+
+    // "Activate" a license the way license:activate does (full write).
+    const withLicense = service.get()
+    const license = {
+      v: 1 as const,
+      holder: 'yuaberry — Mirai Studio Founder',
+      tier: 'pro' as const,
+      features: ['mature'] as ['mature'],
+      iat: 1_791_584_273,
+      exp: 2_106_944_273,
+    }
+    service.update({
+      ...withLicense,
+      content: { licenseKey: 'founder-key', license, matureEnabled: true, matureConfirmedAt: '2026-10-11T18:10:36.728Z' },
+    })
+
+    // A STALE renderer saves General — patch sends ONLY general+appearance.
+    // The old full-object writer would have wiped the license to defaults.
+    service.patch({
+      general: { ...withLicense.general, locale: 'pt-BR' },
+      appearance: { ...withLicense.appearance, uiScale: 1.1 },
+    })
+
+    const after = service.get()
+    expect(after.general.locale).toBe('pt-BR')
+    expect(after.appearance.uiScale).toBe(1.1)
+    expect(after.content.licenseKey).toBe('founder-key') // SURVIVED ✓
+    expect(after.content.matureEnabled).toBe(true) // SURVIVED ✓
+    expect(after.content.license?.holder).toBe(license.holder)
+
+    // The patch schema itself refuses/ignores content — the renderer cannot
+    // even express a content write through settings:update.
+    const patched = AppSettingsPatch.safeParse({ content: { licenseKey: 'hacked' } })
+    expect(patched.success).toBe(true)
+    if (patched.success) expect('content' in patched.data).toBe(false)
+    db.close()
+  })
+
+  it('patch() persists session state across a restart (same DB)', () => {
+    const db = makeDb('patch-session')
+    const service = new SettingsService(db)
+    service.patch({
+      session: {
+        lastViewByProject: { proj_1: 'timeline', proj_2: 'production' },
+        lastProjectPath: '/home/user/MiraiProjects/demo',
+      },
+    })
+
+    // "Restart" — a fresh service over the same DB.
+    const reloaded = new SettingsService(db).get()
+    expect(reloaded.session.lastViewByProject['proj_1']).toBe('timeline')
+    expect(reloaded.session.lastViewByProject['proj_2']).toBe('production')
+    expect(reloaded.session.lastProjectPath).toBe('/home/user/MiraiProjects/demo')
+
+    // A patch on ANOTHER section leaves session untouched.
+    service.patch({ general: { ...reloaded.general, locale: 'pt-BR' } })
+    const final = new SettingsService(db).get()
+    expect(final.session.lastProjectPath).toBe('/home/user/MiraiProjects/demo')
+    expect(final.session.lastViewByProject).toEqual({ proj_1: 'timeline', proj_2: 'production' })
     db.close()
   })
 })

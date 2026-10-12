@@ -4,14 +4,18 @@
  */
 import {
   AppSettings,
+  AppSettingsPatch,
   CREDENTIAL_KEYS,
   DEFAULT_APP_SETTINGS,
   MiraiError,
   type AppSettings as AppSettingsType,
   type CredentialKey,
 } from '@mirai/shared'
+import type { z } from 'zod'
 import type { Database } from '../db/connection'
 import { type Clock, type SecureCodec } from '../types'
+
+export type AppSettingsPatchInput = z.input<typeof AppSettingsPatch>
 
 const SETTINGS_KEY = 'app-settings'
 
@@ -40,6 +44,22 @@ export class SettingsService {
       )
       .run(SETTINGS_KEY, JSON.stringify(parsed))
     return parsed
+  }
+
+  /**
+   * SECTION-LEVEL PATCH (v0.14): only the sections present in the patch are
+   * written; everything else survives from the stored settings. This is the
+   * ONLY writer the renderer may use — a stale react-query cache can never
+   * clobber the license/mature flags because `content` is not even part of
+   * the patch schema (AppSettingsPatch omits it by design).
+   */
+  patch(partial: AppSettingsPatchInput): AppSettingsType {
+    const current = this.get()
+    const merged: Record<string, unknown> = { ...current }
+    for (const [section, value] of Object.entries(partial)) {
+      if (value !== undefined) merged[section] = value
+    }
+    return this.update(merged as AppSettingsType)
   }
 }
 

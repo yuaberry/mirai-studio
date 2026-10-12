@@ -56,8 +56,8 @@ export function CommandPalette() {
       onOpenChange={setOpen}
       label="Command palette"
       loop
-      overlayClassName="fixed inset-0 z-[70] bg-black/60 backdrop-blur-[2px] p-6 flex items-start justify-center pt-[15vh]"
-      contentClassName="w-full max-w-xl animate-scale-in overflow-hidden rounded-xl border border-mirai-border-strong bg-mirai-raise shadow-2xl shadow-black/50"
+      overlayClassName="fixed inset-0 z-[70] bg-black/60 backdrop-blur-[2px]"
+      contentClassName="fixed top-[15vh] left-1/2 z-[71] w-full max-w-xl -translate-x-1/2 animate-scale-in overflow-hidden rounded-xl border border-mirai-border-strong bg-mirai-raise shadow-2xl shadow-black/50"
     >
       <div className="flex items-center gap-2.5 border-b border-mirai-border px-4">
         <Search className="h-4 w-4 text-mirai-faint" />

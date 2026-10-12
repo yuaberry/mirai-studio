@@ -101,7 +101,7 @@ export {
 } from './entities/prompt'
 export type { PromptCategory } from './entities/prompt'
 
-export { AppSettings, DEFAULT_APP_SETTINGS, CREDENTIAL_KEYS, zCredentialKey } from './entities/settings'
+export { AppSettings, AppSettingsPatch, DEFAULT_APP_SETTINGS, CREDENTIAL_KEYS, zCredentialKey } from './entities/settings'
 export {
   VideoGenResult,
   ScreenplayAnalysis,

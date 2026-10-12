@@ -10,7 +10,7 @@ import { z } from 'zod'
 import { zEntityId, zIsoDate } from '../ids'
 import { zTaskStatus } from '../status'
 import { type ErrorPayload } from '../errors'
-import { AppSettings, zCredentialKey } from '../entities/settings'
+import { AppSettings, AppSettingsPatch, zCredentialKey } from '../entities/settings'
 import { JobRecord } from '../entities/job'
 import { LogEntry } from '../entities/log'
 
@@ -800,7 +800,9 @@ export const ipcContracts = {
     response: z.object({ settings: AppSettings }),
   },
   'settings:update': {
-    request: z.object({ settings: AppSettings }),
+    // SECTION PATCH (v0.14): only provided sections are written; the
+    // content section (license/mature) is never part of this schema.
+    request: z.object({ settings: AppSettingsPatch }),
     response: z.object({ settings: AppSettings }),
   },
 

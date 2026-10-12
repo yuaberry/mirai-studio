@@ -4,7 +4,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  type AppSettings,
+  type AppSettingsPatch,
   type AssetRecord,
   type MediaTrack,
   type BackupInfo,
@@ -187,8 +187,10 @@ export function useSettings() {
 export function useUpdateSettings() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (settings: AppSettings) =>
-      invoke('settings:update', { settings }).then((r) => r.settings),
+    // SECTION PATCH: send ONLY the sections being changed — never a full
+    // stale object (it would clobber license/mature/session state).
+    mutationFn: (patch: AppSettingsPatch) =>
+      invoke('settings:update', { settings: patch }).then((r) => r.settings),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.settings }),
   })
 }

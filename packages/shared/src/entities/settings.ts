@@ -106,8 +106,27 @@ export const AppSettings = z.object({
       matureConfirmedAt: z.string().nullable().default(null),
     })
     .default({}),
+  /** Session state (persisted so the user never loses their place). */
+  session: z
+    .object({
+      /** Last active workspace view per project id — restored on open. */
+      lastViewByProject: z.record(z.string(), z.string()).default({}),
+      /** Last opened project path — quietly reopened on launch. */
+      lastProjectPath: z.string().nullable().default(null),
+    })
+    .default({}),
 })
 export type AppSettings = z.infer<typeof AppSettings>
+
+/**
+ * What the renderer may persist directly. SECTION-LEVEL PATCH: only the
+ * sections present are written. `content` (license + mature mode) is
+ * DELIBERATELY ABSENT — those only ever change through the dedicated
+ * license:activate / content:setMature handlers, so no stale renderer
+ * cache can ever wipe the user's Pro license again.
+ */
+export const AppSettingsPatch = AppSettings.omit({ content: true }).partial()
+export type AppSettingsPatch = z.input<typeof AppSettingsPatch>
 
 export const DEFAULT_APP_SETTINGS: AppSettings = AppSettings.parse({})
 

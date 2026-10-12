@@ -78,7 +78,6 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
   const save = () =>
     update.mutate(
       {
-        ...settings,
         general: {
           locale: locale as AppSettings['general']['locale'],
           autosaveIntervalMs: Number(autosave) || 5000,
@@ -229,7 +228,7 @@ function ProvidersCard() {
   const saveProviderPrefs = (patch: Record<string, unknown>) => {
     if (!settings) return
     updateSettings.mutate(
-      { ...settings, ai: { ...settings.ai, ...patch } },
+      { ai: { ...settings.ai, ...patch } },
       {
         onSuccess: () => toast({ kind: 'success', title: 'Provider preferences saved' }),
         onError: (err) => toast({ kind: 'error', title: 'Save failed', description: err.message }),
@@ -542,7 +541,7 @@ function ShortcutsCard() {
     const overrides: Record<string, string> = { ...settings.shortcuts }
     if (combo === null || combo === DEFAULT_SHORTCUTS[actionId]) delete overrides[actionId]
     else overrides[actionId] = combo
-    void updateSettings.mutateAsync({ ...settings, shortcuts: overrides })
+    void updateSettings.mutateAsync({ shortcuts: overrides })
   }
 
   const onCaptureKey = (e: KeyboardEvent) => {
