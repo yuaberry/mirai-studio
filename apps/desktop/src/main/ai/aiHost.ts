@@ -16,12 +16,14 @@ import {
   CharacterPlanList,
   ScenePlanList,
   ShotPlanList,
+  StoryNotesAnalysis,
   type AiContextScope,
   type AutoproduceSummary,
   type ChatMessage,
   type EntityId,
 } from '@mirai/shared'
 import { assertExplicitCastAllowed, maturePipelineActive } from '@mirai/core'
+import type { DossierAiSections, DossierData } from '@mirai/core'
 import {
   ModelRegistry,
   OpenRouterProvider,
@@ -495,6 +497,15 @@ export class AiHost {
   ): Promise<T> {
     const ctx = this.deps.projects.current()
     if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+    return this.chatJsonCore(instruction, schema, temperature)
+  }
+
+  /** Provider round-trip WITHOUT a project — used by notes analysis (v0.15). */
+  private async chatJsonCore<T>(
+    instruction: string,
+    schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false; error: { issues: Array<{ message: string; path: (string | number)[] }> } } },
+    temperature: number,
+  ): Promise<T> {
     const providerConfig = this.resolveChatProvider()
     const settings = this.deps.settings.get()
     const provider = new OpenRouterProvider({
@@ -1002,7 +1013,117 @@ export class AiHost {
       bible: scope.includeBible ? ctx.creative.getBible() : undefined,
     }
   }
+
+  // -------------------------------------------------- v0.15: notes + dossier
+
+  /**
+   * Analyzes the user's imported story notes (BEFORE a project exists) and
+   * returns a professional planning read: title, medium, premise, episode
+   * estimates, cast seeds, improvements, risks and commercial notes.
+   * Works without an open project — the New Project flow depends on it.
+   */
+  async analyzeStoryNotes(notesText: string): Promise<import('@mirai/shared').StoryNotesAnalysis> {
+    if (notesText.trim().length < 40) {
+      throw new MiraiError('VALIDATION_ERROR', 'The imported notes are too short for a meaningful analysis.')
+    }
+    const excerpt = notesText.slice(0, 60_000)
+    return this.chatJsonCore(
+      `You are the head of development of a professional anime/manga studio. The user sent REAL story notes (imported from their documents). Read them like a commercial publisher evaluating a submission, then return a professional planning analysis.\n\nNOTES BEGIN\n${excerpt}\nNOTES END\n\nReturn JSON: { titleSuggestion (marketable title in the notes' language, max 120 chars), medium (ANIME, MANGA, LIGHT_NOVEL, NOVEL, WEBTOON or OTHER), premise (2-4 sentences, the core conflict), synopsis (1-2 paragraphs for a pitch document), tone, suggestedAudience, contentRating (ALL, 7+, 13+, 16+ or 18+ — infer conservatively; only 18+ if the notes are explicitly adult), genres (1-8 anime-taxonomy tags like Drama, Isekai, School, Romance), themes (1-8), estimatedEpisodes (professional planning estimate for the format), estimatedPagesPerEpisode (manga/webtoon pages per chapter; 0 for anime), characterSeeds (up to 12: { name, role, brief } — only characters the notes support), locationSeeds (up to 10), improvements (2-10 concrete, professional sentences — structure, stakes, marketability), risks (0-8 commercial/structural risks), commercialNotes (positioning + monetization read, 1-2 paragraphs) }.\nGround EVERYTHING in the notes — never invent plot the notes don't support; suggest improvements, don't write the story.`,
+      StoryNotesAnalysis,
+      0.4,
+    )
+  }
+
+  /**
+   * Generates the AI-enriched strategic sections of the Project Dossier from
+   * the REAL project data. Each section is multi-paragraph professional
+   * prose — the dossier renders 30-45+ A4 pages with these.
+   */
+  async dossierAiSections(
+    data: DossierData,
+    reportProgress: (pct: number) => void = () => {},
+    signal?: AbortSignal,
+  ): Promise<DossierAiSections> {
+    const about = [
+      `TÍTULO: ${data.title}`,
+      `MATÉRIA/FORMATO: ${data.medium}`,
+      `CLASSIFICAÇÃO: ${data.contentRating}`,
+      `GÊNEROS: ${data.genres.join(', ') || '—'}`,
+      `EPISÓDIOS PLANEJADOS: ${data.plannedEpisodes ?? 'a definir'}`,
+      `DESCRIÇÃO: ${data.description || '—'}`,
+      `PREMISSA: ${data.storyBible.premise ?? '—'}`,
+      `TEMAS: ${data.storyBible.themes ?? '—'}`,
+      `TOM: ${data.storyBible.tone ?? '—'}`,
+      `ELENCO (${data.characters.length}): ${data.characters.map((c) => `${c.name} (${c.role})`).join('; ') || '—'}`,
+      `EPISÓDIOS CRIADOS: ${data.episodes.length}`,
+      `ESTADO DE PRODUÇÃO: ${data.shotsCount} shots, ${data.mediaCount} ativos, QC ${data.qc.errors}e/${data.qc.warnings}a/${data.qc.infos}i`,
+    ].join('\n')
+
+    const section = async (schemaName: string, shape: string, temperature: number): Promise<string> => {
+      if (signal?.aborted) throw new MiraiError('CANCELLED', 'Dossier aborted.')
+      const raw = await this.chatJsonCore(
+        `You are a senior commercial analyst of a professional studio, writing strategic sections of a PROJECT DOSSIER (a formal pitch/planning document for producers, distributors and funders). Project data:\n\n${about}\n\nWrite the "${schemaName}" section. Return JSON: { text: string } where text is 3-5 paragraphs of dense, professional, commercial-grade prose in Brazilian Portuguese (no bullet lists, no headers inside — flowing paragraphs only). ${shape}`,
+        zSectionText,
+        temperature,
+      )
+      return raw.text
+    }
+
+    reportProgress(5)
+    const executiveSummary = await section('Sumário executivo', 'Cover: what the work is, its identity and the single strongest commercial argument; the state of production; what this dossier demonstrates. End with the immediate next step recommendation.', 0.4)
+    reportProgress(25)
+    const marketPositioning = await section('Posicionamento de mercado', 'Define the exact market segment, the competitive differentiation with 2-4 verifiable points grounded in the project data, and the primary/secondary audience.', 0.4)
+    reportProgress(45)
+    const monetization = await section('Modelo de monetização', 'Revenue streams ranked by realistic priority for this format (distribution, licensing, merchandise, derived works), each with a one-line justification.', 0.4)
+    reportProgress(60)
+    const commercialStrategy = await section('Plano comercial integral', 'Three horizons (immediate, 12-18 months, 24-36 months): festivals/pitch, distribution, franchise expansion. Concrete actions per horizon, referencing the project real state.', 0.4)
+    reportProgress(75)
+    const legalRaw = await this.chatJsonCore(
+      `You are a legal-savvy production analyst writing the "Notas jurídicas específicas do projeto" section of a Brazilian project dossier. Project data:\n\n${about}\n\nReturn JSON: { text } — 2-4 paragraphs in pt-BR about: titularidade/cadeia de direitos da obra original, recomendações de registro (LDA 9.610/98), contratos (cessões por escrito LDA art. 33, imagem/voz), proteção de dados (LGPD) e verificação de marca do título. Grounded in the project's real data; include the disclaimer attitude that this is planning documentation, not formal legal advice.`,
+      zSectionText,
+      0.3,
+    )
+    reportProgress(85)
+    const lists = await this.chatJsonCore(
+      `You are the head of production of a professional studio writing planning lists for a project dossier. Project data:\n\n${about}\n\nReturn JSON: { riskRegister: string[] (3-8 concrete commercial/structural risks, each with its mitigation in the same sentence), roadmap: string[] (4-8 actionable steps in chronological tractions, each naming a concrete deliverable), improvements: string[] (3-8 concrete professional improvements to the project as it stands) }. Brazilian Portuguese, one sentence per item.`,
+      zDossierLists,
+      0.4,
+    )
+    reportProgress(95)
+    return {
+      executiveSummary,
+      commercialStrategy,
+      marketPositioning,
+      monetization,
+      legalNotes: legalRaw.text,
+      riskRegister: lists.riskRegister,
+      roadmap: lists.roadmap,
+      improvements: lists.improvements,
+    }
+  }
 }
+
+/** Dossier AI section shapes (validated model outputs). */
+const zSectionText = {
+  safeParse: (v: unknown) => {
+    const ok = typeof v === 'object' && v !== null && typeof (v as { text?: unknown }).text === 'string' && (v as { text: string }).text.length > 80
+    return ok
+      ? { success: true as const, data: v as { text: string } }
+      : { success: false as const, error: { issues: [{ message: 'Expected { text } with substantial content.', path: [] }] } }
+  },
+} satisfies { safeParse: (v: unknown) => { success: true; data: { text: string } } | { success: false; error: { issues: Array<{ message: string; path: (string | number)[] }> } } }
+
+const zDossierLists = {
+  safeParse: (v: unknown) => {
+    const o = v as { riskRegister?: unknown; roadmap?: unknown; improvements?: unknown }
+    const arr = (x: unknown): x is string[] =>
+      Array.isArray(x) && x.every((i) => typeof i === 'string' && i.length > 8) && x.length > 0
+    const ok = arr(o.riskRegister) && arr(o.roadmap) && arr(o.improvements)
+    return ok
+      ? { success: true as const, data: { riskRegister: o.riskRegister as string[], roadmap: o.roadmap as string[], improvements: o.improvements as string[] } }
+      : { success: false as const, error: { issues: [{ message: 'Expected riskRegister/roadmap/improvements string arrays.', path: [] }] } }
+  },
+} satisfies { safeParse: (v: unknown) => { success: true; data: { riskRegister: string[]; roadmap: string[]; improvements: string[] } } | { success: false; error: { issues: Array<{ message: string; path: (string | number)[] }> } } }
 
 /** The real network transport, bound once (Electron main has global fetch). */
 function globalFetch() {

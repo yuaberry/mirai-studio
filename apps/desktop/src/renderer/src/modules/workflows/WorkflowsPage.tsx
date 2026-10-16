@@ -36,12 +36,12 @@ export function WorkflowsPage() {
 
   useEffect(() => {
     if (!episodeId && episodes && episodes.length > 0) setEpisodeId(episodes[0]!.id)
-  }, [episodes, episodeId])
+  }, [episodes, episodeId, setEpisodeId])
   useEffect(() => {
     if (scenes && scenes.length > 0 && !scenes.some((s) => s.id === sceneId)) {
       setSceneId(scenes[0]!.id)
     }
-  }, [scenes, sceneId])
+  }, [scenes, sceneId, setSceneId])
 
   const analysis = useAnalyzeScreenplay()
   const continuity = useContinuityCheck()

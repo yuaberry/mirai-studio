@@ -29,6 +29,8 @@ import {
   PluginRegistry,
   RenderService,
   SettingsService,
+  NotesImportService,
+  DossierService,
   assertExplicitCastAllowed,
   openDatabase,
   runMigrations,
@@ -140,6 +142,48 @@ function expectOrder(shots: Array<{ title: string }>, titles: string[]): void {
   if (JSON.stringify(actual) !== JSON.stringify(titles)) {
     throw new Error(`order mismatch: ${JSON.stringify(actual)}`)
   }
+}
+
+/** Minimal stored-zip writer for smoke fixtures (mirrors the importer's reader). */
+function zipCrc32(buf: Buffer): number {
+  let c: number
+  const table: number[] = []
+  for (let n = 0; n < 256; n++) {
+    c = n
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    table[n] = c >>> 0
+  }
+  let crc = 0xffffffff
+  for (const b of buf) crc = (table[(crc ^ b) & 0xff] ?? 0) ^ (crc >>> 8)
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+function makeStoredZip(name: string, data: Buffer): Buffer {
+  const nameBuf = Buffer.from(name, 'utf8')
+  const local = Buffer.alloc(30 + nameBuf.length + data.length)
+  local.writeUInt32LE(0x04034b50, 0)
+  local.writeUInt32LE(zipCrc32(data), 14)
+  local.writeUInt32LE(data.length, 18)
+  local.writeUInt32LE(data.length, 22)
+  local.writeUInt16LE(nameBuf.length, 26)
+  nameBuf.copy(local, 30)
+  data.copy(local, 30 + nameBuf.length)
+  const central = Buffer.alloc(46 + nameBuf.length)
+  central.writeUInt32LE(0x02014b50, 0)
+  central.writeUInt16LE(20, 4)
+  central.writeUInt32LE(zipCrc32(data), 16)
+  central.writeUInt32LE(data.length, 20)
+  central.writeUInt32LE(data.length, 24)
+  central.writeUInt16LE(nameBuf.length, 28)
+  central.writeUInt32LE(0, 42)
+  nameBuf.copy(central, 46)
+  const eocd = Buffer.alloc(22)
+  eocd.writeUInt32LE(0x06054b50, 0)
+  eocd.writeUInt16LE(1, 8)
+  eocd.writeUInt16LE(1, 10)
+  eocd.writeUInt32LE(central.length, 12)
+  eocd.writeUInt32LE(local.length, 16)
+  return Buffer.concat([local, central, eocd])
 }
 
 function step(name: string, fn: () => void | Promise<void>): Promise<void> {
@@ -1307,6 +1351,84 @@ async function main(): Promise<void> {
     if (next['timeline.togglePlay'] !== 'space') throw new Error('defaults clobbered')
     if (normalizeCombo('Ctrl + SHIFT + S') !== 'ctrl+shift+s') throw new Error('normalization broken')
     if (prettyCombo('ctrl+k') !== 'Ctrl+K') throw new Error('display formatting broken')
+  })
+
+  await step('NOTES IMPORT: .txt/.docx/.pdf/.zip parsed for the AI', () => {
+    const importer = new NotesImportService()
+    const notesDir = join(ctx.summary.path, 'notes-fixtures')
+    mkdirSync(notesDir, { recursive: true })
+    // plain text
+    const txtPath = join(notesDir, 'premissa.txt')
+    writeFileSync(txtPath, 'Uma esgrimista orfa descobre contratos espirituais marcados por fagulhas.\nO dela ainda esta aberto.', 'utf8')
+    // a real (stored) zip containing a .txt
+    const inner = Buffer.from('Dentro do zip: capitulo um comeca na aldeia de Kisaragi.', 'utf8')
+    const zipBytes = makeStoredZip('cap1.txt', inner)
+    const zipPath = join(notesDir, 'material.zip')
+    writeFileSync(zipPath, zipBytes)
+    const result = importer.importFiles([txtPath, zipPath])
+    if (result.files.length !== 2) throw new Error(`expected 2 files, got ${result.files.length}`)
+    if (!result.combined.includes('fagulhas')) throw new Error('txt text missing')
+    if (!result.combined.includes('Kisaragi')) throw new Error('zip text missing')
+  })
+
+  await step('DOSSIER: real .txt + .pdf (30+ pages) from project data', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    const manifest = ctx.manifest
+    const sb = ctx.creative.getBible()
+    const st = ctx.storyboard.getStyleBible()
+    const characters = ctx.creative.listCharacters()
+    const episodes = ctx.creative.listEpisodes()
+    const episodeData = episodes.map((ep) => ({ season: ep.season, number: ep.number, title: ep.title, synopsis: ep.synopsis ?? '', scenes: [] as string[] }))
+    let shots = 0
+    for (let i = 0; i < episodes.length; i++) {
+      for (const scene of ctx.creative.listScenes(episodes[i]!.id)) {
+        episodeData[i]!.scenes.push(scene.title)
+        shots += ctx.storyboard.listShots(scene.id).length
+      }
+    }
+    const svc = new DossierService(ctx.summary.path, systemClock)
+    const result = svc.generate(
+      {
+        name: manifest.name,
+        description: manifest.description ?? '',
+        medium: 'ANIME',
+        title: manifest.config.title,
+        genres: manifest.config.genres,
+        contentRating: manifest.config.contentRating ?? 'a definir',
+        language: manifest.config.language,
+        aspectRatio: manifest.config.aspectRatio,
+        resolution: `${manifest.config.resolution.width}x${manifest.config.resolution.height}`,
+        fps: manifest.config.fps,
+        plannedEpisodes: manifest.config.episodeCount ?? null,
+        appVersion: manifest.appVersion,
+        createdAt: manifest.createdAt,
+        updatedAt: manifest.updatedAt,
+        licenseTier: 'Mirai Studio (smoke)',
+        storyBible: sb,
+        styleBible: st,
+        characters: characters.map((ch) => ({
+          name: ch.name,
+          role: ch.role,
+          age: ch.age,
+          appearance: ch.appearance,
+          personality: ch.personality,
+          voice: ch.voice,
+        })),
+        episodes: episodeData,
+        tasks: ctx.production.listTasks().map((t) => ({ title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate })),
+        qc: { errors: 0, warnings: 0, infos: 0, top: [] },
+        mediaCount: ctx.media.list().length,
+        shotsCount: shots,
+      },
+      null,
+      '1',
+    )
+    if (!existsSync(result.txtPath) || !existsSync(result.pdfPath)) throw new Error('dossier files missing')
+    const pdfHead = readFileSync(result.pdfPath).subarray(0, 5).toString('latin1')
+    if (pdfHead !== '%PDF-') throw new Error('not a real PDF')
+    if (result.pages < 8) throw new Error(`dossier too thin (${result.pages} pages)`)
+    const txt = readFileSync(result.txtPath, 'utf8')
+    if (!txt.includes('FICHA TÉCNICA') || !txt.includes('ADVOCACIA')) throw new Error('dossier sections missing')
   })
 
   await step('SETTINGS persist across restart', () => {

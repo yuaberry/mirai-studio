@@ -8,7 +8,8 @@ import { handleIpc } from './router'
 import { toOpenedProject, type Container } from '../bootstrap'
 import { join } from 'node:path'
 import { newEntityId, LicenseService } from '@mirai/core'
-import { RenderService } from '@mirai/core'
+import { RenderService, NotesImportService, DossierService, type DossierData } from '@mirai/core'
+import { MEDIUM_LABEL, type DossierResult } from '@mirai/shared'
 
 export function registerIpcHandlers(c: Container): void {
   // ---------------------------------------------------------------- projects
@@ -993,6 +994,170 @@ export function registerIpcHandlers(c: Container): void {
     c.credentials.clear(req.key)
     c.logger.info('AI', `Credential cleared: ${req.key}`)
     return { ok: true }
+  })
+
+
+  // ---- Story-notes import + Project Dossier (v0.15) ---------------------------
+  const notesImporter = new NotesImportService()
+
+  handleIpc('notes:importFiles', async () => {
+    const win = c.emitter.window
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Importar notas do projeto (.txt, .md, .docx, .odt, .pdf, .zip)',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        {
+          name: 'Documentos de texto',
+          extensions: ['txt', 'md', 'markdown', 'docx', 'odt', 'pdf', 'zip', 'csv', 'json'],
+        },
+      ],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      throw new MiraiError('CANCELLED', 'Notes import cancelled.')
+    }
+    const imported = notesImporter.importFiles(result.filePaths)
+    c.logger.info('SYSTEM', `Notes imported: ${imported.totalChars} chars from ${imported.files.length} files`, {
+      skipped: imported.skipped.length,
+    })
+    return { import: imported }
+  })
+
+  handleIpc('ai:analyzeNotes', async (req) => {
+    const analysis = await c.ai.analyzeStoryNotes(req.notesText)
+    c.logger.info('AI', `Story-notes analyzed: "${analysis.titleSuggestion}" (${analysis.medium})`)
+    return { analysis }
+  })
+
+  handleIpc('dossier:generate', async () => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('dossier.generate', async (_job, jobCtx) => {
+      const manifest = ctx.manifest
+      const characters = ctx.creative.listCharacters()
+      const episodes = ctx.creative.listEpisodes()
+      const episodeData = episodes.map((ep) => ({
+        season: ep.season,
+        number: ep.number,
+        title: ep.title,
+        synopsis: ep.synopsis ?? '',
+        scenes: [] as string[],
+      }))
+      let shotsCount = 0
+      for (let i = 0; i < episodes.length; i++) {
+        for (const scene of ctx.creative.listScenes(episodes[i]!.id)) {
+          episodeData[i]!.scenes.push(scene.title)
+          shotsCount += ctx.storyboard.listShots(scene.id).length
+        }
+      }
+      const tasks = ctx.production.listTasks()
+      const qcReport = ctx.production.runQc(manifest.config.contentRating ?? null)
+      const sb = ctx.creative.getBible()
+      const st = ctx.storyboard.getStyleBible()
+      const settings = c.settings.get()
+      const data: DossierData = {
+        name: manifest.name,
+        description: manifest.description ?? '',
+        medium: manifest.config.medium ? (MEDIUM_LABEL[manifest.config.medium as keyof typeof MEDIUM_LABEL] ?? manifest.config.medium) : 'a definir',
+        title: manifest.config.title,
+        genres: manifest.config.genres,
+        contentRating: manifest.config.contentRating ?? 'a definir',
+        language: manifest.config.language,
+        aspectRatio: manifest.config.aspectRatio,
+        resolution: `${manifest.config.resolution.width}x${manifest.config.resolution.height}`,
+        fps: manifest.config.fps,
+        plannedEpisodes: manifest.config.episodeCount ?? null,
+        appVersion: manifest.appVersion,
+        createdAt: manifest.createdAt,
+        updatedAt: manifest.updatedAt,
+        licenseTier: settings.content.license?.tier === 'pro' ? 'Mirai Studio Pro' : 'Mirai Studio (free)',
+        storyBible: {
+          premise: sb.premise,
+          themes: sb.themes,
+          tone: sb.tone,
+          message: sb.message,
+          narrativeRules: sb.narrativeRules,
+          coreConcepts: sb.coreConcepts,
+          genreNotes: sb.genreNotes,
+        },
+        styleBible: {
+          artDirection: st.artDirection,
+          lineart: st.lineart,
+          shading: st.shading,
+          palette: st.palette,
+          lighting: st.lighting,
+          proportions: st.proportions,
+          eyesAndHair: st.eyesAndHair,
+          backgrounds: st.backgrounds,
+          cameraLanguage: st.cameraLanguage,
+        },
+        characters: characters.map((ch) => ({
+          name: ch.name,
+          role: ch.role,
+          age: ch.age,
+          appearance: ch.appearance,
+          personality: ch.personality,
+          voice: ch.voice,
+          backstory: [ch.bio, ch.goals ? `Objetivos: ${ch.goals}` : '', ch.fears ? `Medos: ${ch.fears}` : '', ch.notes]
+            .filter((x) => x && x.trim().length > 0)
+            .join(' — ') || undefined,
+        })),
+        episodes: episodeData,
+        tasks: tasks.map((t) => ({ title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate })),
+        qc: {
+          errors: qcReport.errorCount,
+          warnings: qcReport.warningCount,
+          infos: qcReport.infoCount,
+          top: qcReport.findings
+            .filter((f) => f.severity === 'ERROR' || f.severity === 'WARNING')
+            .slice(0, 8)
+            .map((f) => `${f.severity}: ${f.title}`),
+        },
+        mediaCount: ctx.media.list().length,
+        shotsCount,
+      }
+      jobCtx.reportProgress(3)
+
+      // AI enrichment is best-effort: without a configured provider the
+      // dossier still renders every data section (aiEnriched=false).
+      let ai: import('@mirai/core').DossierAiSections | null = null
+      try {
+        const controller = new AbortController()
+        const watcher = setInterval(() => {
+          if (jobCtx.signal.aborted) controller.abort()
+        }, 100)
+        try {
+          ai = await c.ai.dossierAiSections(data, jobCtx.reportProgress, controller.signal)
+        } finally {
+          clearInterval(watcher)
+        }
+      } catch (err) {
+        if (jobCtx.signal.aborted) throw new MiraiError('CANCELLED', 'Dossier generation cancelled.')
+        c.logger.warn('SYSTEM', `Dossier AI sections unavailable: ${(err as Error).message}`)
+      }
+      jobCtx.reportProgress(97)
+
+      // Dossier version = completed dossier jobs before this one + 1.
+      const prior = ctx.jobs.list().filter((j) => j.type === 'dossier.generate' && j.status === 'COMPLETED')
+      const clock = { now: () => new Date(), isoNow: () => new Date().toISOString() }
+      const svc = new DossierService(ctx.summary.path, clock)
+      const result = svc.generate(data, ai, String(prior.length + 1))
+      c.logger.info('SYSTEM', `Dossier generated: ${result.pages} pages -> ${result.pdfPath}`, {
+        aiEnriched: result.aiEnriched,
+      })
+      return { dossier: result }
+    })
+    const job = await ctx.jobs.enqueue('dossier.generate', {}, { priority: 5, maxAttempts: 1 })
+    return { jobId: job.id }
+  })
+
+  handleIpc('dossier:last', () => {
+    const ctx = requireActive(c)
+    const done = ctx.jobs
+      .list()
+      .filter((j) => j.type === 'dossier.generate' && j.status === 'COMPLETED')
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    const last = done[0]
+    const result = (last?.result as { dossier?: DossierResult } | undefined)?.dossier ?? null
+    return { result }
   })
 
   // --------------------------------------------------------------------- jobs

@@ -6,6 +6,27 @@ import { z } from 'zod'
 import { zEntityId, zIsoDate } from '../ids'
 import { zProjectStatus } from '../status'
 
+/** What the work IS (v0.15) — lives here to keep the import graph acyclic. */
+export const PROJECT_MEDIUMS = [
+  'ANIME',
+  'MANGA',
+  'LIGHT_NOVEL',
+  'NOVEL',
+  'WEBTOON',
+  'OTHER',
+] as const
+export type ProjectMedium = (typeof PROJECT_MEDIUMS)[number]
+export const zProjectMedium = z.enum(PROJECT_MEDIUMS)
+
+export const MEDIUM_LABEL: Record<ProjectMedium, string> = {
+  ANIME: 'Anime (animated series/film)',
+  MANGA: 'Mangá (printed/digital comic)',
+  LIGHT_NOVEL: 'Light Novel',
+  NOVEL: 'Novel (prose fiction)',
+  WEBTOON: 'Webtoon (vertical scroll comic)',
+  OTHER: 'Other audiovisual/literary work',
+}
+
 /** Canonical folder layout inside every Mirai project (spec §5). */
 export const PROJECT_FOLDERS = [
   'database',
@@ -40,6 +61,8 @@ export const ProjectConfig = z.object({
   genre: z.string().max(80).optional(),
   /** Full anime taxonomy tags (spec §genres — Ecchi, Isekai, …). */
   genres: z.array(z.string().max(40)).max(12).default([]),
+  /** What the work IS (anime/mangá/novel/…) — dossier + planning. */
+  medium: z.enum(PROJECT_MEDIUMS).optional(),
   language: z.string().min(2).max(16).default('ja'),
   aspectRatio: z.enum(ASPECT_RATIOS).default('16:9'),
   resolution: zResolution.default({ width: 1920, height: 1080 }),

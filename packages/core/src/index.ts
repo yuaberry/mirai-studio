@@ -42,6 +42,10 @@ export { MediaService } from './media/mediaService'
 // render (Phase 4)
 export { RenderService } from './render/renderService'
 export { ffmpegBin, ffprobeBin, ffmpegSource } from './render/ffmpegBin'
+export { NotesImportService } from './import/notesImport'
+export { DossierService } from './production/dossierService'
+export type { DossierAiSections, DossierData } from './production/dossierService'
+export { PdfWriter } from './production/pdfWriter'
 export { buildSceneRenderSpec } from './render/sceneRenderBuilder'
 
 // timeline (Phase 5)

@@ -1250,6 +1250,38 @@ export function useSetMature() {
   })
 }
 
+// ------------------------------------------------- notes + dossier (v0.15)
+
+export function useImportNotes() {
+  return useMutation({
+    mutationFn: () => invoke('notes:importFiles').then((r) => r.import),
+  })
+}
+
+export function useAnalyzeNotes() {
+  return useMutation({
+    mutationFn: (notesText: string) => invoke('ai:analyzeNotes', { notesText }).then((r) => r.analysis),
+  })
+}
+
+export function useGenerateDossier() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => invoke('dossier:generate').then((r) => r.jobId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs })
+      void queryClient.invalidateQueries({ queryKey: ['dossier'] })
+    },
+  })
+}
+
+export function useLastDossier() {
+  return useQuery({
+    queryKey: ['dossier', 'last'],
+    queryFn: () => invoke('dossier:last').then((r) => r.result),
+  })
+}
+
 export function useBlenderStatus() {
   return useQuery({
     queryKey: ['blender', 'status'],

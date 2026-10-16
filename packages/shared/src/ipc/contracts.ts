@@ -13,6 +13,7 @@ import { type ErrorPayload } from '../errors'
 import { AppSettings, AppSettingsPatch, zCredentialKey } from '../entities/settings'
 import { JobRecord } from '../entities/job'
 import { LogEntry } from '../entities/log'
+import { NotesImportResult, StoryNotesAnalysis, DossierResult } from '../entities/dossier'
 
 import {
   OpenedProject,
@@ -822,6 +823,28 @@ export const ipcContracts = {
   'credentials:clear': {
     request: z.object({ key: zCredentialKey }),
     response: z.object({ ok: z.boolean() }),
+  },
+
+  // ---- Story-notes import + Project Dossier (v0.15) ---------------------------
+  /** Picks real documents (.txt/.md/.docx/.odt/.pdf/.zip) and extracts their text. */
+  'notes:importFiles': {
+    request: emptyRequest,
+    response: z.object({ import: NotesImportResult }),
+  },
+  /** AI reads the imported notes and returns a professional planning analysis. */
+  'ai:analyzeNotes': {
+    request: z.object({ notesText: z.string().min(40).max(400_000) }),
+    response: z.object({ analysis: StoryNotesAnalysis }),
+  },
+  /** Generates the Project Dossier (.txt + .pdf) as a job; result = DossierResult. */
+  'dossier:generate': {
+    request: emptyRequest,
+    response: z.object({ jobId: zEntityId }),
+  },
+  /** Fetches the most recent dossier result (job record) for the open project. */
+  'dossier:last': {
+    request: emptyRequest,
+    response: z.object({ result: DossierResult.nullable() }),
   },
 
   // ---- Jobs ----------------------------------------------------------------

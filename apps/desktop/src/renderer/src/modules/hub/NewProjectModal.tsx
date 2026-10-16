@@ -20,9 +20,10 @@ import {
 import { Modal } from '../../system/Modal'
 import { Button, FieldError, Input, Label, Select, Textarea } from '../../system/ui'
 import { invoke } from '../../lib/ipc'
-import { useCreateProject, useHealth, useOpenProject, useSettings } from '../../lib/queries'
+import { useAnalyzeNotes, useCreateProject, useHealth, useImportNotes, useOpenProject, useSettings } from '../../lib/queries'
 import { t } from '../../lib/i18n'
 import { useAppStore, toast } from '../../store/appStore'
+import { MEDIUM_LABEL, PROJECT_MEDIUMS, type NotesImportResult, type ProjectMedium, type StoryNotesAnalysis } from '@mirai/shared'
 
 interface FormState {
   name: string
@@ -32,6 +33,7 @@ interface FormState {
   title: string
   genre: string
   genres: string[]
+  medium: string
   language: string
   aspectRatio: string
   fps: string
@@ -71,6 +73,7 @@ const EMPTY_FORM: FormState = {
   title: '',
   genre: '',
   genres: [],
+  medium: '',
   language: 'ja',
   aspectRatio: '16:9',
   fps: '24',
@@ -91,6 +94,46 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [serverError, setServerError] = useState<string | null>(null)
+  const importNotes = useImportNotes()
+  const analyzeNotes = useAnalyzeNotes()
+  const [notes, setNotes] = useState<NotesImportResult | null>(null)
+  const [analysis, setAnalysis] = useState<StoryNotesAnalysis | null>(null)
+
+  /** Applies the AI analysis to the form — never overwrites what the user typed. */
+  const applyAnalysis = (a: StoryNotesAnalysis) => {
+    setForm((f) => ({
+      ...f,
+      name: f.name.trim() ? f.name : a.titleSuggestion.slice(0, 80),
+      title: f.title.trim() ? f.title : a.titleSuggestion,
+      description: f.description.trim() ? f.description : a.premise,
+      medium: f.medium || a.medium,
+      episodeCount:
+        f.episodeCount.trim() && f.episodeCount !== '12' ? f.episodeCount : String(Math.min(a.estimatedEpisodes, 999)),
+      contentRating:
+        f.contentRating !== '13+' || a.contentRating === '18+'
+          ? a.contentRating && f.contentRating === '13+'
+            ? a.contentRating
+            : f.contentRating
+          : f.contentRating,
+      // Only genre tags that exist in the taxonomy — the rest stay visible
+      // in the analysis panel for the user to map.
+      genres: Array.from(new Set([...f.genres, ...a.genres]))
+        .filter((g) => (ANIME_GENRES as readonly string[]).includes(g))
+        .slice(0, 12),
+    }))
+  }
+
+  const runAnalysis = () => {
+    if (!notes) return
+    analyzeNotes.mutate(notes.combined, {
+      onSuccess: (a) => {
+        setAnalysis(a)
+        applyAnalysis(a)
+        toast({ kind: 'success', title: tr('Notes analyzed'), description: a.titleSuggestion })
+      },
+      onError: (err) => toast({ kind: 'error', title: tr('Analysis failed'), description: err.message }),
+    })
+  }
 
   const preset: ProjectPreset | undefined = useMemo(
     () => PROJECT_PRESETS.find((p) => p.id === form.presetId),
@@ -150,6 +193,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
       title: form.title.trim(),
       genre: form.genre.trim() || undefined,
       genres: form.genres,
+      medium: (form.medium || undefined) as ProjectMedium | undefined,
       language: form.language,
       aspectRatio: form.aspectRatio,
       fps: Number(form.fps),
@@ -236,12 +280,123 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
           />
         </div>
 
+        {/* ---- Story-notes import + AI analysis (v0.15) ---- */}
+        <div className="col-span-2 rounded-lg border border-mirai-border bg-mirai-panel p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              loading={importNotes.isPending}
+              onClick={() =>
+                importNotes.mutate(undefined, {
+                  onSuccess: (result) => {
+                    setNotes(result)
+                    setAnalysis(null)
+                    toast({
+                      kind: 'success',
+                      title: tr('Notes imported'),
+                      description: `${result.files.length} ${tr('files')} · ${result.totalChars.toLocaleString()} ${tr('characters')}`,
+                    })
+                  },
+                  onError: (err) => toast({ kind: 'error', title: tr('Import failed'), description: err.message }),
+                })
+              }
+            >
+              {tr('Import story notes…')}
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={!notes}
+              loading={analyzeNotes.isPending}
+              onClick={runAnalysis}
+            >
+              {tr('Analyze with AI')}
+            </Button>
+            <span className="text-[10px] text-mirai-faint">
+              .txt · .md · .docx · .odt · .pdf · .zip — {tr('Google Docs exports included')}
+            </span>
+          </div>
+          {notes && (
+            <div className="mt-2 space-y-1">
+              <p className="text-[10px] font-bold tracking-wider text-mirai-faint uppercase">
+                {tr('Imported')} ({notes.files.length})
+              </p>
+              {notes.files.map((f) => (
+                <p key={f.name} className="truncate text-[11px] text-mirai-dim">
+                  📄 {f.name} · {f.format} · {f.chars.toLocaleString()} {tr('characters')}
+                  {f.truncated && <span className="text-amber-400"> · {tr('truncated')}</span>}
+                </p>
+              ))}
+              {notes.skipped.map((s) => (
+                <p key={s.name} className="truncate text-[11px] text-amber-400/80">
+                  ⚠ {s.name} — {s.reason}
+                </p>
+              ))}
+            </div>
+          )}
+          {analysis && (
+            <div className="mt-3 space-y-2 rounded-md border border-mirai-border-strong bg-mirai-raise/50 p-2.5">
+              <p className="text-[10px] font-bold tracking-wider text-mirai-accent uppercase">
+                {tr('AI professional analysis')}
+              </p>
+              <p className="text-[11px] leading-relaxed text-mirai-dim">{analysis.premise}</p>
+              <p className="text-[11px] leading-relaxed text-mirai-dim">
+                <span className="font-bold text-mirai-text">{tr('Suggested')}:</span> {analysis.titleSuggestion} ·{' '}
+                {analysis.medium} · {analysis.estimatedEpisodes} {tr('episodes')} · {analysis.suggestedAudience}
+              </p>
+              {analysis.improvements.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-mirai-text">{tr('Improvements')}</p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {analysis.improvements.slice(0, 6).map((i, idx) => (
+                      <li key={idx} className="text-[11px] leading-snug text-mirai-dim">
+                        • {i}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {analysis.risks.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-mirai-text">{tr('Risks')}</p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {analysis.risks.slice(0, 4).map((r, idx) => (
+                      <li key={idx} className="text-[11px] leading-snug text-amber-300/90">
+                        • {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <p className="text-[11px] leading-relaxed text-mirai-faint">
+                <span className="font-bold text-mirai-dim">{tr('Commercial notes')}:</span> {analysis.commercialNotes}
+              </p>
+              <Button size="sm" variant="outline" onClick={() => applyAnalysis(analysis)}>
+                {tr('Apply to form')}
+              </Button>
+            </div>
+          )}
+        </div>
+
         <div>
           <Label htmlFor="np-preset">{tr('Template')}</Label>
           <Select id="np-preset" value={form.presetId} onChange={(e) => applyPreset(e.target.value)}>
             {PROJECT_PRESETS.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="np-medium">{tr('Medium')}</Label>
+          <Select id="np-medium" value={form.medium} onChange={(e) => set('medium', e.target.value)}>
+            <option value="">{tr('Choose…')}</option>
+            {PROJECT_MEDIUMS.map((m) => (
+              <option key={m} value={m}>
+                {tr(MEDIUM_LABEL[m])}
               </option>
             ))}
           </Select>

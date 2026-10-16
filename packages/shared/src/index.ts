@@ -56,8 +56,20 @@ export {
   OpenedProject,
   PROJECT_PRESETS,
   presetById,
+  PROJECT_MEDIUMS,
+  MEDIUM_LABEL,
+  zProjectMedium,
 } from './entities/project'
+export type { ProjectMedium } from './entities/project'
 export type { ProjectPreset } from './entities/project'
+export {
+  SUPPORTED_NOTE_FORMATS,
+  ImportedNoteFile,
+  NotesImportResult,
+  StoryNotesAnalysis,
+  DossierResult,
+} from './entities/dossier'
+export type { NoteFormat } from './entities/dossier'
 
 export {
   SHOT_TYPES,

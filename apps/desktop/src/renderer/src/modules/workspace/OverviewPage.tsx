@@ -8,9 +8,12 @@ import {
   filterGenres,
   ASPECT_RATIOS,
   FPS_OPTIONS,
+  MEDIUM_LABEL,
+  PROJECT_MEDIUMS,
   MiraiError,
   ProjectConfig,
   type JobRecord,
+  type ProjectMedium,
 } from '@mirai/shared'
 import { Button, Card, Input, Label, Select } from '../../system/ui'
 import { ErrorState } from '../../system/EmptyState'
@@ -25,8 +28,12 @@ import {
   useEpisodes,
   usePrompts,
   useSettings,
+  useGenerateDossier,
+  useLastDossier,
 } from '../../lib/queries'
 import { toast } from '../../store/appStore'
+import { FileText } from 'lucide-react'
+import { useT } from '../../lib/i18n'
 
 export function OverviewPage() {
   const { data: project, isLoading, isError, error, refetch } = useCurrentProject()
@@ -35,6 +42,9 @@ export function OverviewPage() {
   const { data: locations } = useLocations()
   const { data: episodes } = useEpisodes()
   const { data: prompts } = usePrompts()
+  const generateDossier = useGenerateDossier()
+  const { data: lastDossier } = useLastDossier()
+  const tr = useT()
   const [configOpen, setConfigOpen] = useState(false)
 
   const lastValidation = (jobs ?? []).find((j) => j.type === 'project.validate')
@@ -58,6 +68,45 @@ export function OverviewPage() {
   return (
     <div className="mx-auto w-full max-w-5xl px-8 py-8">
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
+        <Card className="col-span-2 p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-display text-[11px] font-bold tracking-[0.16em] text-mirai-faint uppercase">
+              {tr('Project Dossier')}
+            </h2>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="max-w-lg">
+              <p className="text-xs text-mirai-dim leading-relaxed">
+                {tr('dossier-desc')}
+              </p>
+              {lastDossier && (
+                <p className="mt-1 text-[11px] text-mirai-faint">
+                  {tr('Last dossier')}: v{lastDossier.version} · {lastDossier.pages} {tr('pages')} ·{' '}
+                  {lastDossier.aiEnriched ? tr('AI-enriched') : tr('data sections only')} ·{' '}
+                  {new Date(lastDossier.generatedAt).toLocaleString()}
+                </p>
+              )}
+            </div>
+            <Button
+              size="sm"
+              variant="primary"
+              loading={generateDossier.isPending}
+              onClick={() =>
+                generateDossier.mutate(undefined, {
+                  onSuccess: () =>
+                    toast({
+                      kind: 'success',
+                      title: tr('Dossier queued'),
+                      description: tr('dossier-queued-desc'),
+                    }),
+                  onError: (err) => toast({ kind: 'error', title: tr('Dossier failed'), description: err.message }),
+                })
+              }
+            >
+              <FileText className="h-3.5 w-3.5" /> {tr('Generate dossier (.txt + .pdf)')}
+            </Button>
+          </div>
+        </Card>
         <Card className="col-span-2 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-display text-[11px] font-bold tracking-[0.16em] text-mirai-faint uppercase">
@@ -207,6 +256,7 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
   const [title, setTitle] = useState('')
   const [genre, setGenre] = useState('')
   const [genres, setGenres] = useState<string[]>([])
+  const [medium, setMedium] = useState('')
   const [aspectRatio, setAspectRatio] = useState('16:9')
   const [fps, setFps] = useState('24')
 
@@ -215,6 +265,7 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
       setTitle(manifest.config.title)
       setGenre(manifest.config.genre ?? '')
       setGenres(manifest.config.genres ?? [])
+      setMedium(manifest.config.medium ?? '')
       setAspectRatio(manifest.config.aspectRatio)
       setFps(String(manifest.config.fps))
     }
@@ -228,6 +279,7 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
       title,
       genre: genre.trim() || undefined,
       genres,
+      medium: (medium || undefined) as ProjectMedium | undefined,
       aspectRatio,
       fps: Number(fps),
     })
@@ -265,6 +317,17 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
         <div className="col-span-2">
           <Label htmlFor="ce-title">Work title</Label>
           <Input id="ce-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        </div>
+        <div>
+          <Label htmlFor="ce-medium">Medium</Label>
+          <Select id="ce-medium" value={medium} onChange={(e) => setMedium(e.target.value)}>
+            <option value="">—</option>
+            {PROJECT_MEDIUMS.map((m) => (
+              <option key={m} value={m}>
+                {MEDIUM_LABEL[m]}
+              </option>
+            ))}
+          </Select>
         </div>
         <div className="col-span-2">
           <Label htmlFor="ce-genre">Genre (free text)</Label>
