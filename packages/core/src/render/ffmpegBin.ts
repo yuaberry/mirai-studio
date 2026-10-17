@@ -24,21 +24,27 @@ function resourceDirs(): string[] {
   return dirs
 }
 
-function bundled(name: 'ffmpeg' | 'ffprobe'): string | null {
-  const envPath = name === 'ffmpeg' ? process.env['MIRAI_FFMPEG_PATH'] : process.env['MIRAI_FFPROBE_PATH']
+function bundled(base: 'ffmpeg' | 'ffprobe'): string | null {
+  const envPath = base === 'ffmpeg' ? process.env['MIRAI_FFMPEG_PATH'] : process.env['MIRAI_FFPROBE_PATH']
   if (envPath && existsSync(envPath)) return envPath
   // Packaged: asarUnpack puts resources under app.asar.unpacked/resources/.
-  const layouts: Array<(dir: string) => string> = [
-    (dir) => join(dir, 'app.asar.unpacked', 'resources', 'ffmpeg', name),
-    (dir) => join(dir, 'ffmpeg', name),
-  ]
   for (const dir of resourceDirs()) {
-    for (const resolve of layouts) {
-      const candidate = resolve(dir)
-      if (existsSync(candidate)) return candidate
+    for (const name of binaryNames(base)) {
+      const candidates = [
+        join(dir, 'app.asar.unpacked', 'resources', 'ffmpeg', name),
+        join(dir, 'ffmpeg', name),
+      ]
+      for (const candidate of candidates) {
+        if (existsSync(candidate)) return candidate
+      }
     }
   }
   return null
+}
+
+/** Windows ships .exe binaries — resolve the platform-correct names. */
+function binaryNames(name: 'ffmpeg' | 'ffprobe'): string[] {
+  return process.platform === 'win32' ? [`${name}.exe`, name] : [name]
 }
 
 /** The FFmpeg binary to spawn — bundled when shipped, 'ffmpeg' from PATH otherwise. */

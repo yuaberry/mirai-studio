@@ -1,0 +1,103 @@
+name: release
+
+# Multi-platform release builds (v0.16+): the desktop can only build Linux
+# packages locally — Windows installers, macOS disk images and the Android
+# companion APK are built here, on REAL runners for each platform.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: sudo apt-get update && sudo apt-get install -y rpm   # rpm target needs rpmbuild
+      - run: bun install --frozen-lockfile
+      - run: node apps/desktop/scripts/fetch-ffmpeg.mjs --platform linux
+      - run: cd apps/desktop && bunx electron-vite build && bunx electron-builder --linux deb AppImage rpm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.rpm
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: node apps/desktop/scripts/fetch-ffmpeg.mjs --platform win32
+      - run: cd apps/desktop && bunx electron-vite build
+      - run: cd apps/desktop && bunx electron-builder --win nsis
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'   # unsigned installer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: apps/desktop/release/*.exe
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: node apps/desktop/scripts/fetch-ffmpeg.mjs --platform darwin
+      - run: bun install --frozen-lockfile
+      - run: cd apps/desktop && bunx electron-vite build
+      - run: cd apps/desktop && bunx electron-builder --mac dmg
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'   # unsigned dmg — users right-click → Open
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+          if-no-files-found: error
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: bun install --frozen-lockfile
+      - run: cd apps/mobile && bun run build && bunx cap sync android
+      - run: cd apps/mobile/android && ./gradlew assembleDebug --no-daemon
+      - name: rename apk
+        run: mv apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk apps/mobile/mirai-companion-${{ github.ref_name }}.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: apps/mobile/*.apk
+          if-no-files-found: error
+
+  publish:
+    needs: [linux, windows, macos, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Attach to the release
+        run: gh release upload "${{ github.ref_name }}" artifacts/* --repo "$GITHUB_REPOSITORY" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Release summary
+        run: ls -la artifacts/

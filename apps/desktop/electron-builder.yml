@@ -36,6 +36,8 @@ linux:
       arch: [x64]
     - target: AppImage
       arch: [x64]
+    - target: rpm
+      arch: [x64]
   desktop:
     Name: Mirai Studio
     Comment: AI-Native Anime & Animation Production Studio
@@ -51,7 +53,7 @@ deb:
 appImage:
   artifactName: mirai-studio_${version}_${arch}.AppImage
 
-# Windows installer (build on Windows or with wine; config ready)
+# Windows installer — built on GitHub Actions windows runners (v0.16+).
 win:
   icon: build/icon.png
   target: nsis
@@ -60,3 +62,14 @@ nsis:
   artifactName: mirai-studio_${version}_${arch}-setup.${ext}
   oneClick: false
   allowToChangeInstallationDirectory: true
+
+# macOS — built on GitHub Actions macOS runners (v0.16+). Unsigned: users
+# right-click → Open on first launch (Gatekeeper); signing needs Apple Dev ID.
+mac:
+  icon: build/icon.png
+  category: public.app-category.graphics-design
+  target:
+    - dmg
+  artifactName: mirai-studio_${version}_${arch}.${ext}
+dmg:
+  artifactName: mirai-studio_${version}_${arch}.dmg

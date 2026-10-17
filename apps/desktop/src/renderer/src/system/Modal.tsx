@@ -37,7 +37,6 @@ export function Modal({
   // Initial focus — ONLY on the closed→open transition, never per re-render.
   useEffect(() => {
     if (open) ref.current?.focus()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   useEffect(() => {

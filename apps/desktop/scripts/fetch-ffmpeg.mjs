@@ -1,61 +1,111 @@
 #!/usr/bin/env node
 /**
- * Downloads John Van Sickle's static GPL FFmpeg build (with libx264 — the
- * encoder the render pipeline NEEDS for H.264 MP4s) into resources/ffmpeg/.
- * The binary is a separate process (spawn, never linked): Mirai Studio calls
- * it like any other system tool — GPL attaches to FFmpeg itself, and we
- * comply by shipping its license (GPLv3.txt, inside the archive) and pointing
- * to the corresponding source (johnvansickle.com provides the source tarball
- * per release). Packaging ships it inside the app: renders work with no
- * system FFmpeg at all.
+ * Downloads the static GPL FFmpeg build for the CURRENT platform (or
+ * --platform override) into resources/ffmpeg/ so the app renders video on
+ * machines with no system FFmpeg.
  *
+ *   linux: johnvansickle static (tar.xz — what we ship today)
+ *   win:   gyan.dev essentials (zip — ffmpeg.exe/ffprobe.exe)
+ *   mac:   osxexperts build (zip — arm64; Intel per release files)
+ *
+ * The binary is a separate process (spawn, never linked): GPL attaches to
+ * the FFmpeg binary; we comply by shipping its license text (GPLv3.txt is
+ * inside the archives) and pointing to the corresponding sources
+ * (johnvansickle.com/ffmpeg, gyan.dev/ffmpeg/builds, osxexperts.net).
  * Skips the download when the binaries are already present.
  */
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const RES = join(HERE, '..', 'resources', 'ffmpeg')
-const BIN_FFMPEG = join(RES, 'ffmpeg')
-const BIN_FFPROBE = join(RES, 'ffprobe')
 
-if (existsSync(BIN_FFMPEG) && existsSync(BIN_FFPROBE)) {
-  console.log('[fetch-ffmpeg] bundled FFmpeg already present — skipping.')
+const argPlatform = process.argv.includes('--platform')
+  ? process.argv[process.argv.indexOf('--platform') + 1]
+  : undefined
+const platform = argPlatform ?? process.platform
+
+const TARGETS = {
+  linux: {
+    url: 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz',
+    kind: 'tar',
+  },
+  win32: {
+    // Requesting the essentials build WITHOUT the 7z variant — zip layout:
+    // ffmpeg-<ver>-essentials_build/bin/ffmpeg.exe + ffprobe.exe
+    url: 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip',
+    kind: 'zip',
+  },
+  darwin: {
+    // osxexperts publishes per-version files; the stable path below follows
+    // their naming (arm64). Adjust the version at port time if needed.
+    url: 'https://www.osxexperts.net/ffmpeg-71-arm.zip',
+    kind: 'zip',
+  },
+}
+
+const BIN_NAMES = platform === 'win32' ? ['ffmpeg.exe', 'ffprobe.exe'] : ['ffmpeg', 'ffprobe']
+const HAVE = BIN_NAMES.every((n) => existsSync(join(RES, n)))
+
+if (HAVE) {
+  console.log(`[fetch-ffmpeg] ${platform}: binaries already present — skipping.`)
   process.exit(0)
 }
 
-// Platform URLs (config-ready for ports — only linux is built/tested today).
-// NOTE: win/mac archives have DIFFERENT layouts; the tar flags and the
-// strip-components below are linux-specific — adjust at port time.
-const PLATFORM_URLS = {
-  linux: 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz',
-  win: 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip',
-  mac: 'https://www.osxexperts.net/ffmpeg-7-0-2-arm.zip', // arm64; Intel builds exist per release
+const target = TARGETS[platform]
+if (!target) {
+  console.error(`[fetch-ffmpeg] unsupported platform: ${platform}`)
+  process.exit(1)
 }
-const platform = process.env['MIRAI_FFMPEG_PLATFORM'] ?? process.platform
-const URL = process.env['MIRAI_FFMPEG_URL'] ?? PLATFORM_URLS[platform] ?? PLATFORM_URLS.linux
-if (platform !== 'linux') {
-  console.warn('[fetch-ffmpeg] NOTE: win/mac downloads are config-ready but UNTESTED — verify the archive layout at port time.')
-}
-const TMP = join(HERE, '..', 'resources', 'ffmpeg-download.tar.xz')
+
 mkdirSync(RES, { recursive: true })
-
-console.log(`[fetch-ffmpeg] downloading ${URL} …`)
-const res = await fetch(URL)
-if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
-// Node 18's fetch body is a web ReadableStream (no .pipe) — buffer once.
+const TMP = join(HERE, '..', 'resources', 'ffmpeg-download-' + platform + '.' + target.kind)
+console.log(`[fetch-ffmpeg] ${platform}: downloading ${target.url} …`)
+const res = await fetch(target.url)
+if (!res.ok) throw new Error(`Download failed: HTTP ${res.status} for ${target.url}`)
 writeFileSync(TMP, Buffer.from(await res.arrayBuffer()))
-console.log(`[fetch-ffmpeg] downloaded, extracting …`)
+console.log(`[fetch-ffmpeg] downloaded ${(statSync(TMP).size / 1_000_000).toFixed(1)} MB, extracting …`)
 
-const tar = spawnSync('tar', ['-xJf', TMP, '-C', RES, '--strip-components=1'], {
-  encoding: 'utf8',
-  timeout: 300_000,
-})
+// Universal extraction: bsdtar (Windows 10+/macOS/Linux all ship a tar that
+// reads zip via libarchive; gyan zip has one top-level folder, osxexperts
+// zips keep binaries at the root).
+const EXTRACT = join(HERE, '..', 'resources', 'ffmpeg-extract')
+rmSync(EXTRACT, { recursive: true, force: true })
+mkdirSync(EXTRACT, { recursive: true })
+const tar = spawnSync('tar', ['-xf', TMP, '-C', EXTRACT], { encoding: 'utf8', timeout: 300_000 })
 rmSync(TMP, { force: true })
-if (tar.status !== 0) throw new Error(`Extraction failed: ${tar.stderr}`)
-if (!existsSync(BIN_FFMPEG) || !existsSync(BIN_FFPROBE)) {
-  throw new Error('Extraction finished but ffmpeg/ffprobe not found — check the archive layout.')
+if (tar.status !== 0) throw new Error(`Extraction failed (is bsdtar available?): ${tar.stderr}`)
+
+/** Find a binary by name anywhere in the extracted tree. */
+function findBinary(name) {
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        const found = walk(p)
+        if (found) return found
+      } else if (entry.name === name && !entry.isDirectory()) {
+        return p
+      }
+    }
+    return null
+  }
+  return walk(EXTRACT)
 }
-console.log(`[fetch-ffmpeg] bundled FFmpeg ready at ${RES}`)
+
+let missing = []
+for (const name of BIN_NAMES) {
+  const src = findBinary(name)
+  if (!src) {
+    missing.push(name)
+    continue
+  }
+  cpSync(src, join(RES, name))
+}
+rmSync(EXTRACT, { recursive: true, force: true })
+if (missing.length > 0) {
+  throw new Error(`Extraction finished but ${missing.join(', ')} not found — check the archive layout for ${target.url}`)
+}
+console.log(`[fetch-ffmpeg] ${platform}: binaries ready at ${RES}`)
