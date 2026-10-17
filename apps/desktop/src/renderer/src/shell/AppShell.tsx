@@ -227,13 +227,16 @@ export function AppShell() {
 
   // RESUME ON LAUNCH: quietly reopen the last project so the user picks up
   // exactly where they left off instead of starting from the Hub.
+  // NEVER while the user is already acting on the Hub (New Project modal
+  // open) — auto-navigating away mid-typing destroyed their form once.
   useEffect(() => {
     const lastPath = settings?.session.lastProjectPath
     if (!lastPath || current) return
+    if (useAppStore.getState().newProjectOpen) return
     let cancelled = false
     void invoke('projects:open', { path: lastPath })
       .then(() => {
-        if (!cancelled) {
+        if (!cancelled && !useAppStore.getState().newProjectOpen) {
           void queryClient.invalidateQueries({ queryKey: ['project'] })
           void queryClient.invalidateQueries({ queryKey: ['projects'] })
         }
@@ -277,7 +280,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                v0.15.0
+                v0.15.1
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio"

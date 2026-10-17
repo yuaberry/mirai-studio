@@ -7,6 +7,14 @@ import { X } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { Button, IconButton } from './ui'
 
+/**
+ * Modal — portal-based, ESC/overlay close, initial focus on the dialog.
+ *
+ * FOCUS CONTRACT (v0.15.1): the dialog takes focus ONCE, when it opens.
+ * The ESC handler may depend on onClose (fresh identity per parent render
+ * is normal), but re-running focus on every re-render STEALS focus from
+ * the inputs — typing died after one keystroke until this was split.
+ */
 export function Modal({
   open,
   onClose,
@@ -26,13 +34,18 @@ export function Modal({
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
+  // Initial focus — ONLY on the closed→open transition, never per re-render.
+  useEffect(() => {
+    if (open) ref.current?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
-    ref.current?.focus()
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 

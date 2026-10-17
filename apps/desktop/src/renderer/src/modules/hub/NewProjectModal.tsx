@@ -2,7 +2,7 @@
  * New Project modal — creates a REAL project on disk (folder structure,
  * manifest, database, prompt library seed) and opens it.
  */
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { FolderOpen, Loader2, Sparkles } from 'lucide-react'
 import {
   ANIME_GENRES,
@@ -94,6 +94,9 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [serverError, setServerError] = useState<string | null>(null)
+  const handleClose = useCallback(() => {
+    if (!createProject.isPending && !openProject.isPending) onClose()
+  }, [createProject.isPending, openProject.isPending, onClose])
   const importNotes = useImportNotes()
   const analyzeNotes = useAnalyzeNotes()
   const [notes, setNotes] = useState<NotesImportResult | null>(null)
@@ -241,7 +244,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
   return (
     <Modal
       open={open}
-      onClose={() => (busy ? undefined : onClose())}
+      onClose={handleClose}
       title="New Project"
       description="Mirai creates the full production folder, database, manifest and a curated prompt library — no placeholders."
       width="max-w-2xl"
