@@ -38,14 +38,20 @@ const TARGETS = {
     url: 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip',
     kind: 'zip',
   },
+  // macOS: VERIFIED direct binaries (macos-latest is arm64). ffmpeg from
+  // eugeneware/ffmpeg-static (GPL build); ffprobe from joshwnj/ffprobe-static.
+  // Intel Macs: swap to darwin-x64 paths.
   darwin: {
-    // osxexperts publishes per-version files; the stable path below follows
-    // their naming (arm64). Adjust the version at port time if needed.
-    url: 'https://www.osxexperts.net/ffmpeg-71-arm.zip',
-    kind: 'zip',
+    kind: 'direct',
+    files: {
+      ffmpeg: 'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64',
+      ffprobe: 'https://raw.githubusercontent.com/joshwnj/ffprobe-static/master/bin/darwin/arm64/ffprobe',
+    },
   },
 }
 
+const binaryNames = (base) =>
+  platform === 'win32' ? [`${base}.exe`, base] : [base]
 const BIN_NAMES = platform === 'win32' ? ['ffmpeg.exe', 'ffprobe.exe'] : ['ffmpeg', 'ffprobe']
 const HAVE = BIN_NAMES.every((n) => existsSync(join(RES, n)))
 
@@ -58,6 +64,21 @@ const target = TARGETS[platform]
 if (!target) {
   console.error(`[fetch-ffmpeg] unsupported platform: ${platform}`)
   process.exit(1)
+}
+
+if (target.kind === 'direct') {
+  for (const [base, url] of Object.entries(target.files)) {
+    for (const name of binaryNames(base)) {
+      const out = join(RES, name)
+      console.log(`[fetch-ffmpeg] ${platform}: downloading ${url} …`)
+      const r = await fetch(url)
+      if (!r.ok) throw new Error(`Download failed: HTTP ${r.status} for ${url}`)
+      writeFileSync(out, Buffer.from(await r.arrayBuffer()))
+      console.log(`  -> ${out} (${(statSync(out).size / 1_000_000).toFixed(1)} MB)`)
+    }
+  }
+  console.log(`[fetch-ffmpeg] ${platform}: binaries ready at ${RES}`)
+  process.exit(0)
 }
 
 mkdirSync(RES, { recursive: true })
