@@ -56,7 +56,7 @@ rpm:
   artifactName: mirai-studio_${version}_${arch}.${ext}
   # electron-builder's default xzmt (threaded xz) breaks on Ubuntu's rpmbuild
   # (CI run 4); gz payload is universally buildable.
-  compression: gz
+  compression: gzip
 
 appImage:
   artifactName: mirai-studio_${version}_${arch}.AppImage
