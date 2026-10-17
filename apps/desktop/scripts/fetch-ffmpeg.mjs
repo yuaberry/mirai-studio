@@ -14,7 +14,7 @@
  * (johnvansickle.com/ffmpeg, gyan.dev/ffmpeg/builds, osxexperts.net).
  * Skips the download when the binaries are already present.
  */
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -67,6 +67,7 @@ if (!target) {
 }
 
 if (target.kind === 'direct') {
+  mkdirSync(RES, { recursive: true })
   for (const [base, url] of Object.entries(target.files)) {
     for (const name of binaryNames(base)) {
       const out = join(RES, name)
@@ -74,7 +75,9 @@ if (target.kind === 'direct') {
       const r = await fetch(url)
       if (!r.ok) throw new Error(`Download failed: HTTP ${r.status} for ${url}`)
       writeFileSync(out, Buffer.from(await r.arrayBuffer()))
-      console.log(`  -> ${out} (${(statSync(out).size / 1_000_000).toFixed(1)} MB)`)
+      // Direct downloads must keep the executable bit for the packaged app.
+      chmodSync(out, 0o755)
+      console.log(`  -> ${out} (${(statSync(out).size / 1_000_000).toFixed(1)} MB, +x)`)
     }
   }
   console.log(`[fetch-ffmpeg] ${platform}: binaries ready at ${RES}`)

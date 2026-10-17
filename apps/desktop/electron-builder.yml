@@ -46,6 +46,10 @@ linux:
 
 deb:
   artifactName: mirai-studio_${version}_${arch}.${ext}
+rpm:
+  # Without this the default uses the package name "@mirai/desktop" — the
+  # slash creates a phantom directory and fpm dies (caught on CI run 2).
+  artifactName: mirai-studio_${version}_${arch}.${ext}
   maintainer: Mirai Studio Developers <dev@mirai.studio>
   priority: optional
   packageCategory: graphics
