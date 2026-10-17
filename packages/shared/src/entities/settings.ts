@@ -62,8 +62,15 @@ export const AppSettings = z.object({
     .default({}),
   appearance: z
     .object({
-      /** Phase 0 ships dark-only; the token keeps future themes honest. */
-      theme: z.enum(['dark']).default('dark'),
+      /** v0.17: full theme set — dark (cinematic), black (OLED), light
+       *  (branco), sakura (warm pink) and custom (user accent color). */
+      theme: z.enum(['dark', 'black', 'light', 'sakura', 'custom']).default('dark'),
+      /** Custom theme accent (#rrggbb) — only used when theme = 'custom'. */
+      customAccent: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{6}$/, 'Expected a #rrggbb hex color.')
+        .nullable()
+        .default(null),
       density: z.enum(['comfortable', 'compact']).default('comfortable'),
       /** Global UI scale multiplier — adapts the whole suite to any screen. */
       uiScale: z.number().min(0.8).max(1.4).default(1),

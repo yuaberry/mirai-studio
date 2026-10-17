@@ -144,6 +144,24 @@ export function AppShell() {
   const { data: settings } = useSettings()
   const queryClient = useQueryClient()
 
+  // THEME (v0.17): data-theme swaps every CSS var (see tokens.css); the
+  // custom theme also injects the user's accent color inline.
+  useEffect(() => {
+    const theme = settings?.appearance.theme ?? 'dark'
+    document.documentElement.dataset.theme = theme
+    const accent = settings?.appearance.customAccent
+    if (theme === 'custom' && accent) {
+      document.documentElement.style.setProperty('--accent', accent)
+      // Derived companions keep the gradient cohesive with any hue.
+      document.documentElement.style.setProperty('--accent-2', `color-mix(in srgb, ${accent} 55%, #a78bfa)`)
+      document.documentElement.style.setProperty('--accent-3', `color-mix(in srgb, ${accent} 35%, #22d3ee)`)
+    } else {
+      document.documentElement.style.removeProperty('--accent')
+      document.documentElement.style.removeProperty('--accent-2')
+      document.documentElement.style.removeProperty('--accent-3')
+    }
+  }, [settings?.appearance.theme, settings?.appearance.customAccent])
+
   // RESPONSIVENESS: the whole suite is rem-based — scaling the root font-size
   // resizes every panel, text and spacing to fit any screen.
   // Layers: density (comfortable/compact) × autoFit (window-height adaptive
@@ -280,7 +298,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                v0.16.0
+                v0.17.0
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio"

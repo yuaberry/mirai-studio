@@ -105,6 +105,11 @@ const PT_BR: Record<string, string> = {
   'Template': 'Modelo',
   'Resolution': 'Resolução',
 
+  // ------------------------------------------------------- themes (v0.17)
+  'Theme': 'Tema',
+  'Custom accent color': 'Cor de destaque personalizada',
+  'Pick the accent color of your studio.': 'Escolha a cor de destaque do seu estúdio.',
+
   // ---------------------------------------------- notes import + dossier (v0.15)
   'Import story notes…': 'Importar notas da história…',
   'Analyze with AI': 'Analisar com IA',

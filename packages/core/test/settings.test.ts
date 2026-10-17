@@ -98,6 +98,28 @@ describe('SettingsService', () => {
     db.close()
   })
 
+  it('persists every theme (v0.17) and the custom accent color', () => {
+    const db = makeDb('themes')
+    const service = new SettingsService(db)
+    for (const theme of ['dark', 'black', 'light', 'sakura', 'custom'] as const) {
+      service.patch({
+        appearance: {
+          ...service.get().appearance,
+          theme,
+          customAccent: theme === 'custom' ? '#22d3ee' : null,
+        },
+      })
+      const after = service.get()
+      expect(after.appearance.theme).toBe(theme)
+      expect(after.appearance.customAccent).toBe(theme === 'custom' ? '#22d3ee' : null)
+    }
+    // Invalid hex rejected by the schema -> patch refuses the whole write.
+    expect(() =>
+      service.patch({ appearance: { ...service.get().appearance, theme: 'custom', customAccent: 'blue' } }),
+    ).toThrow()
+    db.close()
+  })
+
   it('patch() persists session state across a restart (same DB)', () => {
     const db = makeDb('patch-session')
     const service = new SettingsService(db)

@@ -74,6 +74,22 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
   const [density, setDensity] = useState(settings.appearance.density)
   const [uiScale, setUiScale] = useState(String(settings.appearance.uiScale ?? 1))
   const [autoFit, setAutoFit] = useState(settings.appearance.autoFit ?? true)
+  const [theme, setTheme] = useState(settings.appearance.theme)
+  const [customAccent, setCustomAccent] = useState(settings.appearance.customAccent ?? '#f472b6')
+
+  // Live preview: apply the chosen theme instantly while picking.
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    if (theme === 'custom' && /^#[0-9a-fA-F]{6}$/.test(customAccent)) {
+      document.documentElement.style.setProperty('--accent', customAccent)
+      document.documentElement.style.setProperty('--accent-2', `color-mix(in srgb, ${customAccent} 55%, #a78bfa)`)
+      document.documentElement.style.setProperty('--accent-3', `color-mix(in srgb, ${customAccent} 35%, #22d3ee)`)
+    } else {
+      document.documentElement.style.removeProperty('--accent')
+      document.documentElement.style.removeProperty('--accent-2')
+      document.documentElement.style.removeProperty('--accent-3')
+    }
+  }, [theme, customAccent])
 
   const save = () =>
     update.mutate(
@@ -85,6 +101,8 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
         },
         appearance: {
           ...settings.appearance,
+          theme,
+          customAccent: theme === 'custom' ? customAccent : null,
           density: density as AppSettings['appearance']['density'],
           uiScale: Number(uiScale) || 1,
           autoFit,
@@ -117,6 +135,53 @@ function GeneralCard({ settings }: { settings: AppSettings }) {
             onChange={(e) => setAutosave(e.target.value)}
           />
           <p className="mt-1 text-[10px] text-mirai-faint">Editors autosave draft state (Story Bible today, more in Phase 1+).</p>
+        </div>
+        <div className="col-span-2">
+          <Label>{tr('Theme')}</Label>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            {(
+              [
+                { id: 'dark', label: 'Cinematic Dark', base: '#0a0c10', accent: '#f472b6' },
+                { id: 'black', label: 'Preto (OLED)', base: '#000000', accent: '#f472b6' },
+                { id: 'light', label: 'Branco', base: '#f4f5f8', accent: '#d6337c' },
+                { id: 'sakura', label: 'Sakura', base: '#120a10', accent: '#fb7fbd' },
+                { id: 'custom', label: 'Personalizado', base: '#0a0c10', accent: customAccent },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTheme(t.id)}
+                className={cn(
+                  'flex flex-col gap-2 rounded-lg border p-2 text-left transition-colors',
+                  theme === t.id
+                    ? 'border-mirai-accent bg-mirai-hover'
+                    : 'border-mirai-border bg-mirai-panel hover:border-mirai-border-strong',
+                )}
+              >
+                <span
+                  className="flex h-10 items-center justify-center rounded-md border border-black/10"
+                  style={{ background: t.base }}
+                >
+                  <span className="h-4 w-10 rounded-full" style={{ background: t.accent }} />
+                </span>
+                <span className="text-[10px] font-bold text-mirai-text">{t.label}</span>
+              </button>
+            ))}
+          </div>
+          {theme === 'custom' && (
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="color"
+                value={customAccent}
+                onChange={(e) => setCustomAccent(e.target.value)}
+                className="h-8 w-12 cursor-pointer rounded border border-mirai-border bg-mirai-panel"
+                aria-label={tr('Custom accent color')}
+              />
+              <code className="rounded bg-mirai-hover px-2 py-1 text-[11px] text-mirai-dim">{customAccent}</code>
+              <span className="text-[10px] text-mirai-faint">{tr('Pick the accent color of your studio.')}</span>
+            </div>
+          )}
         </div>
         <div>
           <Label htmlFor="st-density">{tr('Interface density')}</Label>
