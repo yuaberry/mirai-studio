@@ -1,0 +1,266 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/space-grotesk';
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  /* CRITICAL: makes native form controls (select dropdown lists, scrollbars,
+     date inputs) render dark — without this the option list opens with a
+     system-white background and the text becomes invisible on Linux/Windows. */
+  html {
+    color-scheme: dark;
+  }
+
+  /* Branco (light) theme: native controls follow. */
+  html[data-theme='light'] {
+    color-scheme: light;
+  }
+
+  /* Belt & suspenders for the native select popup: explicitly paint the
+     options dark too (some Chromium versions ignore color-scheme on option). */
+  select,
+  select option {
+    background-color: var(--bg-panel);
+    color: var(--text);
+  }
+  select option:checked,
+  select option:hover,
+  select option:focus {
+    background-color: color-mix(in srgb, var(--accent) 25%, var(--bg-panel));
+    color: var(--text);
+  }
+
+  body {
+    @apply bg-mirai-base text-mirai-text antialiased;
+    background-image:
+      radial-gradient(52% 38% at 8% 0%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 60%),
+      radial-gradient(46% 40% at 96% 8%, color-mix(in srgb, var(--accent-3) 4%, transparent), transparent 55%);
+    background-attachment: fixed;
+    font-family: 'Inter Variable', Inter, system-ui, sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    overflow: hidden;
+    user-select: none;
+  }
+
+  input,
+  textarea,
+  [data-selectable='true'] {
+    user-select: text;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-thumb {
+    /* Clearly visible against every surface — users reported invisible bars. */
+    background: #4a5478;
+    border-radius: 8px;
+    border: 2px solid var(--bg-base);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #5d688f;
+  }
+  ::-webkit-scrollbar-thumb:active {
+    background: var(--accent);
+  }
+  ::-webkit-scrollbar-track {
+    background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+    outline-offset: 1px;
+  }
+}
+
+@layer utilities {
+  .text-gradient-mirai {
+    background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .bg-gradient-mirai {
+    background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+  }
+
+  .panel {
+    @apply rounded-[10px] border border-mirai-border bg-mirai-raise;
+  }
+
+  /* Cinematic hero glow — the Hub banner. */
+  .hero-glow {
+    background:
+      radial-gradient(60% 90% at 18% 10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
+      radial-gradient(50% 80% at 85% 20%, color-mix(in srgb, var(--accent-3) 12%, transparent), transparent 55%),
+      radial-gradient(40% 70% at 55% 100%, color-mix(in srgb, var(--accent-2) 14%, transparent), transparent 60%);
+  }
+
+  .grid-overlay {
+    background-image:
+      linear-gradient(color-mix(in srgb, var(--border-strong) 30%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--border-strong) 30%, transparent) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  .animate-in {
+    animation: mirai-fade-in 160ms ease-out;
+  }
+
+  .animate-in-up {
+    animation: mirai-slide-up 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-scale-in {
+    animation: mirai-scale-in 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes mirai-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes mirai-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mirai-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes mirai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================ POLISH (v0.17)
+ * Depth, motion and tactile feedback on top of the token system —
+ * every theme inherits it because everything reads the vars.
+ */
+@layer utilities {
+  /* Panels get real depth: soft shadow + barely-there top highlight. */
+  .panel {
+    box-shadow:
+      0 1px 0 0 color-mix(in srgb, var(--text) 4%, transparent) inset,
+      0 8px 24px -12px rgba(0, 0, 0, 0.35);
+  }
+  :root[data-theme='light'] .panel {
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.9) inset,
+      0 6px 18px -10px rgba(20, 22, 28, 0.14);
+  }
+
+  /* Cards/buttons press feedback — the whole suite feels tactile. */
+  button {
+    transition:
+      transform 90ms cubic-bezier(0.16, 1, 0.3, 1),
+      background-color 130ms ease,
+      color 130ms ease,
+      border-color 130ms ease,
+      box-shadow 130ms ease;
+  }
+  button:active:not(:disabled) {
+    transform: scale(0.985);
+  }
+
+  /* Keyboard focus: a crisp accent ring that never fights the layout. */
+  :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+    outline-offset: 2px;
+  }
+
+  /* Text selection follows the brand. */
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  /* Nav items: sliding active indicator + hover glide. */
+  aside button {
+    position: relative;
+  }
+  aside button::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 20%;
+    bottom: 20%;
+    width: 3px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    opacity: 0;
+    transform: scaleY(0.4);
+    transition:
+      opacity 140ms ease,
+      transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  aside button:hover::before {
+    opacity: 0.35;
+    transform: scaleY(0.8);
+  }
+  aside button.bg-mirai-hover::before {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+
+  /* Inputs: focus lift instead of a bare border flip. */
+  input,
+  textarea,
+  select {
+    transition:
+      border-color 130ms ease,
+      box-shadow 130ms ease,
+      background-color 130ms ease;
+  }
+  input:focus,
+  textarea:focus,
+  select:focus {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+  }
+
+  /* Modals: deeper stage + crisper edge. */
+  [role='dialog'] {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent),
+      0 32px 80px -24px rgba(0, 0, 0, 0.6);
+  }
+  :root[data-theme='light'] [role='dialog'] {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent),
+      0 32px 80px -28px rgba(20, 22, 28, 0.35);
+  }
+}
