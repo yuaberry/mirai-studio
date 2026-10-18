@@ -843,6 +843,8 @@ export const ipcContracts = {
       context: z
         .object({
           medium: z.string().max(30).optional(),
+          demographic: z.string().max(30).optional(),
+          seasonCount: z.number().int().min(1).max(50).optional(),
           targetAudience: z.string().max(600).optional(),
           inspirations: z.string().max(600).optional(),
           setting: z.string().max(600).optional(),

@@ -59,8 +59,9 @@ export {
   PROJECT_MEDIUMS,
   MEDIUM_LABEL,
   zProjectMedium,
+  DEMOGRAPHICS,
 } from './entities/project'
-export type { ProjectMedium } from './entities/project'
+export type { ProjectMedium, Demographic } from './entities/project'
 export type { ProjectPreset } from './entities/project'
 export {
   SUPPORTED_NOTE_FORMATS,

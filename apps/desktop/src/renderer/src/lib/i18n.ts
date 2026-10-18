@@ -105,6 +105,14 @@ const PT_BR: Record<string, string> = {
   'Template': 'Modelo',
   'Resolution': 'Resolução',
 
+  // --------------------------------------------- seasons + demographic (v0.19)
+  'Seasons planned for the IP': 'Temporadas planejadas para a IP',
+  'e.g. 2 · 4 — how many seasons/arcs the whole IP plans': 'ex.: 2 · 4 — quantas temporadas/arcos a IP completa planeja',
+  'A temporada 1 fecha seu arco e semeia o grande arco da IP.': 'A temporada 1 fecha seu próprio arco e semeia o grande arco da IP.',
+  'Demographic': 'Demografia',
+  'all fields optional': 'todos os campos opcionais',
+  'seasons': 'temporadas',
+
   // --------------------------------------------- brief + adaptation (v0.18)
   'Author brief — optional, powers the AI': 'Brief do autor — opcional, turbinam a IA',
   'Target audience': 'Público-alvo',

@@ -23,7 +23,7 @@ import { invoke } from '../../lib/ipc'
 import { useAnalyzeNotes, useCreateProject, useHealth, useImportNotes, useOpenProject, useSettings } from '../../lib/queries'
 import { t } from '../../lib/i18n'
 import { useAppStore, toast } from '../../store/appStore'
-import { MEDIUM_LABEL, PROJECT_MEDIUMS, type NotesImportResult, type ProjectMedium, type StoryNotesAnalysis } from '@mirai/shared'
+import { DEMOGRAPHICS, MEDIUM_LABEL, PROJECT_MEDIUMS, type NotesImportResult, type ProjectMedium, type StoryNotesAnalysis } from '@mirai/shared'
 
 interface FormState {
   name: string
@@ -40,13 +40,15 @@ interface FormState {
   resolution: string
   episodeCount: string
   contentRating: string
-  /* v0.18 complete brief — the author's IP answers (all optional). */
+  /* v0.18+ complete brief — the author's IP answers (all optional). */
   targetAudience: string
   inspirations: string
   setting: string
   endingVision: string
   episodeLengthMinutes: string
   pagesPerChapter: string
+  seasonCount: string
+  demographic: string
 }
 
 function toggleGenre(list: string[], genre: string): string[] {
@@ -93,6 +95,8 @@ const EMPTY_FORM: FormState = {
   endingVision: '',
   episodeLengthMinutes: '',
   pagesPerChapter: '',
+  seasonCount: '',
+  demographic: '',
 }
 
 export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -113,6 +117,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
   const importNotes = useImportNotes()
   const analyzeNotes = useAnalyzeNotes()
   const [notes, setNotes] = useState<NotesImportResult | null>(null)
+  const [briefOpen, setBriefOpen] = useState(false)
   const [analysis, setAnalysis] = useState<StoryNotesAnalysis | null>(null)
 
   /** Applies the AI analysis to the form — never overwrites what the user typed. */
@@ -125,6 +130,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
       medium: f.medium || a.medium,
       episodeCount:
         f.episodeCount.trim() && f.episodeCount !== '12' ? f.episodeCount : String(Math.min(a.estimatedEpisodes, 999)),
+      seasonCount: f.seasonCount || (a.estimatedSeasons > 1 ? String(Math.min(a.estimatedSeasons, 50)) : ''),
       contentRating:
         f.contentRating !== '13+' || a.contentRating === '18+'
           ? a.contentRating && f.contentRating === '13+'
@@ -146,6 +152,8 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
         notesText: notes.combined,
         context: {
           medium: form.medium || undefined,
+          demographic: form.demographic || undefined,
+          seasonCount: form.seasonCount === '' ? undefined : Number(form.seasonCount),
           targetAudience: form.targetAudience.trim() || undefined,
           inspirations: form.inspirations.trim() || undefined,
           setting: form.setting.trim() || undefined,
@@ -234,6 +242,8 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
       endingVision: form.endingVision.trim() || undefined,
       episodeLengthMinutes: form.episodeLengthMinutes === '' ? undefined : Number(form.episodeLengthMinutes),
       pagesPerChapter: form.pagesPerChapter === '' ? undefined : Number(form.pagesPerChapter),
+      seasonCount: form.seasonCount === '' ? undefined : Number(form.seasonCount),
+      demographic: (form.demographic || undefined) as (typeof DEMOGRAPHICS)[number] | undefined,
     })
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
@@ -398,7 +408,8 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
               <p className="text-[11px] leading-relaxed text-mirai-dim">{analysis.premise}</p>
               <p className="text-[11px] leading-relaxed text-mirai-dim">
                 <span className="font-bold text-mirai-text">{tr('Suggested')}:</span> {analysis.titleSuggestion} ·{' '}
-                {analysis.medium} · {analysis.estimatedEpisodes} {tr('episodes')} · {analysis.suggestedAudience}
+                {analysis.medium} · {analysis.estimatedEpisodes} {tr('episodes')} · {analysis.estimatedSeasons}{' '}
+                {tr('seasons')} · {analysis.suggestedAudience}
               </p>
               {analysis.improvements.length > 0 && (
                 <div>
@@ -626,12 +637,46 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
           )}
         </div>
 
-        {/* ---- v0.18: the complete author brief — quality IP inputs ---- */}
+        {/* ---- v0.18+: the complete author brief — ALL OPTIONAL, collapsible ---- */}
         <div className="col-span-2 mt-2 border-t border-mirai-border pt-3">
-          <p className="mb-2 text-[10px] font-bold tracking-[0.16em] text-mirai-faint uppercase">
-            {tr('Author brief — optional, powers the AI')}
-          </p>
-          <div className="grid grid-cols-2 gap-4">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between text-left"
+            onClick={() => setBriefOpen((v) => !v)}
+          >
+            <span className="text-[10px] font-bold tracking-[0.16em] text-mirai-faint uppercase">
+              {tr('Author brief — optional, powers the AI')}
+              <span className="ml-2 font-normal normal-case">({tr('all fields optional')})</span>
+            </span>
+            <span className="text-[10px] font-bold text-mirai-dim">{briefOpen ? '▾' : '▸'}</span>
+          </button>
+          {briefOpen && (
+          <>
+          <div className="mt-3 grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="np-seasons">{tr('Seasons planned for the IP')}</Label>
+              <Input
+                id="np-seasons"
+                inputMode="numeric"
+                placeholder={tr('e.g. 2 · 4 — how many seasons/arcs the whole IP plans')}
+                value={form.seasonCount}
+                onChange={(e) => set('seasonCount', e.target.value)}
+              />
+              <p className="mt-0.5 text-[10px] text-mirai-faint">
+                {tr('A temporada 1 fecha seu arco e semeia o grande arco da IP.')}
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="np-demo">{tr('Demographic')}</Label>
+              <Select id="np-demo" value={form.demographic} onChange={(e) => set('demographic', e.target.value)}>
+                <option value="">{tr('Choose…')}</option>
+                {DEMOGRAPHICS.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </Select>
+            </div>
             <div>
               <Label htmlFor="np-audience">{tr('Target audience')}</Label>
               <Input
@@ -696,6 +741,8 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
           <p className="mt-2 text-[10px] leading-relaxed text-mirai-faint">
             {tr('brief-hint')}
           </p>
+          </>
+          )}
         </div>
 
         {serverError && (

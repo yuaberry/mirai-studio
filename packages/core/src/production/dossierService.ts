@@ -39,6 +39,12 @@ export interface DossierData {
   resolution: string
   fps: number
   plannedEpisodes: number | null
+  /** v0.19: the full-IP vision. */
+  plannedSeasons: number | null
+  demographic: string
+  targetAudience: string | undefined
+  inspirations: string | undefined
+  endingVision: string | undefined
   appVersion: string
   createdAt: string
   updatedAt: string
@@ -112,7 +118,12 @@ export class DossierService {
         { kind: 'meta', k: 'Matéria / formato', v: data.medium },
         { kind: 'meta', k: 'Gêneros', v: data.genres.join(', ') || '—' },
         { kind: 'meta', k: 'Classificação de conteúdo', v: data.contentRating },
-        { kind: 'meta', k: 'Episódios/capítulos planejados', v: data.plannedEpisodes !== null ? String(data.plannedEpisodes) : 'a definir' },
+        { kind: 'meta', k: 'Episódios/capítulos por temporada', v: data.plannedEpisodes !== null ? String(data.plannedEpisodes) : 'a definir' },
+        { kind: 'meta', k: 'Temporadas/arcos planejados (visão da IP)', v: data.plannedSeasons !== null ? String(data.plannedSeasons) : 'a definir' },
+        { kind: 'meta', k: 'Demografia (eixo da indústria)', v: data.demographic || 'a definir' },
+        { kind: 'meta', k: 'Público-alvo declarado', v: data.targetAudience || 'a definir' },
+        { kind: 'meta', k: 'Referências/inspirações', v: data.inspirations || 'a definir' },
+        { kind: 'meta', k: 'Visão de desfecho do autor', v: data.endingVision || 'a definir' },
         { kind: 'meta', k: 'Idioma de produção', v: data.language },
         { kind: 'meta', k: 'Formato de vídeo', v: `${data.aspectRatio} · ${data.resolution} · ${data.fps} fps` },
         { kind: 'meta', k: 'Versão do dossiê', v: `v${version}` },

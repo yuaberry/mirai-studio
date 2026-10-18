@@ -1068,7 +1068,11 @@ export class AiHost {
       cfg.inspirations ? `REFERÊNCIAS/INSPIRAÇÕES: ${cfg.inspirations}` : '',
       cfg.setting ? `MUNDO/ÉPOCA: ${cfg.setting}` : '',
       cfg.endingVision ? `DESEJO DE DESFECHO DO AUTOR: ${cfg.endingVision}` : '',
-      cfg.episodeCount ? `EPISÓDIOS/CAPÍTULOS PLANEJADOS: ${cfg.episodeCount}` : '',
+      cfg.episodeCount ? `EPISÓDIOS/CAPÍTULOS POR TEMPORADA: ${cfg.episodeCount}` : '',
+      cfg.seasonCount && cfg.seasonCount > 1
+        ? `VISÃO DA IP COMPLETA: ${cfg.seasonCount} temporadas/arcos — a temporada 1 precisa FECHAR seu próprio arco e ao mesmo tempo semear o arco maior da IP`
+        : '',
+      cfg.demographic ? `DEMOGRAFIA (eixo da indústria): ${cfg.demographic}` : '',
       stored.analysis ? `ANÁLISE PROFISSIONAL PRÉVIA DA IA: ${JSON.stringify({
         titleSuggestion: stored.analysis.titleSuggestion,
         premise: stored.analysis.premise,
@@ -1134,8 +1138,12 @@ export class AiHost {
     // ---- 3. FULL season plan from the document ----------------------------
     guard()
     const planned = Math.min(Math.max(cfg.episodeCount ?? stored.analysis?.estimatedEpisodes ?? 12, 1), 24)
+    const seasonVision =
+      cfg.seasonCount && cfg.seasonCount > 1
+        ? ` The full IP plans ${cfg.seasonCount} seasons — season 1 must LAND its own arc while seeding the larger one (plant, don't resolve, the long-range threads).`
+        : ''
     const seasonPlan = await this.chatJson(
-      `You are the series director. From the author's document below, plan the SEASON (${planned} episodes) following the story's ACTUAL arc: beginning, developments, turn, climax, landing the author wrote (or pointed toward).\n\n${instruction}\n\nReturn JSON: { episodes: [{ number (1..${planned}), title, synopsis (2-4 sentences grounded in the document) }] } — exactly ${planned} episodes.`,
+      `You are the series director. From the author's document below, plan the SEASON (${planned} episodes) following the story's ACTUAL arc: beginning, developments, turn, climax, landing the author wrote (or pointed toward).${seasonVision}\n\n${instruction}\n\nReturn JSON: { episodes: [{ number (1..${planned}), title, synopsis (2-4 sentences grounded in the document) }] } — exactly ${planned} episodes.`,
       SeasonPlanList,
       0.5,
     )
@@ -1250,6 +1258,8 @@ export class AiHost {
     notesText: string,
     context?: {
       medium?: string
+      demographic?: string
+      seasonCount?: number
       targetAudience?: string
       inspirations?: string
       setting?: string
@@ -1262,6 +1272,8 @@ export class AiHost {
     const excerpt = notesText.slice(0, 60_000)
     const authorLines = [
       context?.medium ? `MATÉRIA ESCOLHIDA PELO AUTOR: ${context.medium}` : '',
+      context?.demographic ? `DEMOGRAFIA DECLARADA: ${context.demographic}` : '',
+      context?.seasonCount ? `TEMPORADAS PLANEJADAS PARA A IP: ${context.seasonCount}` : '',
       context?.targetAudience ? `PÚBLICO-ALVO DECLARADO: ${context.targetAudience}` : '',
       context?.inspirations ? `INSPIRAÇÕES DECLARADAS: ${context.inspirations}` : '',
       context?.setting ? `MUNDO/ÉPOCA DECLARADO: ${context.setting}` : '',
@@ -1269,7 +1281,7 @@ export class AiHost {
     ].filter(Boolean)
     const authorBlock = authorLines.length > 0 ? `\n\nAUTHOR DECLARATIONS (honor these):\n${authorLines.join('\n')}\n` : ''
     return this.chatJsonCore(
-      `You are the head of development of a professional anime/manga studio. The user sent REAL story notes (imported from their documents). Read them like a commercial publisher evaluating a submission, then return a professional planning analysis.${authorBlock}\n\nNOTES BEGIN\n${excerpt}\nNOTES END\n\nReturn JSON: { titleSuggestion (marketable title in the notes' language, max 120 chars), medium (ANIME, MANGA, LIGHT_NOVEL, NOVEL, WEBTOON or OTHER), premise (2-4 sentences, the core conflict), synopsis (1-2 paragraphs for a pitch document), tone, suggestedAudience, contentRating (ALL, 7+, 13+, 16+ or 18+ — infer conservatively; only 18+ if the notes are explicitly adult), genres (1-8 anime-taxonomy tags like Drama, Isekai, School, Romance), themes (1-8), estimatedEpisodes (professional planning estimate for the format), estimatedPagesPerEpisode (manga/webtoon pages per chapter; 0 for anime), characterSeeds (up to 12: { name, role, brief } — only characters the notes support), locationSeeds (up to 10), improvements (2-10 concrete, professional sentences — structure, stakes, marketability), risks (0-8 commercial/structural risks), commercialNotes (positioning + monetization read, 1-2 paragraphs) }.\nGround EVERYTHING in the notes — never invent plot the notes don't support; suggest improvements, don't write the story.`,
+      `You are the head of development of a professional anime/manga studio. The user sent REAL story notes (imported from their documents). Read them like a commercial publisher evaluating a submission, then return a professional planning analysis.${authorBlock}\n\nNOTES BEGIN\n${excerpt}\nNOTES END\n\nReturn JSON: { titleSuggestion (marketable title in the notes' language, max 120 chars), medium (ANIME, MANGA, LIGHT_NOVEL, NOVEL, WEBTOON or OTHER), premise (2-4 sentences, the core conflict), synopsis (1-2 paragraphs for a pitch document), tone, suggestedAudience, contentRating (ALL, 7+, 13+, 16+ or 18+ — infer conservatively; only 18+ if the notes are explicitly adult), genres (1-8 anime-taxonomy tags like Drama, Isekai, School, Romance), themes (1-8), estimatedEpisodes (professional planning estimate per season), estimatedSeasons (how many seasons/arcs the material supports as a full IP), estimatedPagesPerEpisode (manga/webtoon pages per chapter; 0 for anime), characterSeeds (up to 12: { name, role, brief } — only characters the notes support), locationSeeds (up to 10), improvements (2-10 concrete, professional sentences — structure, stakes, marketability), risks (0-8 commercial/structural risks), commercialNotes (positioning + monetization read, 1-2 paragraphs) }.\nGround EVERYTHING in the notes — never invent plot the notes don't support; suggest improvements, don't write the story.`,
       StoryNotesAnalysis,
       0.4,
     )

@@ -63,6 +63,8 @@ export const StoryNotesAnalysis = z.object({
   genres: z.array(z.string().min(1).max(40)).min(1).max(12),
   themes: z.array(z.string().min(1).max(120)).min(1).max(8),
   estimatedEpisodes: z.number().int().min(1).max(10_000),
+  /** How many seasons/arcs the material supports as a full IP. */
+  estimatedSeasons: z.number().int().min(1).max(50),
   /** Pages per episode/chapter (manga/webtoon) — 0 when not applicable. */
   estimatedPagesPerEpisode: z.number().int().min(0).max(500),
   characterSeeds: z

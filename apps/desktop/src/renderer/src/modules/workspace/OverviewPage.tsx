@@ -10,6 +10,7 @@ import {
   FPS_OPTIONS,
   MEDIUM_LABEL,
   PROJECT_MEDIUMS,
+  DEMOGRAPHICS,
   MiraiError,
   ProjectConfig,
   type JobRecord,
@@ -297,6 +298,8 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
   const [genre, setGenre] = useState('')
   const [genres, setGenres] = useState<string[]>([])
   const [medium, setMedium] = useState('')
+  const [seasonCount, setSeasonCount] = useState('')
+  const [demographic, setDemographic] = useState('')
   const [aspectRatio, setAspectRatio] = useState('16:9')
   const [fps, setFps] = useState('24')
 
@@ -306,6 +309,8 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
       setGenre(manifest.config.genre ?? '')
       setGenres(manifest.config.genres ?? [])
       setMedium(manifest.config.medium ?? '')
+      setSeasonCount(manifest.config.seasonCount !== undefined ? String(manifest.config.seasonCount) : '')
+      setDemographic(manifest.config.demographic ?? '')
       setAspectRatio(manifest.config.aspectRatio)
       setFps(String(manifest.config.fps))
     }
@@ -320,6 +325,8 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
       genre: genre.trim() || undefined,
       genres,
       medium: (medium || undefined) as ProjectMedium | undefined,
+      seasonCount: seasonCount === '' ? undefined : Number(seasonCount),
+      demographic: (demographic || undefined) as (typeof DEMOGRAPHICS)[number] | undefined,
       aspectRatio,
       fps: Number(fps),
     })
@@ -365,6 +372,27 @@ function ConfigEditModal({ open, onClose }: { open: boolean; onClose: () => void
             {PROJECT_MEDIUMS.map((m) => (
               <option key={m} value={m}>
                 {MEDIUM_LABEL[m]}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="ce-seasons">Seasons planned for the IP</Label>
+          <Input
+            id="ce-seasons"
+            inputMode="numeric"
+            placeholder="2"
+            value={seasonCount}
+            onChange={(e) => setSeasonCount(e.target.value)}
+          />
+        </div>
+        <div>
+          <Label htmlFor="ce-demo">Demographic</Label>
+          <Select id="ce-demo" value={demographic} onChange={(e) => setDemographic(e.target.value)}>
+            <option value="">—</option>
+            {DEMOGRAPHICS.map((d) => (
+              <option key={d} value={d}>
+                {d}
               </option>
             ))}
           </Select>

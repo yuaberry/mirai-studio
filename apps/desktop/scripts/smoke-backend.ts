@@ -1400,6 +1400,11 @@ async function main(): Promise<void> {
         resolution: `${manifest.config.resolution.width}x${manifest.config.resolution.height}`,
         fps: manifest.config.fps,
         plannedEpisodes: manifest.config.episodeCount ?? null,
+        plannedSeasons: manifest.config.seasonCount ?? null,
+        demographic: manifest.config.demographic ?? '',
+        targetAudience: manifest.config.targetAudience,
+        inspirations: manifest.config.inspirations,
+        endingVision: manifest.config.endingVision,
         appVersion: manifest.appVersion,
         createdAt: manifest.createdAt,
         updatedAt: manifest.updatedAt,
@@ -1449,6 +1454,8 @@ async function main(): Promise<void> {
         medium: 'ANIME',
         targetAudience: 'seinen adults',
         endingVision: 'The keeper chooses whose wish is last.',
+        seasonCount: 2,
+        demographic: 'SEINEN',
       },
     })
     ctx = (await projects.open(briefProject.path)) as typeof ctx

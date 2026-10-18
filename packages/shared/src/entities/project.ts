@@ -6,6 +6,10 @@ import { z } from 'zod'
 import { zEntityId, zIsoDate } from '../ids'
 import { zProjectStatus } from '../status'
 
+/** The industry demographic axis — how the market shelves the work. */
+export const DEMOGRAPHICS = ['SHOUNEN', 'SHOUJO', 'SEINEN', 'JOSEI', 'KODOMO', 'GENERAL'] as const
+export type Demographic = (typeof DEMOGRAPHICS)[number]
+
 /** What the work IS (v0.15) — lives here to keep the import graph acyclic. */
 export const PROJECT_MEDIUMS = [
   'ANIME',
@@ -89,6 +93,12 @@ export const ProjectConfig = z.object({
   episodeLengthMinutes: z.number().int().min(1).max(240).optional(),
   /** Pages per chapter/volume (manga/webtoon). */
   pagesPerChapter: z.number().int().min(1).max(200).optional(),
+  /* ---- v0.19: the full-IP vision — optional. ---- */
+  /** How many SEASONS/arcs the whole IP plans (the long arc the author is
+   *  building toward — season 1 lands while seeding this). */
+  seasonCount: z.number().int().min(1).max(50).optional(),
+  /** Industry demographic (shounen/shoujo/seinen/josei/kodomo/general). */
+  demographic: z.enum(DEMOGRAPHICS).optional(),
 })
 export type ProjectConfig = z.infer<typeof ProjectConfig>
 

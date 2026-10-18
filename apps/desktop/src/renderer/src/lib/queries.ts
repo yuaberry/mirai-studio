@@ -1264,7 +1264,15 @@ export function useAnalyzeNotes() {
   return useMutation({
     mutationFn: (input: {
       notesText: string
-      context?: { medium?: string; targetAudience?: string; inspirations?: string; setting?: string; endingVision?: string }
+      context?: {
+        medium?: string
+        demographic?: string
+        seasonCount?: number
+        targetAudience?: string
+        inspirations?: string
+        setting?: string
+        endingVision?: string
+      }
     }) => invoke('ai:analyzeNotes', input).then((r) => r.analysis),
   })
 }
