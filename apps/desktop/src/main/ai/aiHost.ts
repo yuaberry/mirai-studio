@@ -494,21 +494,12 @@ export class AiHost {
   // ------------------------------------------------------------------- phase 8 analysis
 
   /** Shared JSON-mode chat call with zod validation of the provider output. */
-  private async chatJson<T>(
+  /** One structured call: transport + JSON extraction + schema validation. */
+  private async chatJsonAttempt<T>(
     instruction: string,
     schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false; error: { issues: Array<{ message: string; path: (string | number)[] }> } } },
     temperature: number,
-  ): Promise<T> {
-    const ctx = this.deps.projects.current()
-    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
-    return this.chatJsonCore(instruction, schema, temperature)
-  }
-
-  /** Provider round-trip WITHOUT a project — used by notes analysis (v0.15). */
-  private async chatJsonCore<T>(
-    instruction: string,
-    schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false; error: { issues: Array<{ message: string; path: (string | number)[] }> } } },
-    temperature: number,
+    maxTokensFloor: number,
   ): Promise<T> {
     const providerConfig = this.resolveChatProvider()
     const settings = this.deps.settings.get()
@@ -523,12 +514,12 @@ export class AiHost {
     const result = await provider.chat({
       model: providerConfig.model,
       temperature,
-      maxTokens: Math.max(settings.ai.maxTokens, 2_048),
+      maxTokens: Math.max(settings.ai.maxTokens, maxTokensFloor),
       messages: [
         {
           role: 'system',
           content:
-            'You are a professional anime production analysis engine. Respond ONLY with a single valid JSON object matching the requested shape — no markdown fences, no commentary.',
+            'You are a professional anime production analysis engine. Respond ONLY with a single valid JSON object matching the requested shape — no markdown fences, no commentary. Keep the JSON COMPLETE: never sacrifice closing brackets to finish a thought.',
         },
         { role: 'user', content: instruction },
       ],
@@ -538,9 +529,19 @@ export class AiHost {
     try {
       parsed = JSON.parse(raw)
     } catch {
-      throw new MiraiError('AI_PROVIDER_ERROR', 'The model returned invalid JSON — try again.', {
-        retryable: true,
-      })
+      // A cut-off response is the classic maxTokens truncation: the JSON
+      // never closes. Surface the ACTIONABLE cause and stay retryable.
+      const truncated = raw.length > 0 && !/[}\\]$"']\s*$/.test(raw)
+      throw new MiraiError(
+        'AI_PROVIDER_ERROR',
+        truncated
+          ? 'A resposta do modelo veio cortada (provável limite de tokens) — aumente o limite em Settings → IA ou use um modelo com contexto maior.'
+          : 'The model returned invalid JSON — try again.',
+        {
+          retryable: true,
+          details: { excerpt: raw.slice(0, 160) },
+        },
+      )
     }
     const validated = schema.safeParse(parsed)
     if (!validated.success) {
@@ -552,6 +553,41 @@ export class AiHost {
     return validated.data
   }
 
+  /**
+   * Structured call with ONE automatic retry for transient provider errors
+   * (rate limits, overloads, truncated responses). The user should not have
+   * to click "analyze" twice because of a single 429.
+   */
+  private async chatJsonCore<T>(
+    instruction: string,
+    schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false; error: { issues: Array<{ message: string; path: (string | number)[] }> } } },
+    temperature: number,
+    maxTokensFloor = 2_048,
+  ): Promise<T> {
+    try {
+      return await this.chatJsonAttempt(instruction, schema, temperature, maxTokensFloor)
+    } catch (err) {
+      if (err instanceof MiraiError && err.retryable) {
+        this.deps.logger.warn('AI', `Provider error (will retry once): ${err.message}`)
+        await new Promise((r) => setTimeout(r, 1_500))
+        return this.chatJsonAttempt(instruction, schema, temperature, maxTokensFloor)
+      }
+      throw err
+    }
+  }
+
+  private async chatJson<T>(
+    instruction: string,
+    schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false; error: { issues: Array<{ message: string; path: (string | number)[] }> } } },
+    temperature: number,
+    maxTokensFloor = 2_048,
+  ): Promise<T> {
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+    return this.chatJsonCore(instruction, schema, temperature, maxTokensFloor)
+  }
+
+  /** Provider round-trip WITHOUT a project — used by notes analysis (v0.15). */
   private sceneContext(sceneId: string) {
     const ctx = this.deps.projects.current()
     if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
@@ -1102,6 +1138,7 @@ export class AiHost {
         `You are the story editor. From the author's document below, write the Story Bible — extracted from the story itself, not invented.\n\n${instruction}\n\nReturn JSON: { premise (2-4 sentences, the story's actual core conflict), themes (3-6), tone, message, genreNotes }.`,
         BibleDraftPlan,
         0.4,
+        4_096,
       )
       ctx.creative.updateBible({
         ...bible,
@@ -1124,6 +1161,7 @@ export class AiHost {
       `You are the character designer. From the author's document below, extract EVERY character the story supports (up to 8, prioritized by narrative weight). Use the document's own names, ages, traits and descriptions — never invent characters.\n\n${instruction}\n\nReturn JSON: { characters: [{ name, role (PROTAGONIST/DEUTERAGONIST/SUPPORTING/ANTAGONIST/CAMEO/OTHER), age (stated explicitly — e.g. "21"${mature ? '; ALL characters verifiably ADULTS (18+) — hard rule' : ''}), appearance (concrete visual: hair, eyes, build, signature outfit — grounded in the document), personality, goals, voice }] }.`,
       CharacterPlanList,
       0.4,
+      4_096,
     )
     const existingNames = new Set(ctx.creative.listCharacters().map((c) => c.name.toLowerCase()))
     const createdCast: string[] = []
@@ -1172,6 +1210,7 @@ export class AiHost {
         `You are the series director. From the author's document below, break the FIRST episode into scenes with a clear dramatic arc (hook → development → turn → climax landing).\n\n${instruction}\n\nReturn JSON: { scenes: [{ title, synopsis (2-4 sentences), timeOfDay (DAY/NIGHT/DAWN/DUSK/UNSPECIFIED), locationName, castNames (names from the extracted cast; max 4 per scene) }] }.`,
         ScenePlanList,
         0.5,
+        4_096,
       )
       const locationIds = new Map<string, string>()
       const castByName = new Map(ctx.creative.listCharacters().map((c) => [c.name, c.id] as const))
@@ -1269,7 +1308,7 @@ export class AiHost {
     if (notesText.trim().length < 40) {
       throw new MiraiError('VALIDATION_ERROR', 'The imported notes are too short for a meaningful analysis.')
     }
-    const excerpt = notesText.slice(0, 60_000)
+    const excerpt = notesText.slice(0, 24_000)
     const authorLines = [
       context?.medium ? `MATÉRIA ESCOLHIDA PELO AUTOR: ${context.medium}` : '',
       context?.demographic ? `DEMOGRAFIA DECLARADA: ${context.demographic}` : '',
@@ -1281,7 +1320,7 @@ export class AiHost {
     ].filter(Boolean)
     const authorBlock = authorLines.length > 0 ? `\n\nAUTHOR DECLARATIONS (honor these):\n${authorLines.join('\n')}\n` : ''
     return this.chatJsonCore(
-      `You are the head of development of a professional anime/manga studio. The user sent REAL story notes (imported from their documents). Read them like a commercial publisher evaluating a submission, then return a professional planning analysis.${authorBlock}\n\nNOTES BEGIN\n${excerpt}\nNOTES END\n\nReturn JSON: { titleSuggestion (marketable title in the notes' language, max 120 chars), medium (ANIME, MANGA, LIGHT_NOVEL, NOVEL, WEBTOON or OTHER), premise (2-4 sentences, the core conflict), synopsis (1-2 paragraphs for a pitch document), tone, suggestedAudience, contentRating (ALL, 7+, 13+, 16+ or 18+ — infer conservatively; only 18+ if the notes are explicitly adult), genres (1-8 anime-taxonomy tags like Drama, Isekai, School, Romance), themes (1-8), estimatedEpisodes (professional planning estimate per season), estimatedSeasons (how many seasons/arcs the material supports as a full IP), estimatedPagesPerEpisode (manga/webtoon pages per chapter; 0 for anime), characterSeeds (up to 12: { name, role, brief } — only characters the notes support), locationSeeds (up to 10), improvements (2-10 concrete, professional sentences — structure, stakes, marketability), risks (0-8 commercial/structural risks), commercialNotes (positioning + monetization read, 1-2 paragraphs) }.\nGround EVERYTHING in the notes — never invent plot the notes don't support; suggest improvements, don't write the story.`,
+      `You are the head of development of a professional anime/manga studio. The user sent REAL story notes (imported from their documents). Read them like a commercial publisher evaluating a submission, then return a professional planning analysis. Keep the JSON TIGHT — complete, concise sentences; never leave the JSON unclosed.${authorBlock}\n\nNOTES BEGIN\n${excerpt}\nNOTES END\n\nReturn JSON: { titleSuggestion (marketable title in the notes' language, max 120 chars), medium (ANIME, MANGA, LIGHT_NOVEL, NOVEL, WEBTOON or OTHER), premise (2-4 sentences, the core conflict), synopsis (1-2 paragraphs for a pitch document), tone, suggestedAudience, contentRating (ALL, 7+, 13+, 16+ or 18+ — infer conservatively; only 18+ if the notes are explicitly adult), genres (1-8 anime-taxonomy tags like Drama, Isekai, School, Romance), themes (1-8), estimatedEpisodes (professional planning estimate per season), estimatedSeasons (how many seasons/arcs the material supports as a full IP), estimatedPagesPerEpisode (manga/webtoon pages per chapter; 0 for anime), characterSeeds (up to 12: { name, role, brief } — only characters the notes support), locationSeeds (up to 10), improvements (2-10 concrete, professional sentences — structure, stakes, marketability), risks (0-8 commercial/structural risks), commercialNotes (positioning + monetization read, 1-2 paragraphs) }.\nGround EVERYTHING in the notes — never invent plot the notes don't support; suggest improvements, don't write the story.`,
       StoryNotesAnalysis,
       0.4,
     )

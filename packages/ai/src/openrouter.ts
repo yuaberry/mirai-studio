@@ -83,7 +83,18 @@ export class OpenRouterProvider implements AIProvider {
 
     const payload = this.parseJson<ChatCompletionResponse>(await response.text())
     if (payload.error) {
-      throw providerErrorFromMessage(payload.error.message ?? 'Provider error', false)
+      // Empty provider messages surfaced as a bare 'Provider error' — useless
+      // for users. Keep the HTTP status as the minimum context, and mark
+      // rate-limits/overloads retryable so the host can retry once.
+      const msg = payload.error.message?.trim()
+      const status = payload.error.code ?? response.status
+      // An empty provider message (usually transient bad gateways behind a
+      // 200) carries no actionable info — treat it as retryable so the host
+      // can recover automatically instead of bouncing the user.
+      throw providerErrorFromMessage(
+        msg && msg.length > 0 ? `${msg} (HTTP ${status})` : `Provider error (HTTP ${status}).`,
+        status === 429 || status >= 500 || (msg?.length ?? 0) === 0,
+      )
     }
     const content = payload.choices?.[0]?.message?.content ?? ''
     return {

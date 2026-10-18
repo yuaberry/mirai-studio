@@ -1548,6 +1548,74 @@ async function main(): Promise<void> {
     }
   })
 
+  await step('AI RESILIENCE: 429 -> automatic retry -> valid analysis', async () => {
+    // The user hit "Provider Error" on a big .docx analysis (log-proven:
+    // 119k-char import, NVIDIA provider). Root cause class: transient
+    // provider errors + token truncation. This step proves the recovery:
+    // the provider answers 429 ONCE, then a full valid analysis JSON.
+    const analysisSettings = new SettingsService(appDb)
+    const analysisCreds = new CredentialStore(appDb, plaintextCodec, systemClock)
+    analysisCreds.set('openrouter', 'sk-smoke-resilience-key')
+    analysisSettings.update({
+      ...analysisSettings.get(),
+      ai: { ...analysisSettings.get().ai, chatProvider: 'openrouter', defaultModel: 'test/model', maxTokens: 512 },
+    })
+    const analysisAi = new AiHost({
+      credentials: analysisCreds,
+      settings: analysisSettings,
+      projects,
+      logger,
+      emitter: { send: () => undefined, window: null } as never,
+    })
+
+    const validAnalysis = {
+      titleSuggestion: 'The Lantern Keeper',
+      medium: 'ANIME',
+      premise: 'A lantern keeper grants wishes at the cost of memories.',
+      synopsis: 'Kaito tends the last spirit lantern. Every wish costs a memory. When Yuki asks to save her sister, he must choose whose wish is last.',
+      tone: 'Contemplative, luminous',
+      suggestedAudience: 'Seinen adults 18-34',
+      contentRating: '13+',
+      genres: ['Fantasy', 'Drama'],
+      themes: ['sacrifice', 'memory'],
+      estimatedEpisodes: 12,
+      estimatedSeasons: 2,
+      estimatedPagesPerEpisode: 0,
+      characterSeeds: [{ name: 'Kaito', role: 'PROTAGONIST', brief: 'The keeper of the last lantern.' }],
+      locationSeeds: ['Village shrine'],
+      improvements: ['Tighten the midpoint with a failed wish.'],
+      risks: ['Melancholy pacing may narrow the audience.'],
+      commercialNotes: 'Positioned as a contemplative seinen fantasy with strong merchandising iconography (the lantern).',
+    }
+    let calls = 0
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+      void JSON.parse(String(init?.body ?? '{}'))
+      calls++
+      if (calls === 1) {
+        // Transient provider failure with an EMPTY error message — the exact
+        // shape that used to surface as the useless bare 'Provider error'.
+        return new Response(JSON.stringify({ error: {} }), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        id: 'x', object: 'chat.completion', created: 1, model: 'test/model',
+        choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(validAnalysis) } }],
+        usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+      }), { status: 200 })
+    }) as typeof fetch
+    try {
+      const analysis = await analysisAi.analyzeStoryNotes(
+        'Kaito tends the last spirit lantern. Yuki wishes to save her sister. The keeper must choose.',
+        { medium: 'ANIME', seasonCount: 2 },
+      )
+      if (calls !== 2) throw new Error(`expected exactly 1 automatic retry (2 calls), got ${calls}`)
+      if (analysis.titleSuggestion !== 'The Lantern Keeper') throw new Error('analysis content wrong')
+      if (analysis.estimatedSeasons !== 2) throw new Error('seasons estimate lost')
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({
