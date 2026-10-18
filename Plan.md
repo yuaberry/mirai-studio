@@ -331,6 +331,42 @@ camera opacity curves, blend-mode compositing) shipped in v0.8.0 — but this
 file's old WHAT-REMAINS checklist still listed them. Lesson: when finishing a
 phase, update the checklist in the same session.
 
+
+## 7b. EXPANSION ROADMAP (master prompt audit — v0.19.1)
+
+Honest audit of the master prompt against the REAL codebase (17 releases deep):
+
+| § | Master asks | State | Notes |
+|---|---|---|---|
+| 3 | Workspace/tabs/palette/session | DONE | command palette (Ctrl+K), session restore (last project+page), persisted picks, shortcuts |
+| 4 | IP Management | PARTIAL | medium/seasons/demographic/dossier cover the IP vision; MISSING: IP graph, derived works inheritance, impact screen |
+| 5 | Story Development Lab | PARTIAL | bible+adapt+analysis; MISSING: visual structure editor, foreshadowing/mystery planners |
+| 6 | Character Performance Lab | PARTIAL | canonical sheets, QC appearance, dialogue analysis; MISSING: appearance lock, costume registry |
+| 7 | Visual Dev Lab | PARTIAL | style bible+presets+image gen; MISSING: moodboards, color script, poster studio |
+| 8 | Manga Pro | ABSENT | page/panel editor, lettering, RTL — the biggest missing module |
+| 9 | Light Novel Pro | PARTIAL | screenplay editing + versions; MISSING: volume structure, EPUB/DOCX export, POV control |
+| 10 | Storyboard Pro | MOSTLY | shots, durations, rearrange, approval states, AI frames; MISSING: shot list export, alt versions compare |
+| 11 | Animatic & Timeline | DONE (scope) | timeline+keyframes+mixdown+FFmpeg render, scene/episode render, 14 export presets |
+| 12 | Audio Workshop | PARTIAL | voice attach per shot, music library, audio mixdown; MISSING: voice casting/direction registry |
+| 13 | AI Workflow Builder | PARTIAL | node builder (drag/reorder/run, localStorage); MISSING: typed node system, versioning, templates |
+| 14 | Asset Intelligence | PARTIAL | asset library+hash dedupe(QC)+missing-file detection; MISSING: usage history, dependency graph |
+| 15 | Continuity & Canon | PARTIAL | continuity engine + 12 QC checks + mature QC; MISSING: deterministic-vs-suspect separation UI |
+| 16 | Review & Collaboration | PARTIAL | task board+approvals+versioning+crew; MISSING: roles enforcement (cloud), comments |
+| 17 | Publishing Center | PARTIAL | dossier (.txt+.pdf) + 14 render presets; MISSING: channel checklists, EPUB/manga packages |
+| 18 | Localization Lab | ABSENT | glossário i18n é de UI; translation workflow não existe |
+| 19 | Creative Experiments | PARTIAL | generation has variations; MISSING: experiment lab with promote-to-project |
+| 20 | Production Intelligence | DONE (scope) | production dashboard, QC, analytics, jobs, overdue |
+| 21 | Providers/Fallback | DONE (v0.19.1) | retry+backoff, budgets, status surfacing, abort; fallback chain = future |
+| 22 | Data Safety | DONE | WAL checkpoint backups, restore tested in smoke, migrations 0001-0011 |
+| 23 | Plugin Architecture | DONE | manifest+permissions+registry+SDK; marketplace = cloud-only |
+| 24 | UX | DONE | themes×5, loading/empty/error states, i18n pt-BR, density, auto-fit |
+
+PRIORITY (dependency + user value — the next three deliverables):
+1. **Manga Pro slice (§8)**: page/panel data model + editor + lettering (text as data, exportable) — unlocks the mangá medium end-to-end
+2. **Light Novel Pro slice (§9)**: volume/chapter structure + EPUB export (dependency-free EPUB = zip+XHTML, mirrors the dossier pdfWriter pattern) — unlocks the LN medium end-to-end
+3. **IP Graph (§4)**: derived works + impact screen on top of the existing versioning/QC
+
+
 ## 8. KEY ARCHITECTURAL DECISIONS (ADRs)
 
 | # | Decision | Reason |
@@ -401,6 +437,7 @@ phase, update the checklist in the same session.
 45. **Python heredoc edits on TSX are radioactive**: two silent corruptions in ONE session (SubtitlesPage + ProductionPage), both in re-emitted JSX blocks. Rule: python is fine for .ts/.json/yaml anchors; for TSX use the Edit tool (exact oldString matching fails loudly, no escaping layers).
 46. **`__dirname` depth math**: from packages/core/src/render, THREE `..` = packages/, not the repo root — probe with a temp test printing computed paths instead of assuming; vitest provides __dirname per real file location.
 54. **Import cycles crash CJS boot at runtime, not at typecheck**: dossier.ts ⇄ project.ts (PROJECT_MEDIUMS vs CONTENT_RATINGS) — typecheck GREEN, vitest GREEN, smoke GREEN, and the PACKAGED APP died with 'Cannot access before initialization'. The boot test (timeout 20 + grep Uncaught) is the last line of defense — NEVER skip it. Rule: shared entities keep a strict hierarchy (dossier imports from project, never the reverse).
+63. **User bug reports are in the logs**: 'provider Error no docx' — read ~/.config/@mirai/desktop/logs BEFORE theorizing: the import size (119k chars), provider (NVIDIA), settings (maxTokens 2048) were all THERE; the fix wrote the exact token budgets the data demanded. Add logging on failure paths too (analyzeNotes logged nothing — now chatJsonCore logs retries).
 61. **Local green ≠ CI green (ABI)**: every locally-boot-fine release shipped BROKEN from CI because node_modules was locally rebuilt against Electron's ABI once — CI installs fresh (Node ABI) and npmRebuild:false packs it as-is. ANY native module project MUST run its rebuild step inside every CI job that packages. ACCEPTANCE TEST for packaged apps: dpkg-deb -x (no root) + ELECTRON_RUN_AS_NODE require of the packed .node — ABI_FAIL/ABI_OK in one line; require the .node FILE directly (requiring the package hits 'bindings' resolution through the asar and fails misleadingly).
 62. **The publish job needs the release to EXIST**: gh release upload <tag> fails when the release hasn't been created yet — create the release (can be local-artifacts-only) before the CI publish step, or give publish a 'gh release create || true' first step. Also: gh run rerun --failed may print 'cannot be rerun' yet work — verify conclusions after.
 58. **electron-builder rpm is a 3-vocabulary minefield** (6 CI runs): (a) rpm without artifactName uses the package name "@mirai/desktop" — the SLASH creates a phantom directory and fpm dies; (b) RPM spec names cannot contain SPACES — productName 'Mirai Studio' lands raw in the spec; fix: rpm.packageName: mirai-studio; (c) compression: electron-builder rewrites ANY xz to xzmt (threaded) which Ubuntu rpmbuild rejects; the schema enum is gz|bzip2|xz|lzo, fpm's vocabulary is none|xz|xzmt|gzip|bzip2 — bzip2 is the ONLY value valid in all three layers; (d) inserting a YAML block by matching a PREFIX line dropped it INSIDE another target's properties (deb's priority leaked into rpm and broke the GLOBAL schema on every platform). LESSON: when a config edit breaks N unrelated jobs, suspect YOUR config, not the runners — the schema error named the exact property.
@@ -479,6 +516,7 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 | v0.10.1 | Polish | Website professional redesign (CSS app mockup, producer terminal, 12-card studio grid, full pipeline, Pro section, changelog; FIXED broken v0.2.1 download links), Hub capabilities strip, header genre/rating chips + Produce Episode CTA, sidebar version footer, richer EmptyStates, ambient gradients |
 | v0.17.1→(as v0.18.0) | AI adapts the author's document + complete IP brief | projects:create persists the imported document to brief/ (brief.json + source-notes.txt); AiHost.adaptFromDocument — fidelity-first pipeline (document IS canon): bible extracted (never overwritten), cast from the doc, FULL season plan along the actual arc (≤24 eps), scenes+screenplays ep1, adapted flag; ai.adaptNotes job auto-queued after create, Overview retry card; medium-aware stage direction (anime minutes/TV beats, manga-webtoon pages/cliffhangers, LN/novel prose); ProjectConfig += targetAudience/inspirations/setting/endingVision/episodeLengthMinutes/pagesPerChapter; New Project 'Author brief' section; ai:analyzeNotes honors AUTHOR DECLARATIONS; smoke 48/48 with the REAL AiHost + transport-scripted fidelity fixtures; CI 5/5 green first try, ABI_OK re-verified on the shipped deb |
 | v0.19.0 | IP season vision + demographic | config.seasonCount (1-50, optional — how many seasons/arcs the WHOLE IP plans; adaptation prompt: season 1 LANDS its arc while SEEDING the long one), config.demographic (SHOUNEN/SHOUJO/SEINEN/JOSEI/KODOMO/GENERAL); StoryNotesAnalysis.estimatedSeasons (AI estimates + Apply pre-fills); Author brief section COLLAPSIBLE (closed default, 'all fields optional'); dossier ficha técnica += temporadas/demografia/público/referências/desfecho; config editor += seasons+demographic; smoke flows both through ADAPT. 194 tests, 48/48, CI 5/5 first try |
+| v0.19.1 | Provider resilience (user log-proven) | 'Provider Error' on .docx analysis root-caused from the USER'S logs: 119k chars imported, NVIDIA provider, maxTokens 2048 cut the analysis JSON mid-stream; fixes: per-call token budgets (analysis 6144/adapt 4096/dossier 3072), ONE auto-retry (1.5s backoff) for retryable errors, truncation detected with actionable message, provider errors always carry HTTP status, empty-message body errors are retryable, analysis excerpt 60k→24k + 'JSON TIGHT' instruction; smoke AI RESILIENCE step (49/49): scripted empty-error → auto-retry → full analysis, retry count asserted |
 | v0.17.0 | CI ABI fix + themes + polish | CRITICAL: CI-built .deb/.exe/.dmg opened a window and died at bootstrap — better_sqlite3 compiled for NODE's ABI (workflow never ran rebuild:native; proven by dpkg-deb -x + ELECTRON_RUN_AS_NODE require of the packaged .node: v0.16.0 ABI_FAIL, v0.17.0 ABI_OK); rebuild:native added to all 3 desktop CI jobs. THEMES: appearance.theme enum (dark/black/light/sakura/custom) + customAccent #rrggbb; tokens.css [data-theme] var swaps (light flips color-scheme too); AppShell applies theme + accent overrides (accent-2/3 derive via color-mix); Settings picker with live-preview swatch cards + color input; schema regression test. VISUAL POLISH (global.css, all themes): panel depth, button press feedback, :focus-visible ring, brand ::selection, sliding sidebar indicator, input focus lift, deeper modal stage. 194 tests (settings 11), CI 5 jobs green, all six artifacts re-published |
 | v0.16.0 | Multi-platform + mobile | GitHub Actions release workflow (.github/workflows/release.yml, tag-triggered + workflow_dispatch): linux (.deb+.AppImage+.rpm), windows (.exe NSIS, unsigned), macos (.dmg arm64, unsigned), android (companion APK), publish job attaches artifacts to the release; fetch-ffmpeg.mjs real per-platform (linux tar.xz / win32 gyan zip / darwin DIRECT binaries from eugeneware/ffmpeg-static b6.1.1 + joshwnj/ffprobe-static master — VERIFIED via API, chmod +x, mkdir in direct branch); ffmpegBin tries .exe names on win32; apps/mobile = Capacitor+Vite+React Android companion (dossier .txt reader, project .zip reader via pako zip parser, manifest fallback, mobile dark UI); author email added to app package.json (deb/rpm maintainer); ALL SIX artifacts shipped: apk 3.8MB, deb 119MB, arm64.dmg 148MB, x64-setup.exe 141MB, AppImage 171MB, rpm 154MB — CI green on run 7 after a 6-run debugging saga (see lessons 58-59) |
 | v0.15.1 | Typing focus fix | CRITICAL: New Project typing died after one keystroke — Modal useEffect deps [open, onClose] with an inline lambda onClose re-ran focus on EVERY keystroke; the dialog DIV stole focus from the input (CDP-proven: sameNode true, activeTag DIV). Fix: focus contract — dialog focuses ONCE on open-transition; handleClose memoized in NewProjectModal; auto-reopen cancels when the modal is open. Evidence: before focusOnInput false ×3 keys, after true ×3 ('Sak') |
@@ -540,6 +578,6 @@ When continuing from this file after context compaction:
 
 ---
 
-*Last updated: v0.19.0 — IP season vision (seasonCount) + industry demographic + visibly-optional collapsible brief; dossier carries the full IP vision. 194 tests, 48/48 smoke, CI 5/5. Compact freely: this file carries the full state; after compaction ask 'read the Plan.md in the mirai-studio repo'.*
+*Last updated: v0.19.1 — provider resilience (log-proven 'Provider Error' fix + auto-retry + token budgets); EXPANSION ROADMAP audit added (§ master → real state + next-3 priorities). 194 tests, 49/49 smoke. Compact freely: this file carries the full state; after compaction ask 'read the Plan.md in the mirai-studio repo'.*
 *Repository: https://github.com/yuaberry/mirai-studio*
 *Website: https://yuaberry.github.io/mirai-studio*
