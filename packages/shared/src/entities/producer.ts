@@ -60,6 +60,18 @@ export const ScenePlanList = z
   .object({ scenes: z.array(ScenePlan).min(1).max(8) })
   .transform((v) => v.scenes)
 
+/** v0.18: full-season episode plan extracted from the author's document. */
+export const SeasonEpisodePlan = z.object({
+  number: z.number().int().min(1).max(200),
+  title: z.string().min(1).max(160),
+  synopsis: z.string().min(1).max(1_200),
+})
+export type SeasonEpisodePlan = z.infer<typeof SeasonEpisodePlan>
+
+export const SeasonPlanList = z
+  .object({ episodes: z.array(SeasonEpisodePlan).min(1).max(24) })
+  .transform((v) => v.episodes)
+
 export const ShotPlan = z.object({
   title: z.string().min(1).max(160),
   shotType: z.enum(SHOT_TYPES).catch('MEDIUM'),

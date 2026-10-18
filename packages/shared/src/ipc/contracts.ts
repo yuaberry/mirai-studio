@@ -14,6 +14,7 @@ import { AppSettings, AppSettingsPatch, zCredentialKey } from '../entities/setti
 import { JobRecord } from '../entities/job'
 import { LogEntry } from '../entities/log'
 import { NotesImportResult, StoryNotesAnalysis, DossierResult } from '../entities/dossier'
+import { ProjectBriefInput } from '../entities/brief'
 
 import {
   OpenedProject,
@@ -126,6 +127,9 @@ export const ipcContracts = {
       description: z.string().max(2_000).optional(),
       dir: z.string().min(1),
       config: ProjectConfig,
+      /** v0.18: the imported story document — persisted to brief/ for the AI
+       * to ADAPT the user's story (notes + analysis from ai:analyzeNotes). */
+      brief: ProjectBriefInput.optional(),
     }),
     response: z.object({ project: ProjectSummary }),
   },
@@ -833,13 +837,35 @@ export const ipcContracts = {
   },
   /** AI reads the imported notes and returns a professional planning analysis. */
   'ai:analyzeNotes': {
-    request: z.object({ notesText: z.string().min(40).max(400_000) }),
+    request: z.object({
+      notesText: z.string().min(40).max(400_000),
+      /** The author's form answers — ground the analysis to their vision. */
+      context: z
+        .object({
+          medium: z.string().max(30).optional(),
+          targetAudience: z.string().max(600).optional(),
+          inspirations: z.string().max(600).optional(),
+          setting: z.string().max(600).optional(),
+          endingVision: z.string().max(600).optional(),
+        })
+        .optional(),
+    }),
     response: z.object({ analysis: StoryNotesAnalysis }),
   },
   /** Generates the Project Dossier (.txt + .pdf) as a job; result = DossierResult. */
   'dossier:generate': {
     request: emptyRequest,
     response: z.object({ jobId: zEntityId }),
+  },
+  /** Adapts the user's imported story document into the project (job): bible, cast, season plan, scenes, screenplays. */
+  'ai:adaptNotes': {
+    request: emptyRequest,
+    response: z.object({ jobId: zEntityId }),
+  },
+  /** Whether the open project carries an imported brief and if it was adapted. */
+  'brief:status': {
+    request: emptyRequest,
+    response: z.object({ exists: z.boolean(), adapted: z.boolean(), sourceFiles: z.array(z.object({ name: z.string(), format: z.string(), chars: z.number() })), title: z.string().nullable() }),
   },
   /** Fetches the most recent dossier result (job record) for the open project. */
   'dossier:last': {

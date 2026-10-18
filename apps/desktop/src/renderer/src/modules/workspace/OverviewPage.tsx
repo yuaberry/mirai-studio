@@ -30,6 +30,8 @@ import {
   useSettings,
   useGenerateDossier,
   useLastDossier,
+  useAdaptNotes,
+  useBriefStatus,
 } from '../../lib/queries'
 import { toast } from '../../store/appStore'
 import { FileText } from 'lucide-react'
@@ -43,6 +45,8 @@ export function OverviewPage() {
   const { data: episodes } = useEpisodes()
   const { data: prompts } = usePrompts()
   const generateDossier = useGenerateDossier()
+  const adaptNotes = useAdaptNotes()
+  const { data: briefStatus } = useBriefStatus()
   const { data: lastDossier } = useLastDossier()
   const tr = useT()
   const [configOpen, setConfigOpen] = useState(false)
@@ -68,6 +72,42 @@ export function OverviewPage() {
   return (
     <div className="mx-auto w-full max-w-5xl px-8 py-8">
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
+        {briefStatus?.exists && !briefStatus.adapted && (
+          <Card className="col-span-2 border-mirai-accent/30 p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-display text-[11px] font-bold tracking-[0.16em] text-mirai-accent uppercase">
+                {tr('Your document is ready to become a story')}
+              </h2>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="max-w-lg">
+                <p className="text-xs leading-relaxed text-mirai-dim">{tr('adapt-card-desc')}</p>
+                <p className="mt-1 text-[10px] text-mirai-faint">
+                  {briefStatus.sourceFiles.map((f) => `${f.name} (${f.format})`).join(' · ')}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="primary"
+                loading={adaptNotes.isPending}
+                onClick={() =>
+                  adaptNotes.mutate(undefined, {
+                    onSuccess: () =>
+                      toast({
+                        kind: 'success',
+                        title: tr('Building the story from your document'),
+                        description: tr('adapt-queued'),
+                      }),
+                    onError: (err) => toast({ kind: 'error', title: tr('Adaptation failed'), description: err.message }),
+                  })
+                }
+              >
+                {tr('Build the story from the document')}
+              </Button>
+            </div>
+          </Card>
+        )}
+
         <Card className="col-span-2 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-display text-[11px] font-bold tracking-[0.16em] text-mirai-faint uppercase">

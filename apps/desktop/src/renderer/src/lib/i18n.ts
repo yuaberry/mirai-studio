@@ -105,6 +105,26 @@ const PT_BR: Record<string, string> = {
   'Template': 'Modelo',
   'Resolution': 'Resolução',
 
+  // --------------------------------------------- brief + adaptation (v0.18)
+  'Author brief — optional, powers the AI': 'Brief do autor — opcional, turbinam a IA',
+  'Target audience': 'Público-alvo',
+  'e.g. shounen 14-19 · seinen adults · josei 25+': 'ex.: shounen 14-19 · seinen adultos · josei 25+',
+  'References & inspirations': 'Referências e inspirações',
+  'e.g. Mushishi x Violet Evergarden': 'ex.: Mushishi x Violet Evergarden',
+  'World & era': 'Mundo e época',
+  'e.g. Taishō-era Kyoto with spirit telegraphy': 'ex.: Quioto da era Taishō com telégrafo espiritual',
+  'Ending vision': 'Visão de desfecho',
+  'Where the story lands — the ending you are building toward': 'Onde a história pousa — o desfecho para o qual você está construindo',
+  'Pages per chapter': 'Páginas por capítulo',
+  'Minutes per episode': 'Minutos por episódio',
+  'brief-hint': 'Estas respostas alimentam TODAS as gerações da IA (Bíblia, elenco, episódios, roteiros, dossiê) — quanto mais completas, mais fiel e comercial a sua IP sai. A IA prioriza SEMPRE o documento que você importar.',
+  'Building the story from your document': 'Montando a história do seu documento',
+  'adapt-queued': 'A adaptação roda como tarefa — siga o progresso em Jobs. Bíblia, elenco, temporada e roteiros serão criados a partir do SEU documento.',
+  'Your document is ready to become a story': 'Seu documento está pronto para virar história',
+  'adapt-card-desc': 'A IA vai extrair a história do seu arquivo — Bíblia da História, personagens, plano da temporada completa e roteiros do episódio 1 — com fidelidade ao documento (ele é o cânon).',
+  'Build the story from the document': 'Montar a história do documento',
+  'Adaptation failed': 'Falha na adaptação',
+
   // ------------------------------------------------------- themes (v0.17)
   'Theme': 'Tema',
   'Custom accent color': 'Cor de destaque personalizada',

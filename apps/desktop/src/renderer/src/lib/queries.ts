@@ -3,6 +3,7 @@
  * states come for free — every module uses these instead of manual state.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { ProjectBriefInput } from '@mirai/shared'
 import {
   type AppSettingsPatch,
   type AssetRecord,
@@ -91,6 +92,7 @@ export function useCreateProject() {
       description?: string
       dir: string
       config: ProjectConfig
+      brief?: ProjectBriefInput
     }) => invoke('projects:create', input).then((r) => r.project),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
   })
@@ -1260,7 +1262,10 @@ export function useImportNotes() {
 
 export function useAnalyzeNotes() {
   return useMutation({
-    mutationFn: (notesText: string) => invoke('ai:analyzeNotes', { notesText }).then((r) => r.analysis),
+    mutationFn: (input: {
+      notesText: string
+      context?: { medium?: string; targetAudience?: string; inspirations?: string; setting?: string; endingVision?: string }
+    }) => invoke('ai:analyzeNotes', input).then((r) => r.analysis),
   })
 }
 
@@ -1272,6 +1277,24 @@ export function useGenerateDossier() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.jobs })
       void queryClient.invalidateQueries({ queryKey: ['dossier'] })
     },
+  })
+}
+
+export function useAdaptNotes() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => invoke('ai:adaptNotes').then((r) => r.jobId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs })
+      void queryClient.invalidateQueries({ queryKey: ['brief'] })
+    },
+  })
+}
+
+export function useBriefStatus() {
+  return useQuery({
+    queryKey: ['brief', 'status'],
+    queryFn: () => invoke('brief:status'),
   })
 }
 

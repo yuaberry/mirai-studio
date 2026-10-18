@@ -7,9 +7,10 @@ import { MiraiError, type ProjectConfig } from '@mirai/shared'
 import { handleIpc } from './router'
 import { toOpenedProject, type Container } from '../bootstrap'
 import { join } from 'node:path'
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { newEntityId, LicenseService } from '@mirai/core'
 import { RenderService, NotesImportService, DossierService, type DossierData } from '@mirai/core'
-import { MEDIUM_LABEL, type DossierResult } from '@mirai/shared'
+import { MEDIUM_LABEL, StoredBrief, type DossierResult } from '@mirai/shared'
 
 export function registerIpcHandlers(c: Container): void {
   // ---------------------------------------------------------------- projects
@@ -22,6 +23,17 @@ export function registerIpcHandlers(c: Container): void {
       dir: req.dir,
       config: req.config,
     })
+    // v0.18: persist the imported story document for the AI adaptation.
+    if (req.brief) {
+      const briefDir = join(project.path, 'brief')
+      mkdirSync(briefDir, { recursive: true })
+      const stored: StoredBrief = { ...req.brief, adapted: false }
+      writeFileSync(join(briefDir, 'brief.json'), JSON.stringify(stored, null, 2), 'utf8')
+      writeFileSync(join(briefDir, 'source-notes.txt'), req.brief.notesText, 'utf8')
+      c.logger.info('PROJECT', `Story brief stored: ${req.brief.sourceFiles.length} files, ${req.brief.notesText.length} chars`, {
+        project: project.name,
+      })
+    }
     return { project }
   })
 
@@ -1023,7 +1035,7 @@ export function registerIpcHandlers(c: Container): void {
   })
 
   handleIpc('ai:analyzeNotes', async (req) => {
-    const analysis = await c.ai.analyzeStoryNotes(req.notesText)
+    const analysis = await c.ai.analyzeStoryNotes(req.notesText, req.context)
     c.logger.info('AI', `Story-notes analyzed: "${analysis.titleSuggestion}" (${analysis.medium})`)
     return { analysis }
   })
@@ -1147,6 +1159,38 @@ export function registerIpcHandlers(c: Container): void {
     })
     const job = await ctx.jobs.enqueue('dossier.generate', {}, { priority: 5, maxAttempts: 1 })
     return { jobId: job.id }
+  })
+
+  handleIpc('ai:adaptNotes', async () => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('ai.adaptNotes', async (_job, jobCtx) => {
+      const controller = new AbortController()
+      const watcher = setInterval(() => {
+        if (jobCtx.signal.aborted) controller.abort()
+      }, 100)
+      try {
+        return await c.ai.adaptFromDocument(jobCtx.reportProgress, controller.signal)
+      } finally {
+        clearInterval(watcher)
+      }
+    })
+    const job = await ctx.jobs.enqueue('ai.adaptNotes', {}, { priority: 6, maxAttempts: 1 })
+    return { jobId: job.id }
+  })
+
+  handleIpc('brief:status', () => {
+    const ctx = requireActive(c)
+    const briefPath = join(ctx.summary.path, 'brief', 'brief.json')
+    if (!existsSync(briefPath)) {
+      return { exists: false, adapted: false, sourceFiles: [], title: null }
+    }
+    const stored = StoredBrief.parse(JSON.parse(readFileSync(briefPath, 'utf8')))
+    return {
+      exists: true,
+      adapted: stored.adapted,
+      sourceFiles: stored.sourceFiles.map((f) => ({ name: f.name, format: f.format, chars: f.chars })),
+      title: stored.analysis?.titleSuggestion ?? null,
+    }
   })
 
   handleIpc('dossier:last', () => {

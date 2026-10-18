@@ -70,6 +70,7 @@ export {
   DossierResult,
 } from './entities/dossier'
 export type { NoteFormat } from './entities/dossier'
+export { BriefSourceFile, ProjectBriefInput, StoredBrief } from './entities/brief'
 
 export {
   SHOT_TYPES,
@@ -300,6 +301,8 @@ export {
   CharacterPlanList,
   ScenePlan,
   ScenePlanList,
+  SeasonEpisodePlan,
+  SeasonPlanList,
   ShotPlan,
   ShotPlanList,
   AutoproduceSummary,

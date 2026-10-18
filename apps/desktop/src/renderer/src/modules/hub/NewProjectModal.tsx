@@ -40,6 +40,13 @@ interface FormState {
   resolution: string
   episodeCount: string
   contentRating: string
+  /* v0.18 complete brief — the author's IP answers (all optional). */
+  targetAudience: string
+  inspirations: string
+  setting: string
+  endingVision: string
+  episodeLengthMinutes: string
+  pagesPerChapter: string
 }
 
 function toggleGenre(list: string[], genre: string): string[] {
@@ -80,6 +87,12 @@ const EMPTY_FORM: FormState = {
   resolution: '1920x1080 (Full HD)',
   episodeCount: '12',
   contentRating: '13+',
+  targetAudience: '',
+  inspirations: '',
+  setting: '',
+  endingVision: '',
+  episodeLengthMinutes: '',
+  pagesPerChapter: '',
 }
 
 export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -128,7 +141,18 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
 
   const runAnalysis = () => {
     if (!notes) return
-    analyzeNotes.mutate(notes.combined, {
+    analyzeNotes.mutate(
+      {
+        notesText: notes.combined,
+        context: {
+          medium: form.medium || undefined,
+          targetAudience: form.targetAudience.trim() || undefined,
+          inspirations: form.inspirations.trim() || undefined,
+          setting: form.setting.trim() || undefined,
+          endingVision: form.endingVision.trim() || undefined,
+        },
+      },
+      {
       onSuccess: (a) => {
         setAnalysis(a)
         applyAnalysis(a)
@@ -204,6 +228,12 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
       episodeCount: form.episodeCount === '' ? undefined : Number(form.episodeCount),
       visualStyle: preset?.config.visualStyle,
       contentRating: (form.contentRating as 'ALL' | '7+' | '13+' | '16+' | '18+') ?? undefined,
+      targetAudience: form.targetAudience.trim() || undefined,
+      inspirations: form.inspirations.trim() || undefined,
+      setting: form.setting.trim() || undefined,
+      endingVision: form.endingVision.trim() || undefined,
+      episodeLengthMinutes: form.episodeLengthMinutes === '' ? undefined : Number(form.episodeLengthMinutes),
+      pagesPerChapter: form.pagesPerChapter === '' ? undefined : Number(form.pagesPerChapter),
     })
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
@@ -213,12 +243,20 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
     setFieldErrors(errors)
     if (!parsed.success || Object.keys(errors).length > 0) return
 
+    const briefPayload = notes
+      ? {
+          notesText: notes.combined,
+          sourceFiles: notes.files.map((f) => ({ name: f.name, format: f.format, chars: f.chars })),
+          analysis,
+        }
+      : undefined
     createProject.mutate(
       {
         name: form.name.trim(),
         description: form.description.trim() || undefined,
         dir,
         config: parsed.data,
+        brief: briefPayload,
       },
       {
         onSuccess: (project) => {
@@ -228,6 +266,20 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
               setView('overview')
               onClose()
               setForm({ ...EMPTY_FORM })
+              // The AI adapts the author's document into the project.
+              if (briefPayload) {
+                void invoke('ai:adaptNotes')
+                  .then(() =>
+                    toast({
+                      kind: 'success',
+                      title: tr('Building the story from your document'),
+                      description: tr('adapt-queued'),
+                    }),
+                  )
+                  .catch(() => {
+                    /* the Overview card offers a manual retry */
+                  })
+              }
             },
             onError: (err) =>
               setServerError(err instanceof MiraiError ? err.message : `Open failed: ${err.message}`),
@@ -572,6 +624,78 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
               {tr('Mature genre selected — rating locked to 18+ by the adults-only policy.')}
             </p>
           )}
+        </div>
+
+        {/* ---- v0.18: the complete author brief — quality IP inputs ---- */}
+        <div className="col-span-2 mt-2 border-t border-mirai-border pt-3">
+          <p className="mb-2 text-[10px] font-bold tracking-[0.16em] text-mirai-faint uppercase">
+            {tr('Author brief — optional, powers the AI')}
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="np-audience">{tr('Target audience')}</Label>
+              <Input
+                id="np-audience"
+                placeholder={tr('e.g. shounen 14-19 · seinen adults · josei 25+')}
+                value={form.targetAudience}
+                onChange={(e) => set('targetAudience', e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="np-inspirations">{tr('References & inspirations')}</Label>
+              <Input
+                id="np-inspirations"
+                placeholder={tr('e.g. Mushishi x Violet Evergarden')}
+                value={form.inspirations}
+                onChange={(e) => set('inspirations', e.target.value)}
+              />
+            </div>
+            <div className="col-span-2">
+              <Label htmlFor="np-setting">{tr('World & era')}</Label>
+              <Input
+                id="np-setting"
+                placeholder={tr('e.g. Taishō-era Kyoto with spirit telegraphy')}
+                value={form.setting}
+                onChange={(e) => set('setting', e.target.value)}
+              />
+            </div>
+            <div className="col-span-2">
+              <Label htmlFor="np-ending">{tr('Ending vision')}</Label>
+              <Textarea
+                id="np-ending"
+                rows={2}
+                placeholder={tr('Where the story lands — the ending you are building toward')}
+                value={form.endingVision}
+                onChange={(e) => set('endingVision', e.target.value)}
+              />
+            </div>
+            {form.medium === 'MANGA' || form.medium === 'WEBTOON' ? (
+              <div>
+                <Label htmlFor="np-pages">{tr('Pages per chapter')}</Label>
+                <Input
+                  id="np-pages"
+                  inputMode="numeric"
+                  placeholder="40"
+                  value={form.pagesPerChapter}
+                  onChange={(e) => set('pagesPerChapter', e.target.value)}
+                />
+              </div>
+            ) : (
+              <div>
+                <Label htmlFor="np-eplen">{tr('Minutes per episode')}</Label>
+                <Input
+                  id="np-eplen"
+                  inputMode="numeric"
+                  placeholder="22"
+                  value={form.episodeLengthMinutes}
+                  onChange={(e) => set('episodeLengthMinutes', e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-mirai-faint">
+            {tr('brief-hint')}
+          </p>
         </div>
 
         {serverError && (

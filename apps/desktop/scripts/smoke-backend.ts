@@ -1431,6 +1431,116 @@ async function main(): Promise<void> {
     if (!txt.includes('FICHA TÉCNICA') || !txt.includes('ADVOCACIA')) throw new Error('dossier sections missing')
   })
 
+  await step('ADAPT DOCUMENT: author file -> bible, cast, season, scenes, screenplays', async () => {
+    // A fresh project WITH a stored brief — mirrors New Project with an
+    // imported document. The network is mocked at the transport level; the
+    // real AiHost + services run the whole fidelity pipeline.
+    const briefProject = projects.create({
+      name: 'Adapted From Doc',
+      dir: dirs.projectsDefaultDir,
+      config: {
+        title: 'The Lantern Keeper',
+        genres: ['Fantasy'],
+        language: 'ja',
+        aspectRatio: '16:9',
+        fps: 24,
+        resolution: { width: 1920, height: 1080 },
+        episodeCount: 3,
+        medium: 'ANIME',
+        targetAudience: 'seinen adults',
+        endingVision: 'The keeper chooses whose wish is last.',
+      },
+    })
+    ctx = (await projects.open(briefProject.path)) as typeof ctx
+
+    // Write the brief exactly like projects:create does.
+    const briefDir = join(ctx.summary.path, 'brief')
+    mkdirSync(briefDir, { recursive: true })
+    const briefPayload = {
+      notesText: 'Kaito tends the last spirit lantern in a village where every wish costs a memory. He falls for Yuki, whose wish would erase her sister. The keeper must choose before the lantern dies.',
+      sourceFiles: [{ name: 'historia.txt', format: 'txt', chars: 170 }],
+      analysis: null,
+      adapted: false,
+    }
+    writeFileSync(join(briefDir, 'brief.json'), JSON.stringify(briefPayload, null, 2), 'utf8')
+    writeFileSync(join(briefDir, 'source-notes.txt'), briefPayload.notesText, 'utf8')
+
+    // The adaptation AiHost — same pattern as the Producer step.
+    const adaptSettings = new SettingsService(appDb)
+    const adaptCreds = new CredentialStore(appDb, plaintextCodec, systemClock)
+    adaptCreds.set('openrouter', 'sk-smoke-adapt-key')
+    adaptSettings.update({ ...adaptSettings.get(), ai: { ...adaptSettings.get().ai, defaultModel: 'test/model' } })
+    const ai = new AiHost({
+      credentials: adaptCreds,
+      settings: adaptSettings,
+      projects,
+      logger,
+      emitter: { send: () => undefined, window: null } as never,
+    })
+
+    const realFetch = globalThis.fetch
+    const chat = (content: string): Response =>
+      new Response(JSON.stringify({
+        id: 'x', object: 'chat.completion', created: 1, model: 'test/model',
+        choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
+        usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+      }), { status: 200 })
+    globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { messages?: Array<{ content: string }> }
+      const last = body.messages?.[body.messages.length - 1]?.content ?? ''
+      if (last.includes('write the Story Bible')) {
+        return chat(JSON.stringify({
+          premise: 'A lantern keeper must grant the last wish at the cost of his own memory of Yuki.',
+          themes: ['sacrifice', 'memory'], tone: 'contemplative, luminous',
+          message: 'Every wish costs something.', genreNotes: 'Seinen fantasy.',
+        }))
+      }
+      if (last.includes('extract EVERY character')) {
+        return chat(JSON.stringify({ characters: [
+          { name: 'Kaito', role: 'PROTAGONIST', age: '24', appearance: 'Ash-grey coat, lantern-shaped earring.', personality: 'Quiet, dutiful.', goals: 'Keep the lantern lit.', voice: 'measured' },
+          { name: 'Yuki', role: 'DEUTERAGONIST', age: '22', appearance: 'Pale hair, glass-blue eyes.', personality: 'Kind, haunted.', goals: 'Save her sister.', voice: 'soft' },
+        ] }))
+      }
+      if (last.includes('plan the SEASON')) {
+        return chat(JSON.stringify({ episodes: [
+          { number: 1, title: 'The last wish', synopsis: 'Kaito meets Yuki; the lantern flickers for the first time.' },
+          { number: 2, title: 'The price of memory', synopsis: 'Yuki learns what her wish would erase.' },
+          { number: 3, title: 'The keeper chooses', synopsis: 'The lantern dies and Kaito decides whose wish is last.' },
+        ] }))
+      }
+      if (last.includes('break the FIRST episode')) {
+        return chat(JSON.stringify({ scenes: [
+          { title: 'Lantern lit at dusk', synopsis: 'Kaito trims the wick as villagers queue with wishes.', timeOfDay: 'DUSK', locationName: 'Village shrine', castNames: ['Kaito', 'Yuki'] },
+        ] }))
+      }
+      // draftScreenplay prompt
+      if (last.includes('screenplay') || last.includes('Screenplay') || last.includes('scene')) {
+        return chat('INT. SHRINE - DUSK\n\nKAITO trims the wick. YUKI steps forward.\n\nYUKI\n"I wish to save her."\n\nThe lantern flickers.')
+      }
+      return chat('{}')
+    })
+    try {
+      const summary = await ai.adaptFromDocument(() => {}, { aborted: false })
+      const cast = ctx.creative.listCharacters()
+      const eps = ctx.creative.listEpisodes()
+      const bible = ctx.creative.getBible()
+      if (!bible.premise?.includes('lantern keeper')) throw new Error('bible not adapted from the document')
+      if (!cast.some((c) => c.name === 'Kaito') || !cast.some((c) => c.name === 'Yuki')) throw new Error('cast not extracted')
+      if (eps.length !== 3) throw new Error(`season plan wrong: ${eps.length} episodes`)
+      const firstEp = eps.find((e) => e.number === 1)
+      const scenes = firstEp ? ctx.creative.listScenes(firstEp.id) : []
+      if (scenes.length !== 1) throw new Error('episode 1 scenes missing')
+      if (!scenes[0]?.screenplay || scenes[0].screenplay.trim().length === 0) throw new Error('screenplay not written')
+      const stored = JSON.parse(readFileSync(join(ctx.summary.path, 'brief', 'brief.json'), 'utf8')) as { adapted: boolean }
+      if (stored.adapted !== true) throw new Error('adapted flag not persisted')
+      if (summary.charactersCreated !== 2) throw new Error('summary characters count wrong')
+      void summary
+    } finally {
+      globalThis.fetch = realFetch
+      await projects.close()
+    }
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

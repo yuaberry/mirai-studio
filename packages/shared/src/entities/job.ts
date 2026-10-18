@@ -9,7 +9,7 @@ import { zErrorPayload } from '../errors'
 import { zJobStatus } from '../status'
 
 /** Job types shipped with the current phase. Providers add more later. */
-export const BUILTIN_JOB_TYPES = ['project.validate', 'dossier.generate'] as const
+export const BUILTIN_JOB_TYPES = ['project.validate', 'dossier.generate', 'ai.adaptNotes'] as const
 export type BuiltinJobType = (typeof BUILTIN_JOB_TYPES)[number]
 
 export const JobRecord = z.object({

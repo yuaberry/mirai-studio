@@ -75,6 +75,20 @@ export const ProjectConfig = z.object({
   visualStyle: z.string().max(120).optional(),
   episodeCount: z.number().int().min(0).max(10_000).optional(),
   contentRating: z.enum(CONTENT_RATINGS).optional(),
+  /* ---- v0.18: the complete author brief — feeds the AI, the dossier and
+     every generation prompt, tuned per medium. All optional. ---- */
+  /** Target audience ("shounen 14-19", "seinen adults", "josei 25+"…). */
+  targetAudience: z.string().max(600).optional(),
+  /** Reference works / aesthetic inspirations ("Mushishi x Violet Evergarden"). */
+  inspirations: z.string().max(600).optional(),
+  /** World & era ("Taishō-era Kyoto with spirit telegraphy"). */
+  setting: z.string().max(600).optional(),
+  /** Where the story LANDS — the ending the author is building toward. */
+  endingVision: z.string().max(600).optional(),
+  /** Minutes per episode (anime) — beats and pacing derive from this. */
+  episodeLengthMinutes: z.number().int().min(1).max(240).optional(),
+  /** Pages per chapter/volume (manga/webtoon). */
+  pagesPerChapter: z.number().int().min(1).max(200).optional(),
 })
 export type ProjectConfig = z.infer<typeof ProjectConfig>
 

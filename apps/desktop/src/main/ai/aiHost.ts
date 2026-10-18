@@ -6,6 +6,8 @@
  * from the project and sent to the provider (spec §15). Errors surface as
  * typed 'ai:error' events with useful messages, never as generic failures.
  */
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   MiraiError,
   toErrorPayload,
@@ -16,7 +18,9 @@ import {
   CharacterPlanList,
   ScenePlanList,
   ShotPlanList,
+  SeasonPlanList,
   StoryNotesAnalysis,
+  StoredBrief,
   type AiContextScope,
   type AutoproduceSummary,
   type ChatMessage,
@@ -1014,6 +1018,226 @@ export class AiHost {
     }
   }
 
+  // ---------------------------------------------- v0.18: adapt the document
+
+  /**
+   * ADAPT FROM DOCUMENT — the user sent their story notes; this builds the
+   * project AROUND THAT STORY (fidelity-first: the document is canon).
+   * Pipeline: bible <- notes · cast <- notes · full season plan <- notes ·
+   * scenes+screenplays for episode 1. Runs as a job (ai:adaptNotes).
+   */
+  async adaptFromDocument(
+    progress: (pct: number) => void,
+    signal: { readonly aborted: boolean },
+  ): Promise<AutoproduceSummary> {
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+
+    // Read the stored brief (written by projects:create when the user
+    // imported a document in New Project).
+    const briefPath = join(ctx.summary.path, 'brief', 'brief.json')
+    if (!existsSync(briefPath)) {
+      throw new MiraiError('VALIDATION_ERROR', 'This project has no imported document to adapt.')
+    }
+    const stored = StoredBrief.parse(JSON.parse(readFileSync(briefPath, 'utf8')))
+    if (stored.notesText.trim().length < 40) {
+      throw new MiraiError('VALIDATION_ERROR', 'The stored document is too short to adapt.')
+    }
+
+    const manifest = ctx.manifest
+    const mature = this.matureActive(ctx)
+    const guard = () => {
+      if (signal.aborted) throw new MiraiError('CANCELLED', 'Adaptation cancelled.')
+    }
+
+    // The grounded instruction: the AUTHOR'S DOCUMENT IS THE CANON.
+    const notesExcerpt = stored.notesText.slice(0, 60_000)
+    const cfg = manifest.config
+    const mediumLine: Record<string, string> = {
+      ANIME: `MATÉRIA: anime — episodes of ${cfg.episodeLengthMinutes ?? 22} minutes; plan with TV beats (hook in the first minute, act breaks) and a season arc with a landing.`,
+      MANGA: `MATÉRIA: mangá — chapters of ${cfg.pagesPerChapter ?? 40} pages; each episode = one chapter ending on a page-turner cliffhanger.`,
+      WEBTOON: `MATÉRIA: webtoon — vertical-scroll episodes; plan with scroll beats and one strong cliffhanger per episode.`,
+      LIGHT_NOVEL: 'MATÉRIA: light novel — chapters in prose; episodes = chapter structure with an intercalated POV rhythm.',
+      NOVEL: 'MATÉRIA: romance — chapters in literary prose; episodes follow the novel\'s act structure.',
+      OTHER: 'MATÉRIA: other — structure episodes in the format the document itself suggests.',
+    }
+    const briefLines = [
+      `TÍTULO: ${cfg.title}`,
+      mediumLine[cfg.medium ?? 'OTHER'] ?? mediumLine.OTHER,
+      cfg.targetAudience ? `PÚBLICO-ALVO: ${cfg.targetAudience}` : '',
+      cfg.inspirations ? `REFERÊNCIAS/INSPIRAÇÕES: ${cfg.inspirations}` : '',
+      cfg.setting ? `MUNDO/ÉPOCA: ${cfg.setting}` : '',
+      cfg.endingVision ? `DESEJO DE DESFECHO DO AUTOR: ${cfg.endingVision}` : '',
+      cfg.episodeCount ? `EPISÓDIOS/CAPÍTULOS PLANEJADOS: ${cfg.episodeCount}` : '',
+      stored.analysis ? `ANÁLISE PROFISSIONAL PRÉVIA DA IA: ${JSON.stringify({
+        titleSuggestion: stored.analysis.titleSuggestion,
+        premise: stored.analysis.premise,
+        themes: stored.analysis.themes,
+        suggestedAudience: stored.analysis.suggestedAudience,
+      })}` : '',
+    ].filter(Boolean)
+
+    const instruction = [
+      'ADAPTAÇÃO FIEL — O DOCUMENTO DO AUTOR É O CÂNON.',
+      'Extract, structure and adapt ONLY what the document supports. Never invent plot that contradicts it; when structure needs a gap filled, keep it minimal and coherent, marked "[sugestão]".',
+      ...briefLines,
+      `DOCUMENTO DO AUTOR:\n${notesExcerpt}`,
+    ].join('\n\n')
+
+    const steps: AutoproduceSummary['steps'] = []
+    const push = (step: string, detail: string, ok = true) => steps.push({ step, detail, ok })
+    let bibleDrafted = false
+    let scenesCreated = 0
+    let screenplaysDrafted = 0
+
+    // ---- 1. Story Bible from the document (never overwrite the author) ----
+    const bible = ctx.creative.getBible()
+    if (!bible.premise || bible.premise.trim().length === 0) {
+      guard()
+      const plan = await this.chatJson(
+        `You are the story editor. From the author's document below, write the Story Bible — extracted from the story itself, not invented.\n\n${instruction}\n\nReturn JSON: { premise (2-4 sentences, the story's actual core conflict), themes (3-6), tone, message, genreNotes }.`,
+        BibleDraftPlan,
+        0.4,
+      )
+      ctx.creative.updateBible({
+        ...bible,
+        premise: plan.premise,
+        themes: plan.themes.join(', '),
+        tone: plan.tone,
+        message: plan.message,
+        genreNotes: plan.genreNotes,
+      })
+      push('Story Bible', 'Extraído fielmente do documento (premissa, temas, tom, mensagem).')
+      bibleDrafted = true
+    } else {
+      push('Story Bible', "Já escrito — a versão do autor foi mantida.")
+    }
+    progress(10)
+
+    // ---- 2. Cast from the document ---------------------------------------
+    guard()
+    const castPlan = await this.chatJson(
+      `You are the character designer. From the author's document below, extract EVERY character the story supports (up to 8, prioritized by narrative weight). Use the document's own names, ages, traits and descriptions — never invent characters.\n\n${instruction}\n\nReturn JSON: { characters: [{ name, role (PROTAGONIST/DEUTERAGONIST/SUPPORTING/ANTAGONIST/CAMEO/OTHER), age (stated explicitly — e.g. "21"${mature ? '; ALL characters verifiably ADULTS (18+) — hard rule' : ''}), appearance (concrete visual: hair, eyes, build, signature outfit — grounded in the document), personality, goals, voice }] }.`,
+      CharacterPlanList,
+      0.4,
+    )
+    const existingNames = new Set(ctx.creative.listCharacters().map((c) => c.name.toLowerCase()))
+    const createdCast: string[] = []
+    for (const plan of castPlan) {
+      if (existingNames.has(plan.name.toLowerCase())) continue
+      ctx.creative.createCharacter(plan)
+      createdCast.push(plan.name)
+    }
+    push('Elenco', `${createdCast.length} personagens extraídos do documento (${createdCast.join(', ') || 'elenco existente mantido'}).`)
+    progress(30)
+
+    // ---- 3. FULL season plan from the document ----------------------------
+    guard()
+    const planned = Math.min(Math.max(cfg.episodeCount ?? stored.analysis?.estimatedEpisodes ?? 12, 1), 24)
+    const seasonPlan = await this.chatJson(
+      `You are the series director. From the author's document below, plan the SEASON (${planned} episodes) following the story's ACTUAL arc: beginning, developments, turn, climax, landing the author wrote (or pointed toward).\n\n${instruction}\n\nReturn JSON: { episodes: [{ number (1..${planned}), title, synopsis (2-4 sentences grounded in the document) }] } — exactly ${planned} episodes.`,
+      SeasonPlanList,
+      0.5,
+    )
+    const episodes = ctx.creative.listEpisodes()
+    const season = episodes.length > 0 ? episodes[0]!.season : 1
+    const startNumber = episodes.length > 0 ? Math.max(...episodes.map((e) => e.number)) + 1 : 1
+    const createdEpisodes: Array<{ id: string; number: number; title: string }> = []
+    for (const ep of seasonPlan) {
+      const number = startNumber + ep.number - 1
+      const created = ctx.creative.createEpisode({
+        season,
+        number,
+        title: ep.title,
+        synopsis: ep.synopsis,
+      })
+      createdEpisodes.push({ id: created.id, number, title: created.title })
+    }
+    push('Plano da temporada', `${createdEpisodes.length} episódios/capítulos estruturados do documento.`)
+    progress(55)
+
+    // ---- 4. Scenes for episode 1 -------------------------------------------
+    guard()
+    const firstEpisode = createdEpisodes.find((e) => e.number === startNumber)
+    if (firstEpisode) {
+      const scenePlans = await this.chatJson(
+        `You are the series director. From the author's document below, break the FIRST episode into scenes with a clear dramatic arc (hook → development → turn → climax landing).\n\n${instruction}\n\nReturn JSON: { scenes: [{ title, synopsis (2-4 sentences), timeOfDay (DAY/NIGHT/DAWN/DUSK/UNSPECIFIED), locationName, castNames (names from the extracted cast; max 4 per scene) }] }.`,
+        ScenePlanList,
+        0.5,
+      )
+      const locationIds = new Map<string, string>()
+      const castByName = new Map(ctx.creative.listCharacters().map((c) => [c.name, c.id] as const))
+      for (const plan of scenePlans) {
+        let locationId: string | undefined
+        if (plan.locationName && !locationIds.has(plan.locationName)) {
+          const loc = ctx.creative.createLocation({
+            name: plan.locationName,
+            description: `Cenário de "${plan.title}" — extraído do documento do autor.`,
+          })
+          locationIds.set(plan.locationName, loc.id)
+          locationId = loc.id
+        } else if (plan.locationName) {
+          locationId = locationIds.get(plan.locationName)!
+        }
+        ctx.creative.createScene(firstEpisode.id, {
+          title: plan.title,
+          synopsis: plan.synopsis,
+          timeOfDay: plan.timeOfDay,
+          locationId,
+          characterIds: plan.castNames
+            .map((n) => castByName.get(n))
+            .filter((id): id is string => id !== undefined),
+        })
+        scenesCreated++
+      }
+      push('Cenas do episódio 1', `${scenesCreated} cenas planejadas.`)
+      progress(75)
+
+      // ---- 5. Screenplays for episode 1's scenes ---------------------------
+      const scenes = ctx.creative.listScenes(firstEpisode.id)
+      for (const scene of scenes) {
+        guard()
+        try {
+          const draft = await this.draftScreenplay(scene.id)
+          ctx.creative.updateScene(scene.id, {
+            title: scene.title,
+            timeOfDay: scene.timeOfDay,
+            characterIds: scene.characterIds,
+            locationId: scene.locationId ?? undefined,
+            synopsis: scene.synopsis ?? undefined,
+            screenplay: draft.draft,
+          })
+          screenplaysDrafted++
+        } catch (err) {
+          push('Screenplay', `Cena "${scene.title}": ${(err as Error).message}`, false)
+        }
+      }
+      push('Roteiros', `${screenplaysDrafted}/${scenes.length} cenas roteirizadas (os demais episódios seguem no Producer Agent).`)
+    }
+    progress(95)
+
+    // ---- 6. Mark the brief adapted -----------------------------------------
+    writeFileSync(briefPath, JSON.stringify({ ...stored, adapted: true }, null, 2), 'utf8')
+    push('Documento', 'Marcado como adaptado — o dossiê refletirá o material desde a geração.')
+    progress(100)
+
+    this.deps.logger.info('AI', 'Document adapted into project', {
+      project: ctx.summary.name,
+      episodes: createdEpisodes.length,
+    })
+    return {
+      bibleDrafted,
+      charactersCreated: createdCast.length,
+      scenesCreated,
+      screenplaysDrafted,
+      shotsCreated: 0,
+      framesGenerated: 0,
+      timelinesBuilt: 0,
+      episodeTitle: firstEpisode?.title ?? '',
+      steps,
+    }
+  }
+
   // -------------------------------------------------- v0.15: notes + dossier
 
   /**
@@ -1022,13 +1246,30 @@ export class AiHost {
    * estimates, cast seeds, improvements, risks and commercial notes.
    * Works without an open project — the New Project flow depends on it.
    */
-  async analyzeStoryNotes(notesText: string): Promise<import('@mirai/shared').StoryNotesAnalysis> {
+  async analyzeStoryNotes(
+    notesText: string,
+    context?: {
+      medium?: string
+      targetAudience?: string
+      inspirations?: string
+      setting?: string
+      endingVision?: string
+    },
+  ): Promise<import('@mirai/shared').StoryNotesAnalysis> {
     if (notesText.trim().length < 40) {
       throw new MiraiError('VALIDATION_ERROR', 'The imported notes are too short for a meaningful analysis.')
     }
     const excerpt = notesText.slice(0, 60_000)
+    const authorLines = [
+      context?.medium ? `MATÉRIA ESCOLHIDA PELO AUTOR: ${context.medium}` : '',
+      context?.targetAudience ? `PÚBLICO-ALVO DECLARADO: ${context.targetAudience}` : '',
+      context?.inspirations ? `INSPIRAÇÕES DECLARADAS: ${context.inspirations}` : '',
+      context?.setting ? `MUNDO/ÉPOCA DECLARADO: ${context.setting}` : '',
+      context?.endingVision ? `DESEJO DE DESFECHO DO AUTOR: ${context.endingVision}` : '',
+    ].filter(Boolean)
+    const authorBlock = authorLines.length > 0 ? `\n\nAUTHOR DECLARATIONS (honor these):\n${authorLines.join('\n')}\n` : ''
     return this.chatJsonCore(
-      `You are the head of development of a professional anime/manga studio. The user sent REAL story notes (imported from their documents). Read them like a commercial publisher evaluating a submission, then return a professional planning analysis.\n\nNOTES BEGIN\n${excerpt}\nNOTES END\n\nReturn JSON: { titleSuggestion (marketable title in the notes' language, max 120 chars), medium (ANIME, MANGA, LIGHT_NOVEL, NOVEL, WEBTOON or OTHER), premise (2-4 sentences, the core conflict), synopsis (1-2 paragraphs for a pitch document), tone, suggestedAudience, contentRating (ALL, 7+, 13+, 16+ or 18+ — infer conservatively; only 18+ if the notes are explicitly adult), genres (1-8 anime-taxonomy tags like Drama, Isekai, School, Romance), themes (1-8), estimatedEpisodes (professional planning estimate for the format), estimatedPagesPerEpisode (manga/webtoon pages per chapter; 0 for anime), characterSeeds (up to 12: { name, role, brief } — only characters the notes support), locationSeeds (up to 10), improvements (2-10 concrete, professional sentences — structure, stakes, marketability), risks (0-8 commercial/structural risks), commercialNotes (positioning + monetization read, 1-2 paragraphs) }.\nGround EVERYTHING in the notes — never invent plot the notes don't support; suggest improvements, don't write the story.`,
+      `You are the head of development of a professional anime/manga studio. The user sent REAL story notes (imported from their documents). Read them like a commercial publisher evaluating a submission, then return a professional planning analysis.${authorBlock}\n\nNOTES BEGIN\n${excerpt}\nNOTES END\n\nReturn JSON: { titleSuggestion (marketable title in the notes' language, max 120 chars), medium (ANIME, MANGA, LIGHT_NOVEL, NOVEL, WEBTOON or OTHER), premise (2-4 sentences, the core conflict), synopsis (1-2 paragraphs for a pitch document), tone, suggestedAudience, contentRating (ALL, 7+, 13+, 16+ or 18+ — infer conservatively; only 18+ if the notes are explicitly adult), genres (1-8 anime-taxonomy tags like Drama, Isekai, School, Romance), themes (1-8), estimatedEpisodes (professional planning estimate for the format), estimatedPagesPerEpisode (manga/webtoon pages per chapter; 0 for anime), characterSeeds (up to 12: { name, role, brief } — only characters the notes support), locationSeeds (up to 10), improvements (2-10 concrete, professional sentences — structure, stakes, marketability), risks (0-8 commercial/structural risks), commercialNotes (positioning + monetization read, 1-2 paragraphs) }.\nGround EVERYTHING in the notes — never invent plot the notes don't support; suggest improvements, don't write the story.`,
       StoryNotesAnalysis,
       0.4,
     )
