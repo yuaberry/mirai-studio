@@ -9,7 +9,7 @@ import { toOpenedProject, type Container } from '../bootstrap'
 import { join } from 'node:path'
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { newEntityId, LicenseService } from '@mirai/core'
-import { RenderService, NotesImportService, DossierService, type DossierData } from '@mirai/core'
+import { RenderService, NotesImportService, DossierService, EpubService, type DossierData } from '@mirai/core'
 import { MEDIUM_LABEL, StoredBrief, type DossierResult } from '@mirai/shared'
 
 export function registerIpcHandlers(c: Container): void {
@@ -1181,6 +1181,30 @@ export function registerIpcHandlers(c: Container): void {
     })
     const job = await ctx.jobs.enqueue('ai.adaptNotes', {}, { priority: 6, maxAttempts: 1 })
     return { jobId: job.id }
+  })
+
+  handleIpc('epub:export', () => {
+    const ctx = requireActive(c)
+    const manifest = ctx.manifest
+    const chapters = ctx.creative.listEpisodes().map((ep) => {
+      const scenes = ctx.creative.listScenes(ep.id)
+      const sceneBodies = scenes
+        .map((sc) => `${sc.screenplay ? sc.screenplay.trim() : (sc.synopsis ?? '').trim()}`.trim())
+        .filter((b) => b.length > 0)
+        .map((b) => b)
+        .join('\n\n')
+      const intro = ep.synopsis ? `${ep.synopsis.trim()}\n\n` : ''
+      return { title: `Capítulo ${ep.number}: ${ep.title}`, body: intro + sceneBodies }
+    })
+    const svc = new EpubService(ctx.summary.path, { now: () => new Date(), isoNow: () => new Date().toISOString() })
+    const result = svc.export({
+      title: manifest.config.title,
+      author: 'Mirai Studio Author',
+      language: manifest.config.language,
+      chapters,
+    })
+    c.logger.info('SYSTEM', `EPUB exported: ${result.chapters} chapters -> ${result.path}`)
+    return { epubPath: result.path, chapters: result.chapters, bytes: result.bytes }
   })
 
   handleIpc('brief:status', () => {

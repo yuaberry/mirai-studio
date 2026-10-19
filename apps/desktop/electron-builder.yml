@@ -49,6 +49,10 @@ deb:
   maintainer: Mirai Studio Developers <dev@mirai.studio>
   priority: optional
   packageCategory: graphics
+  # v0.20: default electron-builder steps + gtk-update-icon-cache — without
+  # the cache refresh Linux Mint/Cinnamon shows the app with NO icon.
+  afterInstall: build/after-install.sh
+  afterRemove: build/after-remove.sh
 
 rpm:
   # Without artifactName the default uses the package name "@mirai/desktop" —

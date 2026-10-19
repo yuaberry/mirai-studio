@@ -1,73 +1,113 @@
-# MIRAI STUDIO
+<p align="center">
+  <img src="docs/banner.png" alt="Mirai Studio — Create Worlds. Develop Stories. Produce Original IP." width="100%"/>
+</p>
 
-**AI-Native Anime & Animation Production Studio** — *From imagination to animation.*
+<h3 align="center">O estúdio desktop completo para criar, desenvolver e produzir IP original — anime, mangá e light novels — com IA e 100% local-first.</h3>
 
-A professional, local-first desktop studio for creating anime, animation, manga, visual novels and
-other audiovisual works. Modular, provider-agnostic, testable and honest: no fake buttons, no dead UI.
+<p align="center">
+  <a href="https://github.com/yuaberry/mirai-studio/releases/latest"><img src="https://img.shields.io/github/v/release/yuaberry/mirai-studio?style=flat-square&color=f472b6&label=release" alt="release"></a>
+  <a href="https://github.com/yuaberry/mirai-studio/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/yuaberry/mirai-studio/release.yml?style=flat-square&label=CI%20%286%20plataformas%29&color=34d399" alt="CI"></a>
+  <a href="#"><img src="https://img.shields.io/badge/testes-197%20%E2%9C%93-22d3ee?style=flat-square" alt="tests"></a>
+  <a href="#"><img src="https://img.shields.io/badge/smoke-50%2F50%20steps-a78bfa?style=flat-square" alt="smoke"></a>
+  <a href="https://yuaberry.github.io/mirai-studio/"><img src="https://img.shields.io/badge/site-yuaberry.github.io%2Fmirai--studio-f472b6?style=flat-square" alt="site"></a>
+</p>
 
-```
-Story → World → Characters → Script → Storyboard → Assets → Animation
-      → Voice → Music → Sound → Editing → Review → Export
-```
+---
 
-## Status — v0.2.0
+## 🌸 O que é
 
-| Phase | Capability | State |
+**Mirai Studio** é um ambiente de produção profissional onde um criador desenvolve uma IP durante todo o ciclo de vida: da primeira ideia — ou do **seu próprio documento** — até a obra estruturada, roteirizada, exportada e pronta para publicação.
+
+Importe seu documento (.txt, .md, .docx, .odt, .pdf, .zip — exportações do Google Docs inclusas) e **a IA adapta a SUA história**: Bíblia da História, personagens, temporada completa e roteiros — com fidelidade total ao documento. Ele é o cânon.
+
+Tudo fica na sua máquina: banco SQLite local, backups reais, chaves de API criptografadas, zero telemetria.
+
+| Project Hub | New Project — notas + brief | Production Overview |
 |---|---|---|
-| 0 — Foundation | Electron+React app, typed IPC (zod both ways), SQLite + migrations, project lifecycle, backups, persistent job queue + crash recovery, settings, encrypted credentials, logger + Diagnostics, command palette (Ctrl+K) | ✅ |
-| 1 — Creative Core | Story Bible (autosave), Character Studio, Locations, Episodes & Scenes (cast, location, time of day, screenplay text, reorder), creative data travels with duplicates/backups | ✅ |
-| 2 — AI Core (first slice) | Real OpenRouter provider (chat/stream/model discovery via injected transport), model registry with TTL cache + FREE flags, consent-based context builder, streaming AI Assist chat with abort + cost estimate, live model picker in Settings | ✅ |
-| — Prompt Library | 12 built-in professional manga/anime prompts (panels, character sheets, keyframes, style anchors, negatives, story tools), user CRUD, tags, copy, "Use in Assist" | ✅ |
-| 3 — Storyboard (first slice) | Storyboard Studio: shots with framing (10 types), lens presets, 10 camera movements, duration + scene runtime; **real frame import** (native dialog → stored inside the project → served via the restricted `mirai-asset://` protocol with path-escape protection); Style Bible (visual identity, autosave); orphan-asset pruning | ✅ |
-| — Packaging | `.deb` (primary) + AppImage + portable dir, brand icon, boot-tested binaries | ✅ |
+| ![Hub](docs/screenshots/hub.png) | ![New Project](docs/screenshots/new-project.png) | ![Overview](docs/screenshots/overview.png) |
 
-**Verification:** `bun run verify` → typecheck (4 workspaces) + **89 tests** + production build +
-**21-step end-to-end smoke** (project → creative → prompts → AI provider → storyboard with real frames → backup/restore → crash recovery). All green.
-
-## Quick start
-
-```bash
-bun install
-node apps/desktop/node_modules/electron/install.js   # if electron dist/ missing
-bun run rebuild:native                                # compile better-sqlite3 for Electron
-bun run verify
-bun run dev        # launch with HMR
-```
-
-Installers: `bun run package:linux` → `apps/desktop/release/` (`mirai-studio_0.2.1_amd64.deb` +
-AppImage). `sudo apt install ./mirai-studio_0.2.1_amd64.deb`.
-
-| Script | Purpose |
+| Themes (Sakura) | AI Workflows — Node Builder |
 |---|---|
-| `bun run verify` | Full gate: typecheck → tests → build → E2E smoke |
-| `bun run dev` / `build` / `start` | Dev (HMR) / production build / run built app |
-| `bun run package:linux` | `.deb` + AppImage installers |
-| `bun run rebuild:native` | Recompile better-sqlite3 against Electron |
-| `bun run icons` | Regenerate the icon set from `build/icon.svg` |
+| ![Themes](docs/screenshots/settings-themes.png) | ![Workflows](docs/screenshots/workflows.png) |
 
-> Tests touching `better-sqlite3` run under `ELECTRON_RUN_AS_NODE=1` (Electron's own Node) so the
-> binary ABI matches the shipped app exactly.
+---
 
-## Layout
+## ✨ Recursos (todos reais, todos verificados)
+
+### 📖 Story
+- **Importe seu documento → a IA adapta a SUA história** (fidelidade-first: o documento é o cânon)
+- **Brief do autor**: público-alvo, referências, mundo/época, **temporadas planejadas da IP**, demografia (shounen/seinen/josei…), minutos por episódio ou páginas por capítulo
+- Análise profissional de notas com IA (título, premissa, estimativas de temporadas, riscos, notas comerciais)
+- **Bíblia da História** e **Bíblia de Estilo** + 3 presets de estilo adulto (Pro)
+- Personagens com fichas completas, locações, episódios e cenas com roteiro
+
+### 🎬 Produção
+- **Storyboard** com shots, enquadramentos, movimentos de câmera e diálogos
+- **Timeline** com keyframes animados, mixer de áudio e câmera por curvas
+- **Render real via FFmpeg embutido** (nada para instalar): PREVIEW / MASTER / CINEMA (CRF 14/16), 14 presets de exportação (4K DCI, Cinemascope, 8K, 60fps)
+- Geração de **imagem** e **vídeo** (image-to-video) por provedores configuráveis
+- **Subtitles Studio**: SRT, VTT e **ASS** (import/export) + burn-in no render
+- **Ponte Blender**: anexe .blend a um shot
+- **Dossiê do Projeto**: documento comercial-profissional (.txt + **PDF A4 de 30-45+ páginas**) com ficha técnica completa, elenco, plano de episódios, estratégia comercial e **advocacia** (CF, LDA 9.610/98, LGPD, Lei do Audiovisual 8.685/93, Lei Paulo Gustavo 14.216/21)
+- **Export EPUB 3 real** — episódios → capítulos de light novel (validado por estrutura: mimetype stored, OPF, nav, spine)
+
+### 🤖 IA
+- **Producer Agent**: ideia → episódio completo (bíblia, cast, cenas, shots)
+- **AI Director**, **Continuity Engine**, análise de roteiro
+- **Node Builder**: monte pipelines visuais de IA (arraste, reordene, execute)
+- Provider **NVIDIA NIM** e **OpenRouter** (compatível OpenAI), retry automático em falhas transitórias, orçamento de tokens por chamada, erros sempre com status HTTP
+- **Mature Content Mode (Pro)**: toolset adulto com policy **adults-only enforced in code** — chave Ed25519 offline, nada de servidor
+
+### 🏭 Gestão
+- Task board kanban com **datas limite + visão Calendário**
+- Pipeline de aprovações com auditoria, versionamento de entidades, QC com **12 checks** (inclusive tarefas atrasadas e legendas sobrepostas)
+- Analytics de produção, jobs com progresso/cancelamento, plugins com permissões
+- **Sessão persistente**: reabre seu último projeto na última página; **5 temas** (Dark, Preto OLED, Branco, Sakura, **Personalizado** com cor de destaque sua) · pt-BR completo
+
+---
+
+## 📦 Baixe (6 plataformas, construídas por CI em runners reais)
+
+[![Downloads](https://img.shields.io/github/downloads/yuaberry/mirai-studio/total?style=flat-square&color=a78bfa&label=downloads%20totais)](https://github.com/yuaberry/mirai-studio/releases/latest)
+
+| Plataforma | Arquivo |
+|---|---|
+| 🪟 **Windows** | `mirai-studio_x.y.z_x64-setup.exe` |
+| 🍎 **macOS** (Apple Silicon) | `mirai-studio_x.y.z_arm64.dmg` |
+| 🐧 **Linux** Debian/Ubuntu/Mint | `mirai-studio_x.y.z_amd64.deb` |
+| 🐧 **Linux** portátil | `mirai-studio_x.y.z_x86_64.AppImage` |
+| 🐧 **Linux** Fedora/RHEL | `mirai-studio_x.y.z_x86_64.rpm` |
+| 📱 **Android** — *Mirai Companion* | `mirai-companion-x.y.z.apk` |
+
+> FFmpeg (GPL) vai embutido em todos os desktops — render funciona sem instalar nada. macOS sem assinatura Apple: botão direito → Abrir na primeira vez.
+
+**Mirai Companion** (Android): leia o **Dossiê do Projeto** no celular — compartilhe o `.txt` do desktop e continue lendo em qualquer lugar, 100% offline.
+
+---
+
+## 🏗️ Arquitetura (o que faz tudo isso real)
 
 ```
-apps/desktop     Electron app (main = Node backend; renderer = React UI)
-packages/shared  Types, zod schemas, IPC contracts — single source of truth
-packages/core    Electron-free domain: db, projects, jobs, creative, prompts, settings
-packages/ai      AI core: OpenRouter provider, SSE, model registry, context builder
-docs/            Architecture, decisions, packaging, roadmap
+apps/desktop   Electron + React + Tailwind — renderer, main (IPC tipada por contratos zod)
+apps/mobile    Capacitor + React — companion Android (leitor de dossiê)
+packages/core  Domínio: SQLite (migrations versionadas), render FFmpeg, QC,
+               dossiê (pdfWriter A4 próprio), EPUB 3 (zipWriter próprio),
+               notas (leitor zip/docx/odt/pdf próprio, zero dependências)
+packages/ai    Providers (OpenAI-compat): chat, imagens, vídeo, SSE
+packages/shared Schemas zod — o contrato entre tudo
 ```
 
-**Dependency rule:** `renderer → shared (types) → main handlers → services`.
-`@mirai/core`/`@mirai/ai` never import Electron — OS ports are injected.
+- **Contratos IPC tipados ponta a ponta** (zod): nenhum canal solto
+- **197 testes + 50 passos de smoke E2E** (FFmpeg real, EPUB real, adaptação real de documento com transport scriptado, ABI verificado nos pacotes)
+- **CI em 5 jobs** (ubuntu, windows, macos, android, publish) — cada plataforma construída no SO nativo dela
 
-## Security
+## 🗺️ Roadmap
 
-- `contextIsolation` + `sandbox` + CSP; every IPC request **and** response zod-validated.
-- API keys encrypted via OS keychain (`safeStorage`); renderer only ever sees `configured: true/false`.
-- AI context is **opt-in**: only the toggles you enable (Story Bible / Cast / Scene) leave the
-  machine, with a clear privacy notice in the AI Assist header.
+Feito: 🟢 story+adaptação de documentos · dossiê+advocacia · EPUB · render FFmpeg · temas · multi-plataforma · companion móvel
+Próximo: 🔵 editor de páginas de mangá (painéis/lettering/RTL) · export DOCX/PDF de light novel · grafo de IPs e telas de impacto
 
-## Docs
+## 🌸 Criação
 
-- [Architecture](docs/architecture.md) · [Decisions](docs/decisions.md) · [Packaging](docs/packaging.md) · [Roadmap](docs/roadmap.md)
+Feito com dedicação pela **Yua Devs** — *create worlds, develop stories, produce original IP.*
+
+> A IA é uma ferramenta de produção sob direção humana. O conteúdo adulto é regido por policy adults-only enforce em código: o app é um estúdio de histórias, não um gerador de conteúdo adulto.

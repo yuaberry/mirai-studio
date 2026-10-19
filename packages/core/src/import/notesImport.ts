@@ -11,6 +11,7 @@
 import { readFileSync } from 'node:fs'
 import { extname } from 'node:path'
 import { inflateRawSync, inflateSync } from 'node:zlib'
+import { readZipEntries } from './zip'
 import { MiraiError, type ImportedNoteFile, type NoteFormat } from '@mirai/shared'
 
 /** Per-file raw cap (bytes) — keeps a 5 MB scan of a broken archive harmless. */
@@ -19,14 +20,8 @@ const MAX_FILE_BYTES = 2_000_000
 const MAX_TOTAL_CHARS = 400_000
 /** Archive guards: depth + entry count. */
 const MAX_ZIP_DEPTH = 3
-const MAX_ZIP_ENTRIES = 200
 
 const PLAIN: NoteFormat[] = ['txt', 'md', 'markdown', 'csv', 'json']
-
-interface ZipEntry {
-  name: string
-  data: Buffer
-}
 
 function extOf(name: string): string {
   return extname(name).replace('.', '').toLowerCase()
@@ -40,51 +35,6 @@ function toNoteFormat(name: string): NoteFormat | null {
 }
 
 // ------------------------------------------------------------------ zip reader
-
-/** Minimal ZIP reader: End of Central Directory → entries → inflateRaw. */
-function readZip(buffer: Buffer): ZipEntry[] {
-  // EOCD signature scan (from the tail — comment size is variable).
-  let eocd = -1
-  for (let i = buffer.length - 22; i >= Math.max(0, buffer.length - 66_000); i--) {
-    if (buffer.readUInt32LE(i) === 0x06054b50) {
-      eocd = i
-      break
-    }
-  }
-  if (eocd < 0) throw new MiraiError('VALIDATION_ERROR', 'Not a valid .zip archive (no end-of-directory record).')
-  const entryCount = buffer.readUInt16LE(eocd + 10)
-  const cdOffset = buffer.readUInt32LE(eocd + 16)
-  const entries: ZipEntry[] = []
-  let pos = cdOffset
-  for (let n = 0; n < entryCount; n++) {
-    if (pos + 46 > buffer.length || buffer.readUInt32LE(pos) !== 0x02014b50) break
-    const method = buffer.readUInt16LE(pos + 10)
-    const compressedSize = buffer.readUInt32LE(pos + 20)
-    const nameLen = buffer.readUInt16LE(pos + 28)
-    const extraLen = buffer.readUInt16LE(pos + 30)
-    const commentLen = buffer.readUInt16LE(pos + 32)
-    const localOffset = buffer.readUInt32LE(pos + 42)
-    const name = buffer.subarray(pos + 46, pos + 46 + nameLen).toString('utf8')
-    pos += 46 + nameLen + extraLen + commentLen
-    if (name.endsWith('/')) continue // directory record
-    // Local header → data offset.
-    if (localOffset + 30 > buffer.length || buffer.readUInt32LE(localOffset) !== 0x04034b50) continue
-    const lNameLen = buffer.readUInt16LE(localOffset + 26)
-    const lExtraLen = buffer.readUInt16LE(localOffset + 28)
-    const dataStart = localOffset + 30 + lNameLen + lExtraLen
-    const raw = buffer.subarray(dataStart, dataStart + compressedSize)
-    try {
-      entries.push({ name, data: method === 0 ? Buffer.from(raw) : inflateRawSync(raw) })
-    } catch {
-      // A single corrupt entry never kills the import.
-    }
-    if (entries.length >= MAX_ZIP_ENTRIES) break
-  }
-  if (entries.length === 0) {
-    throw new MiraiError('VALIDATION_ERROR', 'The .zip archive has no readable entries.')
-  }
-  return entries
-}
 
 // ------------------------------------------------------------------ extractors
 
@@ -112,14 +62,14 @@ function xmlToText(xml: string): string {
 }
 
 function extractDocx(buffer: Buffer): string {
-  const entries = readZip(buffer)
+  const entries = readZipEntries(buffer)
   const doc = entries.find((e) => e.name === 'word/document.xml')
   if (!doc) throw new MiraiError('VALIDATION_ERROR', 'This .docx has no word/document.xml (corrupt or unusual export).')
   return xmlToText(doc.data.toString('utf8'))
 }
 
 function extractOdt(buffer: Buffer): string {
-  const entries = readZip(buffer)
+  const entries = readZipEntries(buffer)
   const doc = entries.find((e) => e.name === 'content.xml')
   if (!doc) throw new MiraiError('VALIDATION_ERROR', 'This .odt has no content.xml (corrupt or unusual export).')
   return xmlToText(doc.data.toString('utf8'))
@@ -199,7 +149,7 @@ export class NotesImportService {
           skipped.push({ name, reason: 'Nested .zip too deep (max 3 levels).' })
           return
         }
-        for (const entry of readZip(data)) {
+        for (const entry of readZipEntries(data)) {
           this.readOne(entry.name, entry.data, depth + 1, collected, skipped)
         }
         return

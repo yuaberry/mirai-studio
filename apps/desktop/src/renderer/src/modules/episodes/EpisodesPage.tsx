@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronUp, ListVideo, Plus, Trash2, X } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronUp, ListVideo, Plus, Trash2, X } from 'lucide-react'
 import {
   MiraiError,
   TASK_STATUSES,
@@ -32,6 +32,7 @@ import {
   useLocations,
   useMediaLibrary,
   useMediaMutations,
+  useExportEpub,
 } from '../../lib/queries'
 import { invoke } from '../../lib/ipc'
 import { toast } from '../../store/appStore'
@@ -46,6 +47,7 @@ const TIME_LABEL: Record<TimeOfDay, string> = {
 }
 
 export function EpisodesPage() {
+  const exportEpub = useExportEpub()
   const { data: episodes, isLoading, isError, error, refetch } = useEpisodes()
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null)
   const [newEpisodeOpen, setNewEpisodeOpen] = useState(false)
@@ -66,9 +68,26 @@ export function EpisodesPage() {
       <div className="flex w-64 shrink-0 flex-col border-r border-mirai-border px-4 py-6">
         <div className="mb-3 flex items-center justify-between">
           <h1 className="font-display text-sm font-bold text-mirai-text"><T k="Episodes" /></h1>
-          <Button size="sm" variant="primary" onClick={() => setNewEpisodeOpen(true)}>
-            <Plus className="h-3.5 w-3.5" /> New
-          </Button>
+          <div className="flex gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              loading={exportEpub.isPending}
+              title="Light Novel: episodes -> chapters as a real EPUB 3 book"
+              onClick={() =>
+                exportEpub.mutate(undefined, {
+                  onSuccess: (r) =>
+                    toast({ kind: 'success', title: 'EPUB exported', description: `${r.chapters} chapters — ${r.epubPath}` }),
+                  onError: (err) => toast({ kind: 'error', title: 'EPUB export failed', description: err.message }),
+                })
+              }
+            >
+              <BookOpen className="h-3.5 w-3.5" /> EPUB
+            </Button>
+            <Button size="sm" variant="primary" onClick={() => setNewEpisodeOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> New
+            </Button>
+          </div>
         </div>
         <div className="-mx-1 min-h-0 flex-1 overflow-y-auto">
           {isLoading ? (

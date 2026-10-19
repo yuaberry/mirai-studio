@@ -29,6 +29,7 @@ import {
   PluginRegistry,
   RenderService,
   SettingsService,
+  EpubService,
   NotesImportService,
   DossierService,
   assertExplicitCastAllowed,
@@ -1614,6 +1615,27 @@ async function main(): Promise<void> {
     } finally {
       globalThis.fetch = realFetch
     }
+  })
+
+  await step('EPUB: episodes export as a real EPUB 3 book', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    const chapters = ctx.creative.listEpisodes().map((ep) => {
+      const scenes = ctx.creative.listScenes(ep.id)
+      const body = scenes
+        .map((sc) => (sc.screenplay ?? sc.synopsis ?? '').trim())
+        .filter((b) => b.length > 0)
+        .join('\n\n')
+      return { title: `Capítulo ${ep.number}: ${ep.title}`, body: ep.synopsis ? `${ep.synopsis}\n\n${body}` : body }
+    })
+    const svc = new EpubService(ctx.summary.path, systemClock)
+    const result = svc.export({ title: 'Sakura Chronicles', author: 'Smoke Author', language: 'ja', chapters })
+    if (result.chapters < 1) throw new Error('no chapters exported')
+    const raw = readFileSync(result.path)
+    // mimetype MUST be the first, stored entry
+    const head = raw.subarray(0, 80).toString('latin1')
+    if (!head.includes('mimetype') || !head.includes('application/epub+zip')) throw new Error('mimetype not first/stored')
+    if (raw.subarray(0, 2).toString('latin1') !== 'PK') throw new Error('not a zip')
+    await projects.close()
   })
 
   await step('SETTINGS persist across restart', () => {

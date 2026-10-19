@@ -1299,6 +1299,12 @@ export function useAdaptNotes() {
   })
 }
 
+export function useExportEpub() {
+  return useMutation({
+    mutationFn: () => invoke('epub:export'),
+  })
+}
+
 export function useBriefStatus() {
   return useQuery({
     queryKey: ['brief', 'status'],

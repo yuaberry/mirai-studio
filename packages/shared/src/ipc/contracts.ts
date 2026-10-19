@@ -864,6 +864,12 @@ export const ipcContracts = {
     request: emptyRequest,
     response: z.object({ jobId: zEntityId }),
   },
+  /** Exports the project's episodes as a REAL EPUB 3 book (Light Novel Pro). */
+  'epub:export': {
+    request: emptyRequest,
+    response: z.object({ epubPath: z.string(), chapters: z.number().int().min(1), bytes: z.number().int().min(0) }),
+  },
+
   /** Whether the open project carries an imported brief and if it was adapted. */
   'brief:status': {
     request: emptyRequest,
