@@ -103,8 +103,14 @@ export {
   CharacterRecord,
   LocationRecord,
   SceneRecord,
+  RELATIONSHIP_KINDS,
+  zRelationshipKind,
+  CharacterRelationship,
+  RelationshipInput,
+  CharacterCostume,
+  CostumeInput,
 } from './entities/creative'
-export type { CharacterRole, TimeOfDay } from './entities/creative'
+export type { CharacterRole, TimeOfDay, RelationshipKind } from './entities/creative'
 
 export {
   PROMPT_CATEGORIES,

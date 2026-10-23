@@ -58,6 +58,8 @@ export const AppSettings = z.object({
       streaming: z.boolean().default(true),
       requestTimeoutMs: z.number().int().min(1_000).max(600_000).default(120_000),
       maxRetries: z.number().int().min(0).max(10).default(2),
+      /** v0.21: fallback model — chat tries it when the primary fails twice. */
+      fallbackModel: z.string().max(160).optional(),
     })
     .default({}),
   appearance: z

@@ -30,6 +30,7 @@ import {
   RenderService,
   SettingsService,
   EpubService,
+  AiUsageService,
   NotesImportService,
   DossierService,
   assertExplicitCastAllowed,
@@ -1635,6 +1636,46 @@ async function main(): Promise<void> {
     const head = raw.subarray(0, 80).toString('latin1')
     if (!head.includes('mimetype') || !head.includes('application/epub+zip')) throw new Error('mimetype not first/stored')
     if (raw.subarray(0, 2).toString('latin1') !== 'PK') throw new Error('not a zip')
+    await projects.close()
+  })
+
+  await step('V21 CORE: relationships, costumes, FTS memory, AI usage', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+
+    // relationships + costumes through the REAL service
+    const relA = ctx.creative.createCharacter({ name: 'Rel Ayaka', role: 'PROTAGONIST' })
+    const relB = ctx.creative.createCharacter({ name: 'Rel Rin', role: 'SUPPORTING' })
+    const rel = ctx.creative.createRelationship({ fromCharacterId: relA.id, toCharacterId: relB.id, kind: 'ROMANTIC', notes: 'letters' })
+    if (ctx.creative.listRelationships(relA.id).length !== 1) throw new Error('relationship not listed')
+    ctx.creative.createCostume({ characterId: relA.id, name: 'Uniforme de combate' })
+    if (ctx.creative.listCostumes(relA.id).length !== 1) throw new Error('costume not listed')
+    ctx.creative.deleteRelationship(rel.id)
+
+    // FTS: create a scene with distinctive text and search it
+    const ftScene = ctx.creative.createScene(ctx.creative.listEpisodes()[0]!.id, {
+      title: 'Cena do testemunho',
+      synopsis: 'O xilofone mágico da chama vermelha atravessa a sala.',
+    })
+    ctx.creative.updateScene(ftScene.id, {
+      title: ftScene.title,
+      timeOfDay: ftScene.timeOfDay,
+      characterIds: ftScene.characterIds,
+      locationId: ftScene.locationId ?? undefined,
+      synopsis: ftScene.synopsis,
+      screenplay: 'AYAKA\n' + '"O xilofone responde só à lua cheia."',
+    })
+    const hits = ctx.creative.searchProjectMemory('xilofone')
+    if (!hits.some((h) => h.entityId === ftScene.id)) throw new Error('FTS did not index the scene')
+
+    // AI usage persistence (app DB): record + summary round-trip
+    const usage = new AiUsageService(appDb)
+    usage.record({ kind: 'chat', provider: 'nvidia', model: 'glm-5.3', promptTokens: 100, completionTokens: 20, durationMs: 300 }, systemClock.isoNow())
+    usage.record({ kind: 'chat', model: 'glm-5.3', promptTokens: 50, completionTokens: 10, durationMs: 100, status: 'ERROR', error: 'boom' }, systemClock.isoNow())
+    const usageSummary = usage.summary()
+    if (usageSummary.totalCalls < 2) throw new Error('usage not recorded')
+    if (usageSummary.totalErrors < 1) throw new Error('usage error not recorded')
+    if (usageSummary.totalPromptTokens < 150) throw new Error('usage tokens wrong')
+
     await projects.close()
   })
 

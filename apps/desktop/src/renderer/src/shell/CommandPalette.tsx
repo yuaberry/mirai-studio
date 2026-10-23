@@ -4,6 +4,7 @@
  * a project is open — no dead entries, ever.
  */
 import { Command } from 'cmdk'
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   FolderOpen,
@@ -24,12 +25,16 @@ import {
   X,
 } from 'lucide-react'
 import { invoke } from '../lib/ipc'
+import { useMemorySearch } from '../lib/queries'
 import { queryKeys, useCurrentProject, useJobActions, usePluginMutations, usePlugins, useProjectAction } from '../lib/queries'
 import { useAppStore, toast } from '../store/appStore'
 import { ItemStyles } from './paletteStyles'
 
 export function CommandPalette() {
   const open = useAppStore((s) => s.paletteOpen)
+  const [memQuery, setMemQuery] = useState('')
+  const { data: memoryResults } = useMemorySearch(memQuery)
+  const projectSearch = (memQuery ?? '').trim().length >= 2
   const setOpen = useAppStore((s) => s.setPaletteOpen)
   const setView = useAppStore((s) => s.setView)
   const setNewProjectOpen = useAppStore((s) => s.setNewProjectOpen)
@@ -63,7 +68,9 @@ export function CommandPalette() {
         <Search className="h-4 w-4 text-mirai-faint" />
         <Command.Input
           autoFocus
-          placeholder="Type a command…"
+          value={memQuery}
+          onValueChange={setMemQuery}
+          placeholder="Type a command — or search the project ('?term' for full-text)…"
           className="h-11 flex-1 bg-transparent text-sm text-mirai-text placeholder:text-mirai-faint focus:outline-none"
         />
         <span className="text-[10px] font-semibold tracking-widest text-mirai-faint uppercase">
@@ -74,6 +81,21 @@ export function CommandPalette() {
         <Command.Empty className="px-3 py-8 text-center text-xs text-mirai-faint">
           No matching command.
         </Command.Empty>
+
+        {projectSearch && current && memoryResults && memoryResults.length > 0 && (
+          <Command.Group heading="Project memory (full-text)" className={ItemStyles.group}>
+            {memoryResults.slice(0, 6).map((m) => (
+              <Command.Item
+                key={m.entityId}
+                className={ItemStyles.item}
+                onSelect={run('Open', () => setView(m.entityType === 'SCENE' ? 'episodes' : 'characters'))}
+              >
+                <Search className="h-4 w-4" /> {m.title}
+                <span className="ml-1 truncate text-[10px] text-mirai-faint">{m.snippet}</span>
+              </Command.Item>
+            ))}
+          </Command.Group>
+        )}
 
         <Command.Group heading="Project" className={ItemStyles.group}>
           <Command.Item className={ItemStyles.item} onSelect={run('New Project', () => setNewProjectOpen(true))}>

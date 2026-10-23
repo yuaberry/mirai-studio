@@ -17,6 +17,7 @@ import { VersionHistoryButton, VersionHistoryModal } from '../production/Version
 import { useCharacters, useCharacterMutations, useApprovalTransition } from '../../lib/queries'
 import { toast } from '../../store/appStore'
 import { T } from '../../system/T'
+import { CharacterRelations } from './CharacterRelations'
 
 const ROLE_LABEL: Record<string, string> = {
   PROTAGONIST: 'Protagonist',
@@ -277,6 +278,8 @@ function CharacterEditor({ character }: { character: CharacterRecord }) {
         <Field label="Biography" hint="Their story so far." value={form.bio} onChange={(v) => set('bio', v)} rows={5} id="ch-bio" />
         <Field label="Notes" hint="Anything else — continuity details, trivia." value={form.notes} onChange={(v) => set('notes', v)} rows={3} id="ch-notes" />
       </div>
+
+      <CharacterRelations character={character} />
 
       <VersionHistoryModal
         open={historyOpen}

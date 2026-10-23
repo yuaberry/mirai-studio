@@ -51,6 +51,26 @@ export const APP_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0003_ai_usage',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE ai_usage (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ts TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          provider TEXT,
+          model TEXT,
+          prompt_tokens INTEGER NOT NULL DEFAULT 0,
+          completion_tokens INTEGER NOT NULL DEFAULT 0,
+          duration_ms INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'OK',
+          error TEXT
+        );
+        CREATE INDEX idx_usage_ts ON ai_usage (ts);
+      `)
+    },
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -395,6 +415,73 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
     up: (db) => {
       db.exec(`
         ALTER TABLE shots ADD COLUMN blend_asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL;
+      `)
+    },
+  },
+  {
+    name: '0012_relationships_costumes',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE character_relationships (
+          id TEXT PRIMARY KEY,
+          from_character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+          to_character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL DEFAULT 'UNKNOWN',
+          notes TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_rel_from ON character_relationships (from_character_id);
+        CREATE INDEX idx_rel_to ON character_relationships (to_character_id);
+
+        CREATE TABLE character_costumes (
+          id TEXT PRIMARY KEY,
+          character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          description TEXT,
+          occasion TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_costume_char ON character_costumes (character_id);
+      `)
+    },
+  },
+  {
+    name: '0013_project_memory_fts',
+    up: (db) => {
+      db.exec(`
+        CREATE VIRTUAL TABLE project_memory USING fts5(
+          entity_type,
+          entity_id,
+          title,
+          body,
+          tokenize = 'unicode61 remove_diacritics 2'
+        );
+        CREATE TRIGGER scenes_ai AFTER INSERT ON scenes BEGIN
+          INSERT INTO project_memory (entity_type, entity_id, title, body)
+          VALUES ('SCENE', new.id, new.title, coalesce(new.synopsis, '') || ' ' || coalesce(new.screenplay, ''));
+        END;
+        CREATE TRIGGER scenes_au AFTER UPDATE OF title, synopsis, screenplay ON scenes BEGIN
+          DELETE FROM project_memory WHERE entity_type = 'SCENE' AND entity_id = new.id;
+          INSERT INTO project_memory (entity_type, entity_id, title, body)
+          VALUES ('SCENE', new.id, new.title, coalesce(new.synopsis, '') || ' ' || coalesce(new.screenplay, ''));
+        END;
+        CREATE TRIGGER scenes_ad AFTER DELETE ON scenes BEGIN
+          DELETE FROM project_memory WHERE entity_type = 'SCENE' AND entity_id = old.id;
+        END;
+        CREATE TRIGGER characters_ai AFTER INSERT ON characters BEGIN
+          INSERT INTO project_memory (entity_type, entity_id, title, body)
+          VALUES ('CHARACTER', new.id, new.name, coalesce(new.appearance, '') || ' ' || coalesce(new.personality, '') || ' ' || coalesce(new.bio, ''));
+        END;
+        CREATE TRIGGER characters_au AFTER UPDATE OF name, appearance, personality, bio ON characters BEGIN
+          DELETE FROM project_memory WHERE entity_type = 'CHARACTER' AND entity_id = new.id;
+          INSERT INTO project_memory (entity_type, entity_id, title, body)
+          VALUES ('CHARACTER', new.id, new.name, coalesce(new.appearance, '') || ' ' || coalesce(new.personality, '') || ' ' || coalesce(new.bio, ''));
+        END;
+        CREATE TRIGGER characters_ad AFTER DELETE ON characters BEGIN
+          DELETE FROM project_memory WHERE entity_type = 'CHARACTER' AND entity_id = old.id;
+        END;
       `)
     },
   },

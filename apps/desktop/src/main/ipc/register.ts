@@ -1183,6 +1183,29 @@ export function registerIpcHandlers(c: Container): void {
     return { jobId: job.id }
   })
 
+  // ---- Relationships + costumes + memory + usage (v0.21) -----------------------
+  handleIpc('relationships:list', () => ({ relationships: requireActive(c).creative.listRelationships() }))
+
+  handleIpc('relationships:create', (req) => ({ relationship: requireActive(c).creative.createRelationship(req) }))
+
+  handleIpc('relationships:delete', (req) => {
+    requireActive(c).creative.deleteRelationship(req.id)
+    return { ok: true }
+  })
+
+  handleIpc('costumes:list', (req) => ({ costumes: requireActive(c).creative.listCostumes(req.characterId) }))
+
+  handleIpc('costumes:create', (req) => ({ costume: requireActive(c).creative.createCostume(req) }))
+
+  handleIpc('costumes:delete', (req) => {
+    requireActive(c).creative.deleteCostume(req.id)
+    return { ok: true }
+  })
+
+  handleIpc('memory:search', (req) => ({ results: requireActive(c).creative.searchProjectMemory(req.query) }))
+
+  handleIpc('ai:usage', () => ({ summary: c.aiUsage.summary() }))
+
   handleIpc('epub:export', () => {
     const ctx = requireActive(c)
     const manifest = ctx.manifest

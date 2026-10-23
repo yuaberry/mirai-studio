@@ -15,6 +15,7 @@ import { JobRecord } from '../entities/job'
 import { LogEntry } from '../entities/log'
 import { NotesImportResult, StoryNotesAnalysis, DossierResult } from '../entities/dossier'
 import { ProjectBriefInput } from '../entities/brief'
+import { RelationshipInput, CostumeInput, CharacterRelationship, CharacterCostume } from '../entities/creative'
 
 import {
   OpenedProject,
@@ -864,6 +865,59 @@ export const ipcContracts = {
     request: emptyRequest,
     response: z.object({ jobId: zEntityId }),
   },
+  // ---- Relationships + costumes + project memory (v0.21) ---------------------
+  'relationships:list': {
+    request: emptyRequest,
+    response: z.object({ relationships: z.array(CharacterRelationship) }),
+  },
+  'relationships:create': {
+    request: RelationshipInput,
+    response: z.object({ relationship: CharacterRelationship }),
+  },
+  'relationships:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'costumes:list': {
+    request: z.object({ characterId: zEntityId }),
+    response: z.object({ costumes: z.array(CharacterCostume) }),
+  },
+  'costumes:create': {
+    request: CostumeInput,
+    response: z.object({ costume: CharacterCostume }),
+  },
+  'costumes:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Full-text search over the project's scenes and characters. */
+  'memory:search': {
+    request: z.object({ query: z.string().min(1).max(200) }),
+    response: z.object({
+      results: z.array(z.object({
+        entityType: z.string(),
+        entityId: z.string(),
+        title: z.string(),
+        snippet: z.string(),
+      })),
+    }),
+  },
+  /** REAL provider usage on this machine (cost dashboard facts). */
+  'ai:usage': {
+    request: emptyRequest,
+    response: z.object({
+      summary: z.object({
+        totalCalls: z.number(),
+        totalErrors: z.number(),
+        totalPromptTokens: z.number(),
+        totalCompletionTokens: z.number(),
+        totalDurationMs: z.number(),
+        byModel: z.array(z.object({ model: z.string(), calls: z.number(), promptTokens: z.number(), completionTokens: z.number() })),
+        recentErrors: z.array(z.object({ ts: z.string(), kind: z.string(), model: z.string().nullable(), error: z.string().nullable() })),
+      }),
+    }),
+  },
+
   /** Exports the project's episodes as a REAL EPUB 3 book (Light Novel Pro). */
   'epub:export': {
     request: emptyRequest,

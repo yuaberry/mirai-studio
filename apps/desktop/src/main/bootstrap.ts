@@ -14,6 +14,7 @@ import {
   type AppDirs,
   type Database,
   type OpenProjectContext,
+  AiUsageService,
 } from '@mirai/core'
 import type { IpcEventChannel, IpcEventPayload, OpenedProject } from '@mirai/shared'
 import { ipcEventPayloads } from '@mirai/shared'
@@ -61,6 +62,7 @@ export interface Container {
   credentials: CredentialStore
   projects: ProjectService
   ai: AiHost
+  aiUsage: AiUsageService
   emitter: MainEmitter
   health: HealthChecker
   /** App-level plugin registry (Phase 9). */
@@ -102,7 +104,8 @@ export function bootstrap(): Container {
     logger,
     onJobUpdated: (job) => emitter.send('jobs:updated', { job }),
   })
-  const ai = new AiHost({ credentials, settings, projects, logger, emitter })
+  const aiUsage = new AiUsageService(appDb)
+  const ai = new AiHost({ credentials, settings, projects, logger, emitter, aiUsage })
 
   // Log batches → renderer (Diagnostics live tail).
   logger.subscribe((entries) => emitter.send('logs:appended', { entries }))
@@ -119,6 +122,7 @@ export function bootstrap(): Container {
     credentials,
     projects,
     ai,
+    aiUsage,
     emitter,
     health,
     plugins,

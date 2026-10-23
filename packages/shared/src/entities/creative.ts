@@ -140,3 +140,60 @@ export const SceneRecord = Scene.extend({
   updatedAt: zIsoDate,
 })
 export type SceneRecord = z.infer<typeof SceneRecord>
+
+// ------------------------------------------------- relationships + costumes (v0.21)
+
+export const RELATIONSHIP_KINDS = [
+  'ALLY',
+  'RIVAL',
+  'FAMILY',
+  'ROMANTIC',
+  'MENTOR',
+  'STUDENT',
+  'ENEMY',
+  'UNKNOWN',
+] as const
+export type RelationshipKind = (typeof RELATIONSHIP_KINDS)[number]
+export const zRelationshipKind = z.enum(RELATIONSHIP_KINDS)
+
+export const CharacterRelationship = z.object({
+  id: zEntityId,
+  fromCharacterId: zEntityId,
+  toCharacterId: zEntityId,
+  kind: zRelationshipKind,
+  notes: z.string().max(1_000).nullable(),
+  createdAt: zIsoDate,
+  updatedAt: zIsoDate,
+})
+export type CharacterRelationship = z.infer<typeof CharacterRelationship>
+
+export const RelationshipInput = z
+  .object({
+    fromCharacterId: zEntityId,
+    toCharacterId: zEntityId,
+    kind: zRelationshipKind,
+    notes: z.string().max(1_000).optional(),
+  })
+  .refine((r) => r.fromCharacterId !== r.toCharacterId, {
+    message: 'A character cannot relate to themselves.',
+  })
+export type RelationshipInput = z.input<typeof RelationshipInput>
+
+export const CharacterCostume = z.object({
+  id: zEntityId,
+  characterId: zEntityId,
+  name: z.string().min(1).max(120),
+  description: z.string().max(2_000).nullable(),
+  occasion: z.string().max(120).nullable(),
+  createdAt: zIsoDate,
+  updatedAt: zIsoDate,
+})
+export type CharacterCostume = z.infer<typeof CharacterCostume>
+
+export const CostumeInput = z.object({
+  characterId: zEntityId,
+  name: z.string().min(1).max(120),
+  description: z.string().max(2_000).optional(),
+  occasion: z.string().max(120).optional(),
+})
+export type CostumeInput = z.input<typeof CostumeInput>

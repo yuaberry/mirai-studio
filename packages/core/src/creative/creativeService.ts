@@ -10,6 +10,10 @@ import {
   MiraiError,
   CharacterInput,
   CharacterRecord,
+  CharacterRelationship,
+  RelationshipInput,
+  CharacterCostume,
+  CostumeInput,
   EpisodeInput,
   EpisodeRecord,
   EpisodeWithStats,
@@ -539,6 +543,91 @@ export class CreativeService {
       if (!wanted.has(existingId)) remove.run(sceneId, existingId)
     }
   }
+
+
+
+  // ------------------------------------------- relationships + costumes (v0.21)
+
+  listRelationships(characterId?: EntityId): CharacterRelationship[] {
+    const rows = characterId
+      ? (this.db.prepare('SELECT * FROM character_relationships WHERE from_character_id = ? OR to_character_id = ? ORDER BY created_at ASC').all(characterId, characterId) as RelationshipRow[])
+      : (this.db.prepare('SELECT * FROM character_relationships ORDER BY created_at ASC').all() as RelationshipRow[])
+    return rows.map(rowToRelationship)
+  }
+
+  createRelationship(input: z.input<typeof RelationshipInput>): CharacterRelationship {
+    const parsed = parseOrThrowShared(RelationshipInput, input, 'Invalid relationship.')
+    for (const id of [parsed.fromCharacterId, parsed.toCharacterId]) {
+      if (!this.getCharacter(id)) throw new MiraiError('NOT_FOUND', `Character ${id} not found.`)
+    }
+    const id = newEntityId()
+    const now = this.clock.isoNow()
+    this.db
+      .prepare(
+        'INSERT INTO character_relationships (id, from_character_id, to_character_id, kind, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(id, parsed.fromCharacterId, parsed.toCharacterId, parsed.kind, parsed.notes ?? null, now, now)
+    return this.getRelationship(id)
+  }
+
+  getRelationship(id: EntityId): CharacterRelationship {
+    const row = this.db.prepare('SELECT * FROM character_relationships WHERE id = ?').get(id) as RelationshipRow | undefined
+    if (!row) throw new MiraiError('NOT_FOUND', `Relationship ${id} not found.`)
+    return rowToRelationship(row)
+  }
+
+  deleteRelationship(id: EntityId): void {
+    const res = this.db.prepare('DELETE FROM character_relationships WHERE id = ?').run(id)
+    if (res.changes === 0) throw new MiraiError('NOT_FOUND', `Relationship ${id} not found.`)
+  }
+
+  listCostumes(characterId: EntityId): CharacterCostume[] {
+    const rows = this.db
+      .prepare('SELECT * FROM character_costumes WHERE character_id = ? ORDER BY created_at ASC')
+      .all(characterId) as CostumeRow[]
+    return rows.map(rowToCostume)
+  }
+
+  createCostume(input: z.input<typeof CostumeInput>): CharacterCostume {
+    const parsed = parseOrThrowShared(CostumeInput, input, 'Invalid costume.')
+    if (!this.getCharacter(parsed.characterId)) {
+      throw new MiraiError('NOT_FOUND', `Character ${parsed.characterId} not found.`)
+    }
+    const id = newEntityId()
+    const now = this.clock.isoNow()
+    this.db
+      .prepare(
+        'INSERT INTO character_costumes (id, character_id, name, description, occasion, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(id, parsed.characterId, parsed.name, parsed.description ?? null, parsed.occasion ?? null, now, now)
+    return this.getCostume(id)
+  }
+
+  deleteCostume(id: EntityId): void {
+    const res = this.db.prepare('DELETE FROM character_costumes WHERE id = ?').run(id)
+    if (res.changes === 0) throw new MiraiError('NOT_FOUND', `Costume ${id} not found.`)
+  }
+
+  getCostume(id: EntityId): CharacterCostume {
+    const row = this.db.prepare('SELECT * FROM character_costumes WHERE id = ?').get(id) as CostumeRow | undefined
+    if (!row) throw new MiraiError('NOT_FOUND', `Costume ${id} not found.`)
+    return rowToCostume(row)
+  }
+
+  // ------------------------------------------- project memory (FTS5, v0.21)
+
+  /** Full-text search over scenes and characters (unicode61, diacritic-insensitive). */
+  searchProjectMemory(query: string, limit = 12): Array<{ entityType: string; entityId: string; title: string; snippet: string }> {
+    const trimmed = query.trim()
+    if (trimmed.length < 2) return []
+    const rows = this.db
+      .prepare(
+        `SELECT entity_type, entity_id, title, snippet(project_memory, 0, '', '', '…', 12) AS snip
+         FROM project_memory WHERE project_memory MATCH ? ORDER BY rank LIMIT ?`,
+      )
+      .all(trimmed.replace(/["]/g, '""'), limit) as Array<{ entity_type: string; entity_id: string; title: string; snip: string }>
+    return rows.map((r) => ({ entityType: r.entity_type, entityId: r.entity_id, title: r.title, snippet: r.snip }))
+  }
 }
 
 // ---------------------------------------------------------------------- mappers
@@ -607,6 +696,7 @@ function rowToEpisode(row: EpisodeRow): EpisodeRecord {
   return parsed.data
 }
 
+
 function rowToScene(row: SceneRow, characterIds: EntityId[]): SceneRecord {
   const parsed = SceneRecord.safeParse({
     id: row.id,
@@ -627,5 +717,54 @@ function rowToScene(row: SceneRow, characterIds: EntityId[]): SceneRecord {
       details: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
     })
   }
+  return parsed.data
+}
+interface RelationshipRow {
+  id: string
+  from_character_id: string
+  to_character_id: string
+  kind: string
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface CostumeRow {
+  id: string
+  character_id: string
+  name: string
+  description: string | null
+  occasion: string | null
+  created_at: string
+  updated_at: string
+}
+
+function rowToRelationship(row: RelationshipRow): CharacterRelationship {
+  return {
+    id: row.id,
+    fromCharacterId: row.from_character_id,
+    toCharacterId: row.to_character_id,
+    kind: row.kind as CharacterRelationship['kind'],
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function rowToCostume(row: CostumeRow): CharacterCostume {
+  return {
+    id: row.id,
+    characterId: row.character_id,
+    name: row.name,
+    description: row.description,
+    occasion: row.occasion,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function parseOrThrowShared<T extends z.ZodTypeAny>(schema: T, value: unknown, message: string): z.infer<T> {
+  const parsed = schema.safeParse(value)
+  if (!parsed.success) throw new MiraiError('VALIDATION_ERROR', message)
   return parsed.data
 }

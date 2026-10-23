@@ -28,6 +28,7 @@ import {
   useClearCredential,
   useAiModels,
   useAiStatus,
+  useAiUsage,
 } from '../../lib/queries'
 import { toast } from '../../store/appStore'
 
@@ -289,6 +290,9 @@ function ProvidersCard() {
       },
     )
   }
+
+  const { data: usage } = useAiUsage()
+  const [fallbackModel, setFallbackModel] = useState(settings?.ai.fallbackModel ?? '')
 
   const saveProviderPrefs = (patch: Record<string, unknown>) => {
     if (!settings) return
@@ -586,6 +590,57 @@ function ProvidersCard() {
           <p className="mt-1.5 text-[10px] text-mirai-faint">
             All three fields (key, URL, model) enable the “Generate (AI)” button on storyboard shots.
           </p>
+        </div>
+      </div>
+      <div className="mt-4 rounded-lg border border-mirai-border bg-mirai-panel p-3">
+        <p className="text-[10px] font-bold tracking-wider text-mirai-faint uppercase">AI usage on this machine</p>
+        {usage ? (
+          <>
+            <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-mirai-dim">
+              <span><span className="font-bold text-mirai-text">{usage.totalCalls.toLocaleString()}</span> calls</span>
+              <span><span className="font-bold text-mirai-text">{usage.totalErrors.toLocaleString()}</span> errors</span>
+              <span><span className="font-bold text-mirai-text">{usage.totalPromptTokens.toLocaleString()}</span> prompt tokens</span>
+              <span><span className="font-bold text-mirai-text">{usage.totalCompletionTokens.toLocaleString()}</span> completion tokens</span>
+              <span><span className="font-bold text-mirai-text">{(usage.totalDurationMs / 1000).toFixed(0)}s</span> de tempo de IA</span>
+            </div>
+            {usage.byModel.length > 0 && (
+              <ul className="mt-2 space-y-0.5">
+                {usage.byModel.map((m: (typeof usage.byModel)[number]) => (
+                  <li key={m.model} className="flex items-center justify-between text-[10px] text-mirai-faint">
+                    <span className="truncate">{m.model}</span>
+                    <span>{m.calls} calls · {(m.promptTokens + m.completionTokens).toLocaleString()} tokens</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {usage.recentErrors.length > 0 && (
+              <p className="mt-2 text-[10px] text-amber-400/80">últimos erros: {usage.recentErrors.length} (ver Diagnostics)</p>
+            )}
+          </>
+        ) : (
+          <p className="mt-1 text-[11px] text-mirai-faint">—</p>
+        )}
+        <div className="mt-3 flex items-end gap-2">
+          <div className="flex-1">
+            <Label className="text-[10px]">Modelo de fallback (opcional)</Label>
+            <Input
+              value={fallbackModel}
+              onChange={(e) => setFallbackModel(e.target.value)}
+              placeholder="ex.: openrouter/anthropic/claude-sonnet"
+              className="h-8 font-mono text-xs"
+            />
+            <p className="mt-1 text-[10px] text-mirai-faint">
+              Quando o modelo principal falhar 2×, a IA tenta este antes de desistir.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            loading={updateSettings.isPending}
+            onClick={() => saveProviderPrefs({ fallbackModel: fallbackModel.trim() || undefined })}
+          >
+            Save
+          </Button>
         </div>
       </div>
     </Card>

@@ -1352,3 +1352,61 @@ export function useAutoproduce() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.jobs }),
   })
 }
+
+// ------------------------------------- relationships + costumes + memory + usage (v0.21)
+
+export function useRelationships() {
+  return useQuery({
+    queryKey: ['relationships'],
+    queryFn: () => invoke('relationships:list').then((r) => r.relationships),
+  })
+}
+
+export function useRelationshipMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['relationships'] })
+  return {
+    create: useMutation({ mutationFn: (input: import('@mirai/shared').RelationshipInput) => invoke('relationships:create', input as never).then((r) => r.relationship), onSuccess: invalidate }),
+    remove: useMutation({ mutationFn: (id: string) => invoke('relationships:delete', { id }).then(() => true), onSuccess: invalidate }),
+  }
+}
+
+export function useCostumes(characterId: string | undefined) {
+  return useQuery({
+    queryKey: ['costumes', characterId],
+    queryFn: () => invoke('costumes:list', { characterId: characterId! }).then((r) => r.costumes),
+    enabled: characterId !== undefined,
+  })
+}
+
+export function useCostumeMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['costumes'] })
+  }
+  return {
+    create: useMutation({
+      mutationFn: (input: { characterId: string; name: string; description?: string; occasion?: string }) => invoke('costumes:create', input).then((r) => r.costume),
+      onSuccess: () => invalidate(),
+    }),
+    remove: useMutation({
+      mutationFn: (input: { id: string; characterId: string }) => invoke('costumes:delete', { id: input.id }).then(() => true),
+      onSuccess: () => invalidate(),
+    }),
+  }
+}
+
+export function useMemorySearch(query: string) {
+  return useQuery({
+    queryKey: ['memory', 'search', query],
+    queryFn: () => invoke('memory:search', { query }).then((r) => r.results),
+    enabled: query.trim().length >= 2,
+  })
+}
+
+export function useAiUsage() {
+  return useQuery({
+    queryKey: ['ai', 'usage'],
+    queryFn: () => invoke('ai:usage').then((r) => r.summary),
+  })
+}

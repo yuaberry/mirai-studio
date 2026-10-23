@@ -63,6 +63,9 @@ export class AiHost {
       projects: ProjectService
       logger: LoggerService
       emitter: MainEmitter
+      /** v0.21: real usage persistence (cost dashboard). Optional so
+       * tests/smoke can construct without it. */
+      aiUsage?: { record(e: import('@mirai/core').AiUsageEntry): void }
     },
   ) {
     this.registry = new ModelRegistry({
@@ -500,9 +503,11 @@ export class AiHost {
     schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false; error: { issues: Array<{ message: string; path: (string | number)[] }> } } },
     temperature: number,
     maxTokensFloor: number,
+    modelOverride?: string,
   ): Promise<T> {
     const providerConfig = this.resolveChatProvider()
     const settings = this.deps.settings.get()
+    const model = modelOverride ?? providerConfig.model
     const provider = new OpenRouterProvider({
       apiKey: providerConfig.apiKey,
       baseUrl: providerConfig.baseUrl,
@@ -511,19 +516,44 @@ export class AiHost {
       appUrl: 'https://mirai-studio.app',
       timeoutMs: settings.ai.requestTimeoutMs,
     })
-    const result = await provider.chat({
-      model: providerConfig.model,
-      temperature,
-      maxTokens: Math.max(settings.ai.maxTokens, maxTokensFloor),
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are a professional anime production analysis engine. Respond ONLY with a single valid JSON object matching the requested shape — no markdown fences, no commentary. Keep the JSON COMPLETE: never sacrifice closing brackets to finish a thought.',
-        },
-        { role: 'user', content: instruction },
-      ],
-    })
+    const startedAt = Date.now()
+    const kind = 'chat'
+    const usageDeps = this.deps.aiUsage
+    let result: Awaited<ReturnType<typeof provider.chat>>
+    try {
+      result = await provider.chat({
+        model,
+        temperature,
+        maxTokens: Math.max(settings.ai.maxTokens, maxTokensFloor),
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a professional anime production analysis engine. Respond ONLY with a single valid JSON object matching the requested shape — no markdown fences, no commentary. Keep the JSON COMPLETE: never sacrifice closing brackets to finish a thought.',
+          },
+          { role: 'user', content: instruction },
+        ],
+      })
+      usageDeps?.record({
+        kind,
+        provider: providerConfig.id,
+        model,
+        promptTokens: result.usage?.promptTokens ?? 0,
+        completionTokens: result.usage?.completionTokens ?? 0,
+        durationMs: Date.now() - startedAt,
+        status: 'OK',
+      })
+    } catch (err) {
+      usageDeps?.record({
+        kind,
+        provider: providerConfig.id,
+        model,
+        durationMs: Date.now() - startedAt,
+        status: 'ERROR',
+        error: (err as Error).message,
+      })
+      throw err
+    }
     const raw = result.content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
     let parsed: unknown
     try {
@@ -570,7 +600,18 @@ export class AiHost {
       if (err instanceof MiraiError && err.retryable) {
         this.deps.logger.warn('AI', `Provider error (will retry once): ${err.message}`)
         await new Promise((r) => setTimeout(r, 1_500))
-        return this.chatJsonAttempt(instruction, schema, temperature, maxTokensFloor)
+        try {
+          return await this.chatJsonAttempt(instruction, schema, temperature, maxTokensFloor)
+        } catch (retryErr) {
+          // FALLBACK CHAIN (v0.21, Phase 2): when a fallback model is
+          // configured, one last attempt rides it before giving up.
+          const fallback = this.deps.settings.get().ai.fallbackModel?.trim()
+          if (fallback && fallback.length > 0) {
+            this.deps.logger.warn('AI', `Primary model failed twice — falling back to ${fallback}`)
+            return this.chatJsonAttempt(instruction, schema, temperature, maxTokensFloor, fallback)
+          }
+          throw retryErr
+        }
       }
       throw err
     }
