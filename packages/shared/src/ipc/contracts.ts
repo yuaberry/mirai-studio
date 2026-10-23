@@ -983,6 +983,21 @@ export const ipcContracts = {
     request: emptyRequest,
     response: z.object({ epubPath: z.string(), chapters: z.number().int().min(1), bytes: z.number().int().min(0) }),
   },
+  /** v0.23: Light Novel DOCX export (Office Open XML, Word-compatible). */
+  'ln:exportDocx': {
+    request: emptyRequest,
+    response: z.object({
+      docxPath: z.string(),
+      chapters: z.number().int().min(1),
+      scenes: z.number().int().min(0),
+      bytes: z.number().int().min(0),
+    }),
+  },
+  /** Reveals an exported DOCX in the file manager (exports/ only). */
+  'ln:revealDocx': {
+    request: z.object({ path: z.string() }),
+    response: z.object({ ok: z.boolean() }),
+  },
 
   /** Whether the open project carries an imported brief and if it was adapted. */
   'brief:status': {

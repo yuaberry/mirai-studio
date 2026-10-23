@@ -1305,6 +1305,18 @@ export function useExportEpub() {
   })
 }
 
+export function useExportDocx() {
+  return useMutation({
+    mutationFn: () => invoke('ln:exportDocx'),
+  })
+}
+
+export function useRevealDocx() {
+  return useMutation({
+    mutationFn: (path: string) => invoke('ln:revealDocx', { path }),
+  })
+}
+
 export function useBriefStatus() {
   return useQuery({
     queryKey: ['brief', 'status'],

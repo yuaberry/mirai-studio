@@ -6,10 +6,10 @@ import { clipboard, dialog, shell } from 'electron'
 import { MiraiError, type ProjectConfig } from '@mirai/shared'
 import { handleIpc } from './router'
 import { toOpenedProject, type Container } from '../bootstrap'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { newEntityId, LicenseService } from '@mirai/core'
-import { RenderService, NotesImportService, DossierService, EpubService, type DossierData } from '@mirai/core'
+import { RenderService, NotesImportService, DossierService, EpubService, DocxService, type DossierData } from '@mirai/core'
 import { MEDIUM_LABEL, StoredBrief, type DossierResult } from '@mirai/shared'
 
 export function registerIpcHandlers(c: Container): void {
@@ -1282,6 +1282,40 @@ export function registerIpcHandlers(c: Container): void {
     })
     c.logger.info('SYSTEM', `EPUB exported: ${result.chapters} chapters -> ${result.path}`)
     return { epubPath: result.path, chapters: result.chapters, bytes: result.bytes }
+  })
+
+  handleIpc('ln:exportDocx', () => {
+    const ctx = requireActive(c)
+    const manifest = ctx.manifest
+    const chapters = ctx.creative.listEpisodes().map((ep) => {
+      const scenes = ctx.creative
+        .listScenes(ep.id)
+        .map((sc) => ({
+          title: sc.title,
+          body: `${sc.screenplay ? sc.screenplay.trim() : (sc.synopsis ?? '').trim()}`.trim(),
+        }))
+        .filter((sc) => sc.body.length > 0 || sc.title.length > 0)
+      return { title: `Capítulo ${ep.number}: ${ep.title}`, scenes }
+    })
+    const svc = new DocxService(ctx.summary.path, { now: () => new Date(), isoNow: () => new Date().toISOString() })
+    const result = svc.export({
+      title: manifest.config.title,
+      author: 'Mirai Studio Author',
+      language: manifest.config.language,
+      chapters,
+    })
+    c.logger.info('SYSTEM', `DOCX exported: ${result.chapters} chapters, ${result.scenes} scenes -> ${result.path}`)
+    return { docxPath: result.path, chapters: result.chapters, scenes: result.scenes, bytes: result.bytes }
+  })
+  handleIpc('ln:revealDocx', (req) => {
+    const ctx = requireActive(c)
+    // Path-escape guard: only paths inside this project's exports/ are revealable.
+    const exportsRoot = join(ctx.summary.path, 'exports') + sep
+    if (!req.path.startsWith(exportsRoot) || !req.path.endsWith('.docx')) {
+      throw new MiraiError('VALIDATION_ERROR', 'Only exported .docx files inside exports/ can be revealed.')
+    }
+    shell.showItemInFolder(req.path)
+    return { ok: true }
   })
 
   handleIpc('brief:status', () => {

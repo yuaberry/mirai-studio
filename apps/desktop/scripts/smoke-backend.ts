@@ -30,7 +30,9 @@ import {
   RenderService,
   SettingsService,
   EpubService,
+  DocxService,
   AiUsageService,
+  readZipEntries,
   NotesImportService,
   DossierService,
   assertExplicitCastAllowed,
@@ -1710,6 +1712,31 @@ async function main(): Promise<void> {
     ctx.manga.deletePanel(panel.id)
     ctx.manga.deletePage(page.id)
     ctx.creative.deleteCharacter(moka.id)
+
+    await projects.close()
+  })
+
+  await step('V23 DOCX: light novel exports as a real Word document', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    const chapters = ctx.creative.listEpisodes().map((ep) => {
+      const scenes = ctx.creative
+        .listScenes(ep.id)
+        .map((sc) => ({ title: sc.title, body: (sc.screenplay ?? sc.synopsis ?? '').trim() }))
+        .filter((sc) => sc.body.length > 0 || sc.title.length > 0)
+      return { title: `Capítulo ${ep.number}: ${ep.title}`, scenes }
+    })
+    const svc = new DocxService(ctx.summary.path, systemClock)
+    const result = svc.export({ title: 'Sakura Chronicles', author: 'Smoke Author', language: 'ja', chapters })
+    if (result.chapters < 1) throw new Error('no chapters exported')
+    if (result.scenes < 1) throw new Error('no scenes exported')
+    // unzip the written file and prove the OOXML parts Word requires are intact
+    const byName = new Map(readZipEntries(readFileSync(result.path)).map((e) => [e.name, e.data.toString('utf8')]))
+    const types = byName.get('[Content_Types].xml')
+    if (!types || !types.includes('PartName="/word/document.xml"')) throw new Error('content types missing document part')
+    if (!types.includes('wordprocessingml.document.main+xml')) throw new Error('wrong document content type')
+    if (!byName.get('_rels/.rels')?.includes('Target="word/document.xml"')) throw new Error('package rels missing')
+    const doc = byName.get('word/document.xml')
+    if (!doc || !doc.includes('Capítulo 1:')) throw new Error('document.xml missing chapter heading')
 
     await projects.close()
   })

@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, ChevronDown, ChevronUp, ListVideo, Plus, Trash2, X } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronUp, FileText, ListVideo, Plus, Trash2, X } from 'lucide-react'
 import {
   MiraiError,
   TASK_STATUSES,
@@ -33,6 +33,7 @@ import {
   useMediaLibrary,
   useMediaMutations,
   useExportEpub,
+  useExportDocx,
 } from '../../lib/queries'
 import { invoke } from '../../lib/ipc'
 import { toast } from '../../store/appStore'
@@ -48,6 +49,7 @@ const TIME_LABEL: Record<TimeOfDay, string> = {
 
 export function EpisodesPage() {
   const exportEpub = useExportEpub()
+  const exportDocx = useExportDocx()
   const { data: episodes, isLoading, isError, error, refetch } = useEpisodes()
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null)
   const [newEpisodeOpen, setNewEpisodeOpen] = useState(false)
@@ -83,6 +85,21 @@ export function EpisodesPage() {
               }
             >
               <BookOpen className="h-3.5 w-3.5" /> EPUB
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              loading={exportDocx.isPending}
+              title="Light novel: the season as a real Word .docx (chapters, scene headings, prose)"
+              onClick={() =>
+                exportDocx.mutate(undefined, {
+                  onSuccess: (r) =>
+                    toast({ kind: 'success', title: 'DOCX exported', description: `${r.chapters} chapters, ${r.scenes} scenes — ${r.docxPath}` }),
+                  onError: (err) => toast({ kind: 'error', title: 'DOCX export failed', description: err.message }),
+                })
+              }
+            >
+              <FileText className="h-3.5 w-3.5" /> DOCX
             </Button>
             <Button size="sm" variant="primary" onClick={() => setNewEpisodeOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> New
