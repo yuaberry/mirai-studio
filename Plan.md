@@ -117,7 +117,7 @@ mirai-studio/
 
 ---
 
-## 4. DATABASE SCHEMA (per-project SQLite, migrations 0001-0006)
+## 4. DATABASE SCHEMA (per-project SQLite migrations 0001-0013 + App DB 0001-0003 — full inventory in section 12)
 
 **App DB** (`appData/app.sqlite`): `project_registry`, `settings` (kv), `credentials` (encrypted blobs)
 
@@ -146,7 +146,7 @@ mirai-studio/
 
 ---
 
-## 5. IPC CONTRACTS (153 channels)
+## 5. IPC CONTRACTS (~180 channels — zod contracts in packages/shared/src/ipc/contracts.ts)
 
 All in `packages/shared/src/ipc/contracts.ts` — zod schemas validate requests AND responses.
 
@@ -537,23 +537,46 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 
 ---
 
-## 12. CURRENT STATE (as of this file's creation)
+## 12. CURRENT STATE (v0.21.0 — authoritative)
 
-- **Repo**: https://github.com/yuaberry/mirai-studio (public, main branch)
-- **Website**: https://yuaberry.github.io/mirai-studio (v0.4.0)
-- **Latest release**: v0.4.0 (GitHub Releases: .deb + AppImage)
-- **All tests**: 166 passing (15 shared + 27 AI + 124 core — incl. 10 license/policy/blender tests)
-- **Smoke**: 45/45 steps passing (incl. Producer Agent end-to-end)
-- **Lint**: 0 errors, 0 warnings
-- **Typecheck**: 0 errors (4 workspaces)
-- **IPC channels**: 152 contracts, 153 handlers
-- **Migrations**: Project 0001-0010 + App 0001-0002
-- **Latest release**: v0.10.1 (.deb + AppImage, boot-tested)
-- **Website**: https://yuaberry.github.io/mirai-studio (v0.10.1 — professional redesign: app mockup, producer terminal, full studio grid, pipeline, Pro section, changelog)
-- **License private key**: `mirai-license-private.pem` (kept OUTSIDE the repo, on the dev machine) — mint keys with `scripts/licensegen.mjs`
-- **Backup**: `/home/llinux/mirai-studio-backup-v0.10.0.tar.gz`
+### Machine & access
+- **Repo**: https://github.com/yuaberry/mirai-studio (public, main; tags = releases)
+- **Website**: https://yuaberry.github.io/mirai-studio (v0.21.0)
+- **Dev machine IS the user's machine** (Linux Mint): their real profile at `~/.config/@mirai/desktop/` — logs at `logs/mirai-*.log` (READ THE LOGS when the user reports a bug — lesson 63)
+- **License private key**: `/home/llinux/mirai-license-private.pem` (OUTSIDE the repo); receipt `/home/llinux/MIRAI-STUDIO-PRO-KEY.txt` (rotated 2026-10 — the original leaked in git history v0.13.0-v0.14.0 and was purged via filter-branch)
+- **Backup**: `/home/llinux/mirai-studio-backup-v0.21.0.tar.gz`
 
----
+### Release & quality gates
+- **Latest release**: v0.21.0 — CI 5/5 green (linux/windows/macos/android/publish), all SIX artifacts published (.exe NSIS, arm64 .dmg, .deb, .AppImage, .rpm, companion .apk)
+- **Releases are CI-built**: `git tag vX.Y.Z` → `gh workflow run release.yml --ref <tag>` (first tag after creating the workflow needs manual dispatch; create the GitHub release BEFORE the publish job runs — it attaches via `gh release upload --clobber`)
+- **ABI acceptance test**: `dpkg-deb -x` + `ELECTRON_RUN_AS_NODE <binary> -e require('.../better_sqlite3.node')` → must print ABI_OK (CI runs `bun run rebuild:native` in all 3 desktop jobs — NEVER remove it; lesson 61)
+- **Verify gate**: `bun run verify` = typecheck(4) + tests + build + smoke. Currently **202 tests** (shared 20, ai 28, core 154) + **51/51 smoke** + lint 0/0
+- **Test env**: `ELECTRON_RUN_AS_NODE=1 apps/desktop/node_modules/.bin/electron ../../node_modules/vitest/vitest.mjs run <file>` from packages/core
+- **Boot test**: `timeout 20 ./apps/desktop/release/linux-unpacked/mirai-studio --no-sandbox | grep -E "Uncaught|Cannot"` → 0 matches
+- **gh-pages**: orphan flow `git checkout --orphan gh-pages-new && cp website/* . && git add index.html style.css app.js favicon.svg && commit && push --force origin gh-pages-new:gh-pages && checkout main && branch -D` — NEVER `git checkout main -- .` on gh-pages
+
+### Current architecture facts
+- **Migrations**: Project DB 0001-0013 (0011 due dates, 0012 relationships+costumes, 0013 FTS5 project_memory with triggers); App DB 0001-0003 (0003 ai_usage)
+- **IPC**: ~180 channels (153 + mature/license + notes/analyze + adapt/dossier/epub + relationships/costumes/memory/usage)
+- **Settings**: renderer may ONLY `settings:update` with AppSettingsPatch (section-level; `content` — license/mature — NOT in the patch schema; SettingsService.patch merges). theme ∈ dark/black/light/sakura/custom (+customAccent hex); session.lastViewByProject/lastProjectPath (auto-reopen + view restore)
+- **Themes**: tokens.css `[data-theme]` var swaps; AppShell applies theme + accent overrides (accent-2/3 via color-mix)
+- **AI**: chatJson → chatJsonCore (budgets: analysis 6144, adapt 4096-6144, dossier 3072; ONE auto-retry 1.5s for retryable; FALLBACK chain via settings.ai.fallbackModel after 2 primary failures). AiUsageService records REAL provider facts per call → ai:usage → Settings card. Providers: NVIDIA NIM (user's: glm-5.3) + OpenRouter, OpenAI-compat via baseUrl
+- **Story adaptation**: <project>/brief/ (brief.json + source-notes.txt) from New Project import; `ai:adaptNotes` job → AiHost.adaptFromDocument (document IS canon; season 1 lands while seeding the seasonCount arc; medium-aware: anime TV beats / manga-webtoon chapter cliffhangers / LN prose)
+- **New Project form**: identity, medium (ANIME/MANGA/LIGHT_NOVEL/NOVEL/WEBTOON/OTHER), author brief (ALL optional, collapsible): targetAudience, inspirations, setting, endingVision, episodeLengthMinutes, pagesPerChapter, seasonCount, demographic
+- **Dossier**: Overview → Generate → exports/dossier/*.txt + 30-45+ page A4 .pdf (ficha técnica incl. seasons/demographic/audience/inspirations/ending, bibles, page-per-character cast, per-episode beats+checklist, production status, commercial strategy, BR advocacy CF/LDA/LGPD/8.685/14.216/SeAC, originality declaration, glossary); aiEnriched best-effort
+- **EPUB 3**: Episodes → EPUB → exports/epub/*.epub (mimetype stored-first, container, OPF, nav, ncx, XHTML chapters) — core zip writer at packages/core/src/import/zip.ts
+- **FTS memory**: command palette live search (scenes+characters, unicode61 diacritic-insensitive, snippet() results)
+- **Mobile companion**: apps/mobile (Capacitor+Vite+React, id com.miraistudio.companion) — dossier reader, debug-signed APK from CI
+- **Packaging**: fetch-ffmpeg.mjs per-platform (linux tar.xz, win gyan zip, darwin DIRECT binaries eugeneware/ffmpeg-static b6.1.1 + joshwnj/ffprobe-static, chmod +x); ffmpegBin resolves .exe on win32; deb postinst runs gtk-update-icon-cache (Mint fix); rpm needs artifactName+packageName+compression bzip2 (never xz/gz)
+- **Icons**: build/icon.svg (sakura mark v2) → `bun run icons` (sharp)
+
+### Feature inventory (everything REAL)
+Project hub/session persistence · typed IPC (zod contracts end-to-end) · Story/Style bibles · characters (relationships graph, costumes, versioning, approvals) · locations · episodes/scenes with screenplay · Producer Agent (idea→episode) · document adaptation (fidelity-first) · notes analysis · AI Director/Continuity/Screenplay analysis · node builder workflows · prompts library (293 genres, 41 mature Pro-gated) · storyboard (10 framings, lenses, 10 movements, reorder, approval) · frame image-gen (OpenAI-compat) + video-gen (image-to-video) · Blender bridge · media library · timeline (keyframes, mixer) · subtitles (SRT/VTT/ASS + burn-in) · render (FFmpeg bundled, PREVIEW/MASTER/CINEMA, 14 presets) · EPUB 3 export · dossier (.txt+.pdf) · production (tasks+due dates+calendar, approvals+audit, versions, QC 12 checks, analytics) · jobs (queue, cancel, retry, recovery) · licensing (Ed25519 offline, Pro/mature) · plugins (permissions enforced) · themes×5 + pt-BR i18n · AI usage dashboard + fallback
+
+### Next priorities (roadmap §7b, in order)
+1. **Manga Pro slice**: page/panel data model + editor + lettering (text-as-data) + RTL reading — unlocks mangá end-to-end
+2. **Light Novel Pro slice II**: volume structure + DOCX/PDF export (DOCX = OOXML zip, pattern exists: epub writer)
+3. **IP Graph**: derived works + impact screen ("affects 12 scenes…") on top of versioning/QC
 
 ## 13. IS MIRAI STUDIO "FINISHED"? — STATUS ANSWER (v0.12.0)
 
