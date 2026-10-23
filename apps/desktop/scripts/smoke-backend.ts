@@ -1741,6 +1741,58 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V24 IP: impact counts + derived work with canon inheritance', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+
+    // ---- impact: real dependents counted from the live project
+    const ipAyaka = ctx.creative.createCharacter({ name: 'IP Ayaka', role: 'PROTAGONIST' })
+    const ipScene = ctx.creative.createScene(ctx.creative.listEpisodes()[0]!.id, {
+      title: 'Cena do impacto',
+      characterIds: [ipAyaka.id],
+    })
+    ctx.storyboard.createShot(ipScene.id, { title: 'Impacto wide', durationSeconds: 2 })
+    const impact = ctx.ip.impact('CHARACTER', ipAyaka.id)
+    const impactScenes = impact.impacts.find((e) => e.key === 'scenes')
+    const impactShots = impact.impacts.find((e) => e.key === 'shots')
+    if (!impactScenes || impactScenes.count !== 1) throw new Error('impact: scenes not counted')
+    if (!impactShots || impactShots.count !== 1) throw new Error('impact: indirect shots not counted')
+    let impactThrew = false
+    try { ctx.ip.impact('CHARACTER', '01DOESNOTEXIST00000000000X') } catch { impactThrew = true }
+    if (!impactThrew) throw new Error('impact: unknown id must throw')
+    ctx.creative.deleteCharacter(ipAyaka.id)
+
+    // ---- derived work: canon really travels
+    const derived = projects.createDerivedWork({
+      parentId: summary.id,
+      name: 'Smoke Derivado',
+      kind: 'SPIN_OFF',
+      inherit: { storyBible: true, styleBible: false, characters: true, locations: true },
+    })
+    const childDb = openDatabase(join(derived.summary.path, 'database', 'project.sqlite'))
+    const charCount = (childDb.prepare('SELECT COUNT(*) AS n FROM characters').get() as { n: number }).n
+    const sceneCount = (childDb.prepare('SELECT COUNT(*) AS n FROM scenes').get() as { n: number }).n
+    childDb.close()
+    if (charCount < 1) throw new Error('derived work did not inherit characters')
+    if (sceneCount !== 0) throw new Error('derived work must not inherit scenes')
+    const fromParent = projects.listDerivedWorks(summary.id)
+    if (fromParent.length !== 1 || fromParent[0]!.direction !== 'child') throw new Error('derived link missing from parent')
+    let duplicateThrew = false
+    try {
+      projects.createDerivedWork({
+        parentId: summary.id,
+        name: 'Smoke Derivado',
+        kind: 'SPIN_OFF',
+        inherit: { storyBible: false, styleBible: false, characters: false, locations: false },
+      })
+    } catch { duplicateThrew = true }
+    if (!duplicateThrew) throw new Error('duplicate derived work must throw')
+    projects.removeDerivedWork(fromParent[0]!.id)
+    if (projects.listDerivedWorks(summary.id).length !== 0) throw new Error('derived link not removed')
+    if (!existsSync(derived.summary.path)) throw new Error('removing the link must NOT delete the project')
+
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

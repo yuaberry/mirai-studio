@@ -1495,6 +1495,42 @@ export function useMangaRevealScript() {
   })
 }
 
+export function useEntityImpact(kind: import('@mirai/shared').ImpactKind, id: string | undefined) {
+  return useQuery({
+    queryKey: ['ip', 'impact', kind, id],
+    queryFn: () => invoke('ip:impact', { kind, id: id! }).then((r) => r.impact),
+    enabled: id !== undefined,
+  })
+}
+
+export function useDerivedWorks(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ['ip', 'derived', projectId],
+    queryFn: () => invoke('ip:derived:list', { projectId: projectId! }).then((r) => r.works),
+    enabled: projectId !== undefined,
+  })
+}
+
+export function useDerivedWorkMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['ip', 'derived'] })
+    void queryClient.invalidateQueries({ queryKey: ['projects'] })
+  }
+  return {
+    create: useMutation({
+      mutationFn: (input: import('@mirai/shared').CreateDerivedWorkInput) =>
+        invoke('ip:derived:create', { input }).then((r) => r.summary),
+      onSuccess: () => invalidate(),
+    }),
+    remove: useMutation({
+      mutationFn: (vars: { id: string; projectId: string }) =>
+        invoke('ip:derived:remove', { id: vars.id }).then(() => true),
+      onSuccess: () => invalidate(),
+    }),
+  }
+}
+
 export function useMemorySearch(query: string) {
   return useQuery({
     queryKey: ['memory', 'search', query],

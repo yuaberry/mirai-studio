@@ -18,6 +18,7 @@ import { useCharacters, useCharacterMutations, useApprovalTransition } from '../
 import { toast } from '../../store/appStore'
 import { T } from '../../system/T'
 import { CharacterRelations } from './CharacterRelations'
+import { CharacterImpact } from './CharacterImpact'
 
 const ROLE_LABEL: Record<string, string> = {
   PROTAGONIST: 'Protagonist',
@@ -280,6 +281,8 @@ function CharacterEditor({ character }: { character: CharacterRecord }) {
       </div>
 
       <CharacterRelations character={character} />
+
+      <CharacterImpact character={character} />
 
       <VersionHistoryModal
         open={historyOpen}

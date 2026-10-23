@@ -34,6 +34,7 @@ import {
   useAdaptNotes,
   useBriefStatus,
 } from '../../lib/queries'
+import { DerivedWorksCard } from './DerivedWorksCard'
 import { toast } from '../../store/appStore'
 import { FileText } from 'lucide-react'
 import { useT } from '../../lib/i18n'
@@ -223,6 +224,8 @@ export function OverviewPage() {
           </Card>
         </div>
       </div>
+
+      <DerivedWorksCard project={project} />
 
       <ConfigEditModal open={configOpen} onClose={() => setConfigOpen(false)} />
     </div>

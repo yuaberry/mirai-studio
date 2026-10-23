@@ -71,6 +71,24 @@ export const APP_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0004_derived_works',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE derived_works (
+          id TEXT PRIMARY KEY,
+          parent_project_id TEXT NOT NULL,
+          child_project_id TEXT NOT NULL,
+          kind TEXT NOT NULL DEFAULT 'ADAPTATION',
+          notes TEXT,
+          created_at TEXT NOT NULL,
+          UNIQUE (parent_project_id, child_project_id)
+        );
+        CREATE INDEX idx_dw_parent ON derived_works (parent_project_id);
+        CREATE INDEX idx_dw_child ON derived_works (child_project_id);
+      `)
+    },
+  },
 ]
 
 // ---------------------------------------------------------------------------

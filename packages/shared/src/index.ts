@@ -123,6 +123,17 @@ export {
   MangaPanelRecord,
   zReadingDirection,
 } from './entities/manga'
+export {
+  DERIVED_WORK_KINDS,
+  InheritFlags,
+  CreateDerivedWorkInput,
+  DerivedWorkRecord,
+  DerivedWorkView,
+  IMPACT_KINDS,
+  ImpactEntry,
+  ImpactResult,
+} from './entities/ip'
+export type { DerivedWorkKind, ImpactKind, ImpactEntry as ImpactEntryType } from './entities/ip'
 export type { ReadingDirection, BubbleKind, BubbleTail } from './entities/manga'
 
 export {

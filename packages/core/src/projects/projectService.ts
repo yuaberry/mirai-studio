@@ -40,6 +40,8 @@ import { CreativeService } from '../creative/creativeService'
 import { PromptService } from '../prompts/promptService'
 import { StoryboardService } from '../storyboard/storyboardService'
 import { MangaService } from '../creative/mangaService'
+import { ImpactService } from '../production/impactService'
+import type { DerivedWorkKind, DerivedWorkView, InheritFlags } from '@mirai/shared'
 import { MediaService } from '../media/mediaService'
 import { RenderService } from '../render/renderService'
 import { TimelineService } from '../timeline/timelineService'
@@ -77,6 +79,8 @@ export interface OpenProjectContext {
   storyboard: StoryboardService
   /** Manga Pro (§8): pages, panels, lettering, script export. */
   manga: MangaService
+  /** IP impact screen (§4): real dependents of an entity. */
+  ip: ImpactService
   /** Media library (music/SFX/ambience) for this project. */
   media: MediaService
   /** Render engine (FFmpeg) for this project. */
@@ -109,6 +113,174 @@ export class ProjectService {
   private active: OpenProjectContext | null = null
 
   constructor(private readonly opts: ProjectServiceOptions) {}
+
+  // ------------------------------------------------------------- derived works (§4)
+
+  /**
+   * Create a derived work of a parent project — a REAL new project whose
+   * canon (bible / style bible / characters / locations) is inherited
+   * from the parent. The link lives in the App DB (derived_works).
+   */
+  createDerivedWork(input: {
+    parentId: string
+    name: string
+    description?: string
+    kind: DerivedWorkKind
+    notes?: string
+    inherit: InheritFlags
+    dir?: string
+  }): { summary: ProjectSummary; workId: string } {
+    const parent = this.summaryById(input.parentId)
+    if (!existsSync(parent.path)) {
+      throw new MiraiError('PROJECT_INVALID', `Parent project folder is missing: ${parent.path}`)
+    }
+    if (parent.id === input.name) {
+      // no-op guard — names are ids-free, nothing to check beyond existence
+    }
+
+    // Product rule: one derived work per (parent, name) — a duplicate
+    // name would silently create "Name 2" via uniquePath; refuse instead.
+    const existingChildIds = (this.opts.appDb
+      .prepare('SELECT child_project_id AS id FROM derived_works WHERE parent_project_id = ?')
+      .all(input.parentId) as Array<{ id: string }>).map((r) => r.id)
+    if (existingChildIds.length > 0) {
+      const clash = this.opts.appDb
+        .prepare(
+          `SELECT name FROM project_registry WHERE id IN (${existingChildIds.map(() => '?').join(',')}) AND name = ?`,
+        )
+        .get(...existingChildIds, input.name) as { name: string } | undefined
+      if (clash) {
+        throw new MiraiError(
+          'ALREADY_EXISTS',
+          `A derived work named "${input.name}" already exists for this project.`,
+        )
+      }
+    }
+
+    const parentManifest = readManifest(parent.path)
+    const child = this.create({
+      name: input.name,
+      description: input.description,
+      dir: input.dir ?? join(parent.path, '..'),
+      config: parentManifest.config,
+    })
+
+    this.inheritCanon(parent.path, child.path, input.inherit)
+
+    const workId = newEntityId()
+    this.opts.appDb
+      .prepare(
+        `INSERT INTO derived_works (id, parent_project_id, child_project_id, kind, notes, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(workId, input.parentId, child.id, input.kind, input.notes ?? null, this.opts.clock.isoNow())
+    this.opts.logger.info('PROJECT', `Derived work created: "${child.name}" from "${parent.name}"`, {
+      kind: input.kind,
+      inherit: input.inherit,
+    })
+    return { summary: child, workId }
+  }
+
+  /** Copy the requested canon from the parent DB into the child DB. */
+  private inheritCanon(parentPath: string, childPath: string, flags: InheritFlags): void {
+    const parentDb = openDatabase(join(parentPath, PROJECT_DB_FILE))
+    const childDb = openDatabase(join(childPath, PROJECT_DB_FILE))
+    try {
+      const copyKv = (key: string): void => {
+        const row = parentDb.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as
+          | { value: string }
+          | undefined
+        if (!row) return
+        childDb
+          .prepare('INSERT OR REPLACE INTO kv_store (key, value, updated_at) VALUES (?, ?, ?)')
+          .run(key, row.value, this.opts.clock.isoNow())
+      }
+      if (flags.storyBible) copyKv('story-bible')
+      if (flags.styleBible) copyKv('style-bible')
+
+      const copyTable = (table: string): number => {
+        const rows = parentDb.prepare(`SELECT * FROM ${table}`).all() as Array<Record<string, unknown>>
+        if (rows.length === 0) return 0
+        const cols = Object.keys(rows[0]!)
+        const insert = childDb.prepare(
+          `INSERT OR REPLACE INTO ${table} (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+        )
+        const tx = childDb.transaction(() => {
+          for (const row of rows) insert.run(...cols.map((c) => row[c] as unknown))
+        })
+        tx()
+        return rows.length
+      }
+
+      let copied = 0
+      if (flags.characters) {
+        copied += copyTable('characters')
+        copied += copyTable('character_relationships')
+        copied += copyTable('character_costumes')
+        // scene cast links reference scenes that do not exist in the child — skip.
+      }
+      if (flags.locations) copied += copyTable('locations')
+      if (copied > 0) {
+        this.opts.logger.info('PROJECT', `Canon inherited: ${copied} rows`)
+      }
+    } finally {
+      parentDb.close()
+      childDb.close()
+    }
+  }
+
+  /** Both directions of the derived-works graph around one project. */
+  listDerivedWorks(projectId: string): DerivedWorkView[] {
+    const rows = this.opts.appDb
+      .prepare(
+        `SELECT * FROM derived_works WHERE parent_project_id = ? OR child_project_id = ?
+         ORDER BY created_at DESC`,
+      )
+      .all(projectId, projectId) as Array<{
+      id: string
+      parent_project_id: string
+      child_project_id: string
+      kind: string
+      notes: string | null
+      created_at: string
+    }>
+    return rows.map((row) => {
+      const direction = row.parent_project_id === projectId ? 'child' : 'parent'
+      const otherId = direction === 'child' ? row.child_project_id : row.parent_project_id
+      const reg = this.opts.appDb
+        .prepare('SELECT * FROM project_registry WHERE id = ?')
+        .get(otherId) as RegistryRow | undefined
+      const other = reg
+        ? ({
+            id: reg.id,
+            name: reg.name,
+            description: reg.description,
+            path: reg.path,
+            status: reg.status,
+            createdAt: reg.created_at,
+            updatedAt: reg.updated_at,
+            lastOpenedAt: reg.last_opened_at,
+            appVersion: reg.app_version,
+          } as DerivedWorkView['other'])
+        : null
+      return {
+        id: row.id,
+        parentId: row.parent_project_id,
+        childId: row.child_project_id,
+        kind: row.kind as DerivedWorkKind,
+        notes: row.notes,
+        createdAt: row.created_at,
+        direction,
+        other,
+      }
+    })
+  }
+
+  /** Remove a derived-work LINK (never the projects themselves). */
+  removeDerivedWork(id: string): void {
+    const info = this.opts.appDb.prepare('DELETE FROM derived_works WHERE id = ?').run(id)
+    if (info.changes === 0) throw new MiraiError('NOT_FOUND', `Derived work ${id} not found.`)
+  }
 
   // ------------------------------------------------------------------ listing
 
@@ -580,6 +752,7 @@ export class ProjectService {
     const prompts = new PromptService(db, this.opts.clock)
     const storyboard = new StoryboardService(db, this.opts.clock, path)
     const manga = new MangaService(db, this.opts.clock, path)
+    const ip = new ImpactService(db)
     const media = new MediaService(db, this.opts.clock, path)
     const timeline = new TimelineService(db, this.opts.clock)
     const production = new ProductionService(db, this.opts.clock, path, creative, storyboard, timeline, media)
@@ -591,7 +764,7 @@ export class ProjectService {
     this.upsertRegistry(manifest, path, now)
 
     const summary = this.summaryById(manifest.id)
-    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, manga, media, render, timeline, production, subtitles, blender, recoveredCount }
+    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, manga, ip, media, render, timeline, production, subtitles, blender, recoveredCount }
     this.opts.logger.info('PROJECT', `Project opened: "${manifest.name}"`, {
       id: manifest.id,
       recoveredJobs: recoveredCount,

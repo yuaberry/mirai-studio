@@ -22,6 +22,12 @@ import {
   MangaPanelInput,
   MangaPanelRecord,
 } from '../entities/manga'
+import {
+  CreateDerivedWorkInput,
+  DerivedWorkView,
+  IMPACT_KINDS,
+  ImpactResult,
+} from '../entities/ip'
 
 import {
   OpenedProject,
@@ -330,6 +336,27 @@ export const ipcContracts = {
   },
   'manga:revealScript': {
     request: z.object({ episodeId: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+
+  // ---------------------------------------------------------------- IP graph (§4)
+  'ip:impact': {
+    request: z.object({ kind: z.enum(IMPACT_KINDS), id: zEntityId }),
+    response: z.object({ impact: ImpactResult }),
+  },
+  'ip:derived:list': {
+    request: z.object({ projectId: zEntityId }),
+    response: z.object({ works: z.array(DerivedWorkView) }),
+  },
+  'ip:derived:create': {
+    request: z.object({ input: CreateDerivedWorkInput }),
+    response: z.object({
+      summary: ProjectSummary,
+      workId: z.string(),
+    }),
+  },
+  'ip:derived:remove': {
+    request: z.object({ id: zEntityId }),
     response: z.object({ ok: z.boolean() }),
   },
 

@@ -322,6 +322,34 @@ export function registerIpcHandlers(c: Container): void {
     return { ok: true }
   })
 
+  // ------------------------------------------------------------------ IP graph (§4)
+  handleIpc('ip:impact', (req) => ({ impact: requireActive(c).ip.impact(req.kind, req.id) }))
+  handleIpc('ip:derived:list', (req) => ({ works: c.projects.listDerivedWorks(req.projectId) }))
+  handleIpc('ip:derived:create', async (req) => {
+    const dir = await dialog.showOpenDialog(c.emitter.window!, {
+      title: 'Choose where the derived work will live',
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    if (dir.canceled || dir.filePaths.length === 0) {
+      throw new MiraiError('CANCELLED', 'Derived work creation cancelled.')
+    }
+    const result = c.projects.createDerivedWork({
+      parentId: req.input.parentId,
+      name: req.input.name,
+      description: req.input.description,
+      kind: req.input.kind,
+      notes: req.input.notes,
+      inherit: req.input.inherit,
+      dir: dir.filePaths[0]!,
+    })
+    c.logger.info('SYSTEM', `Derived work created: ${result.summary.name}`, { workId: result.workId })
+    return { summary: result.summary, workId: result.workId }
+  })
+  handleIpc('ip:derived:remove', (req) => {
+    c.projects.removeDerivedWork(req.id)
+    return { ok: true }
+  })
+
   // ---- Style Bible (Module 23)
   handleIpc('style-bible:get', () => ({ style: requireActive(c).storyboard.getStyleBible() }))
 
