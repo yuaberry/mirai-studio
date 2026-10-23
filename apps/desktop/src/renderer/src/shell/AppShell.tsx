@@ -20,6 +20,7 @@ import {
   Home,
   LayoutGrid,
   ListVideo,
+  PanelTop,
   Palette,
   Play,
   Puzzle,
@@ -40,6 +41,7 @@ import { StoryBiblePage } from '../modules/bible/StoryBiblePage'
 import { CharactersPage } from '../modules/characters/CharactersPage'
 import { LocationsPage } from '../modules/locations/LocationsPage'
 import { EpisodesPage } from '../modules/episodes/EpisodesPage'
+import { MangaStudioPage } from '../modules/manga/MangaStudioPage'
 import { PromptLibraryPage } from '../modules/prompts/PromptLibraryPage'
 import { StoryboardPage } from '../modules/storyboard/StoryboardPage'
 import { StyleBiblePage } from '../modules/style/StyleBiblePage'
@@ -77,6 +79,7 @@ const PROJECT_NAV: ReadonlyArray<{ view: MainView; label: string; icon: LucideIc
   { view: 'characters', label: 'Characters', icon: Users },
   { view: 'locations', label: 'Locations', icon: Building2 },
   { view: 'episodes', label: 'Episodes & Scenes', icon: ListVideo },
+  { view: 'manga', label: 'Manga Studio', icon: PanelTop },
   { view: 'storyboard', label: 'Storyboard', icon: LayoutGrid },
   { view: 'timeline', label: 'Timeline', icon: AudioWaveform },
   { view: 'render', label: 'Render & Export', icon: FileVideo },
@@ -298,7 +301,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                v0.21.0
+                v0.22.0
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio"
@@ -320,6 +323,7 @@ export function AppShell() {
           {view === 'characters' && <CharactersPage />}
           {view === 'locations' && <LocationsPage />}
           {view === 'episodes' && <EpisodesPage />}
+          {view === 'manga' && <MangaStudioPage />}
           {view === 'storyboard' && <StoryboardPage />}
           {view === 'timeline' && <TimelinePage />}
           {view === 'render' && <RenderPage />}

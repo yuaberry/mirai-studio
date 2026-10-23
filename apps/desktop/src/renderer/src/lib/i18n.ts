@@ -188,6 +188,17 @@ const PT_BR: Record<string, string> = {
   'Archive': 'Arquivar',
   'Restore from Archive': 'Restaurar do Arquivo',
   'Remove from List…': 'Remover da Lista…',
+  // ------------------------------------------------------- manga studio (v0.22)
+  'Manga Studio': 'Estúdio de Mangá',
+  'Pages': 'Páginas',
+  'Page': 'Página',
+  'New page': 'Nova página',
+  'Add panel': 'Adicionar quadrinho',
+  'Add bubble': 'Adicionar balão',
+  'Save panel': 'Salvar quadrinho',
+  'Panel art': 'Arte do quadrinho',
+  'Script': 'Roteiro',
+  'Save': 'Salvar',
 }
 /** Translate: pt-BR when translated, English source otherwise. */
 export function t(locale: Locale, key: string): string {

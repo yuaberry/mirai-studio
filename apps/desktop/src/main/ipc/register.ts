@@ -268,6 +268,60 @@ export function registerIpcHandlers(c: Container): void {
     return { ok: true }
   })
 
+  // ------------------------------------------------------------------- manga (§8)
+  handleIpc('manga:pages:list', (req) => ({ pages: requireActive(c).manga.listPages(req.episodeId) }))
+  handleIpc('manga:pages:create', (req) => ({ page: requireActive(c).manga.createPage(req.episodeId, req.input) }))
+  handleIpc('manga:pages:update', (req) => ({ page: requireActive(c).manga.updatePage(req.id, req.input) }))
+  handleIpc('manga:pages:delete', (req) => {
+    requireActive(c).manga.deletePage(req.id)
+    return { ok: true }
+  })
+  handleIpc('manga:pages:move', (req) => {
+    requireActive(c).manga.movePage(req.id, req.direction)
+    return { ok: true }
+  })
+  handleIpc('manga:panels:list', (req) => ({ panels: requireActive(c).manga.listPanels(req.pageId) }))
+  handleIpc('manga:panels:create', (req) => ({ panel: requireActive(c).manga.createPanel(req.pageId, req.input) }))
+  handleIpc('manga:panels:update', (req) => ({ panel: requireActive(c).manga.updatePanel(req.id, req.input) }))
+  handleIpc('manga:panels:delete', (req) => {
+    requireActive(c).manga.deletePanel(req.id)
+    return { ok: true }
+  })
+  handleIpc('manga:panels:move', (req) => {
+    requireActive(c).manga.movePanel(req.id, req.direction)
+    return { ok: true }
+  })
+  handleIpc('manga:panels:attachImage', async (req) => {
+    const ctx = requireActive(c)
+    const win = c.emitter.window
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Import panel art',
+      properties: ['openFile'],
+      filters: [
+        {
+          name: 'Images',
+          extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
+        },
+      ],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      throw new MiraiError('CANCELLED', 'Panel art import cancelled.')
+    }
+    const panel = ctx.manga.attachPanelImage(req.id, result.filePaths[0]!)
+    c.logger.info('MEDIA', `Panel art imported for panel ${req.id}`, { assetId: panel.imageAssetId })
+    return { panel }
+  })
+  handleIpc('manga:exportScript', (req) => {
+    const result = requireActive(c).manga.exportLetteringScript(req.episodeId)
+    c.logger.info('RENDER', `Lettering script exported: ${result.path}`, { pages: result.pages, bubbles: result.bubbles })
+    return result
+  })
+  handleIpc('manga:revealScript', (req) => {
+    const ctx = requireActive(c)
+    shell.showItemInFolder(ctx.manga.letteringScriptPath(req.episodeId))
+    return { ok: true }
+  })
+
   // ---- Style Bible (Module 23)
   handleIpc('style-bible:get', () => ({ style: requireActive(c).storyboard.getStyleBible() }))
 

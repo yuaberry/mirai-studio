@@ -1396,6 +1396,93 @@ export function useCostumeMutations() {
   }
 }
 
+export function useMangaPages(episodeId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['manga', 'pages', episodeId],
+    queryFn: () => invoke('manga:pages:list', { episodeId: episodeId! }).then((r) => r.pages),
+    enabled: episodeId !== undefined,
+  })
+}
+
+export function useMangaPageMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = (episodeId: string) => {
+    void queryClient.invalidateQueries({ queryKey: ['manga', 'pages', episodeId] })
+  }
+  return {
+    create: useMutation({
+      mutationFn: ({ episodeId, input }: { episodeId: string; input: import('@mirai/shared').MangaPageInput }) =>
+        invoke('manga:pages:create', { episodeId, input }).then((r) => r.page),
+      onSuccess: (page: import('@mirai/shared').MangaPageRecord) => invalidate(page.episodeId),
+    }),
+    update: useMutation({
+      mutationFn: ({ id, input }: { id: string; input: import('@mirai/shared').MangaPageInput }) =>
+        invoke('manga:pages:update', { id, input }).then((r) => r.page),
+      onSuccess: (page: import('@mirai/shared').MangaPageRecord) => invalidate(page.episodeId),
+    }),
+    remove: useMutation<boolean, Error, { id: string; episodeId: string }>({
+      mutationFn: (vars) => invoke('manga:pages:delete', { id: vars.id }).then(() => true),
+      onSuccess: (_r, vars) => invalidate(vars.episodeId),
+    }),
+    move: useMutation<boolean, Error, { id: string; direction: 'up' | 'down'; episodeId: string }>({
+      mutationFn: (vars) => invoke('manga:pages:move', { id: vars.id, direction: vars.direction }).then(() => true),
+      onSuccess: (_r, vars) => invalidate(vars.episodeId),
+    }),
+  }
+}
+
+export function useMangaPanels(pageId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['manga', 'panels', pageId],
+    queryFn: () => invoke('manga:panels:list', { pageId: pageId! }).then((r) => r.panels),
+    enabled: pageId !== undefined,
+  })
+}
+
+export function useMangaPanelMutations() {
+  const queryClient = useQueryClient()
+  const invalidatePage = (pageId: string) => {
+    void queryClient.invalidateQueries({ queryKey: ['manga', 'panels', pageId] })
+    void queryClient.invalidateQueries({ queryKey: ['manga', 'pages'] })
+  }
+  return {
+    create: useMutation({
+      mutationFn: ({ pageId, input }: { pageId: string; input: import('@mirai/shared').MangaPanelInput }) =>
+        invoke('manga:panels:create', { pageId, input }).then((r) => r.panel),
+      onSuccess: (panel: import('@mirai/shared').MangaPanelRecord) => invalidatePage(panel.pageId),
+    }),
+    update: useMutation({
+      mutationFn: ({ id, input }: { id: string; input: import('@mirai/shared').MangaPanelInput }) =>
+        invoke('manga:panels:update', { id, input }).then((r) => r.panel),
+      onSuccess: (panel: import('@mirai/shared').MangaPanelRecord) => invalidatePage(panel.pageId),
+    }),
+    remove: useMutation<boolean, Error, { id: string; pageId: string }>({
+      mutationFn: (vars) => invoke('manga:panels:delete', { id: vars.id }).then(() => true),
+      onSuccess: (_r, vars) => invalidatePage(vars.pageId),
+    }),
+    move: useMutation<boolean, Error, { id: string; direction: 'up' | 'down'; pageId: string }>({
+      mutationFn: (vars) => invoke('manga:panels:move', { id: vars.id, direction: vars.direction }).then(() => true),
+      onSuccess: (_r, vars) => invalidatePage(vars.pageId),
+    }),
+    attachImage: useMutation({
+      mutationFn: ({ id }: { id: string; pageId: string }) => invoke('manga:panels:attachImage', { id }).then((r) => r.panel),
+      onSuccess: (panel: import('@mirai/shared').MangaPanelRecord) => invalidatePage(panel.pageId),
+    }),
+  }
+}
+
+export function useMangaScriptExport() {
+  return useMutation({
+    mutationFn: (episodeId: string) => invoke('manga:exportScript', { episodeId }),
+  })
+}
+
+export function useMangaRevealScript() {
+  return useMutation({
+    mutationFn: (episodeId: string) => invoke('manga:revealScript', { episodeId }),
+  })
+}
+
 export function useMemorySearch(query: string) {
   return useQuery({
     queryKey: ['memory', 'search', query],

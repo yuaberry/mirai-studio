@@ -16,6 +16,12 @@ import { LogEntry } from '../entities/log'
 import { NotesImportResult, StoryNotesAnalysis, DossierResult } from '../entities/dossier'
 import { ProjectBriefInput } from '../entities/brief'
 import { RelationshipInput, CostumeInput, CharacterRelationship, CharacterCostume } from '../entities/creative'
+import {
+  MangaPageInput,
+  MangaPageRecord,
+  MangaPanelInput,
+  MangaPanelRecord,
+} from '../entities/manga'
 
 import {
   OpenedProject,
@@ -270,6 +276,60 @@ export const ipcContracts = {
   },
   'scenes:move': {
     request: z.object({ id: zEntityId, direction: z.enum(['up', 'down']) }),
+    response: z.object({ ok: z.boolean() }),
+  },
+
+  // ------------------------------------------------------------------- Manga (§8)
+  'manga:pages:list': {
+    request: z.object({ episodeId: zEntityId }),
+    response: z.object({ pages: z.array(MangaPageRecord) }),
+  },
+  'manga:pages:create': {
+    request: z.object({ episodeId: zEntityId, input: MangaPageInput }),
+    response: z.object({ page: MangaPageRecord }),
+  },
+  'manga:pages:update': {
+    request: z.object({ id: zEntityId, input: MangaPageInput }),
+    response: z.object({ page: MangaPageRecord }),
+  },
+  'manga:pages:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'manga:pages:move': {
+    request: z.object({ id: zEntityId, direction: z.enum(['up', 'down']) }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'manga:panels:list': {
+    request: z.object({ pageId: zEntityId }),
+    response: z.object({ panels: z.array(MangaPanelRecord) }),
+  },
+  'manga:panels:create': {
+    request: z.object({ pageId: zEntityId, input: MangaPanelInput }),
+    response: z.object({ panel: MangaPanelRecord }),
+  },
+  'manga:panels:update': {
+    request: z.object({ id: zEntityId, input: MangaPanelInput }),
+    response: z.object({ panel: MangaPanelRecord }),
+  },
+  'manga:panels:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'manga:panels:move': {
+    request: z.object({ id: zEntityId, direction: z.enum(['up', 'down']) }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'manga:panels:attachImage': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ panel: MangaPanelRecord }),
+  },
+  'manga:exportScript': {
+    request: z.object({ episodeId: zEntityId }),
+    response: z.object({ path: z.string(), pages: z.number().int().min(0), bubbles: z.number().int().min(0) }),
+  },
+  'manga:revealScript': {
+    request: z.object({ episodeId: zEntityId }),
     response: z.object({ ok: z.boolean() }),
   },
 

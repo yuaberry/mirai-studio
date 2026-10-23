@@ -39,6 +39,7 @@ import { JobQueue, type JobHandler } from '../jobs/jobQueue'
 import { CreativeService } from '../creative/creativeService'
 import { PromptService } from '../prompts/promptService'
 import { StoryboardService } from '../storyboard/storyboardService'
+import { MangaService } from '../creative/mangaService'
 import { MediaService } from '../media/mediaService'
 import { RenderService } from '../render/renderService'
 import { TimelineService } from '../timeline/timelineService'
@@ -74,6 +75,8 @@ export interface OpenProjectContext {
   prompts: PromptService
   /** Storyboard core (shots, frames, style bible) for this project. */
   storyboard: StoryboardService
+  /** Manga Pro (§8): pages, panels, lettering, script export. */
+  manga: MangaService
   /** Media library (music/SFX/ambience) for this project. */
   media: MediaService
   /** Render engine (FFmpeg) for this project. */
@@ -576,6 +579,7 @@ export class ProjectService {
     const creative = new CreativeService(db, this.opts.clock)
     const prompts = new PromptService(db, this.opts.clock)
     const storyboard = new StoryboardService(db, this.opts.clock, path)
+    const manga = new MangaService(db, this.opts.clock, path)
     const media = new MediaService(db, this.opts.clock, path)
     const timeline = new TimelineService(db, this.opts.clock)
     const production = new ProductionService(db, this.opts.clock, path, creative, storyboard, timeline, media)
@@ -587,7 +591,7 @@ export class ProjectService {
     this.upsertRegistry(manifest, path, now)
 
     const summary = this.summaryById(manifest.id)
-    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, media, render, timeline, production, subtitles, blender, recoveredCount }
+    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, manga, media, render, timeline, production, subtitles, blender, recoveredCount }
     this.opts.logger.info('PROJECT', `Project opened: "${manifest.name}"`, {
       id: manifest.id,
       recoveredJobs: recoveredCount,

@@ -111,6 +111,19 @@ export {
   CostumeInput,
 } from './entities/creative'
 export type { CharacterRole, TimeOfDay, RelationshipKind } from './entities/creative'
+export {
+  READING_DIRECTIONS,
+  BUBBLE_KINDS,
+  BUBBLE_TAILS,
+  BubbleInput,
+  Bubble,
+  MangaPageInput,
+  MangaPageRecord,
+  MangaPanelInput,
+  MangaPanelRecord,
+  zReadingDirection,
+} from './entities/manga'
+export type { ReadingDirection, BubbleKind, BubbleTail } from './entities/manga'
 
 export {
   PROMPT_CATEGORIES,

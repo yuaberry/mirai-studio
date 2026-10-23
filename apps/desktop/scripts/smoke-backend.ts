@@ -1679,6 +1679,41 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V22 MANGA: pages, panels, lettering and the script export', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+
+    // page -> panel -> typed lettering, all through the REAL service
+    const page = ctx.manga.createPage((ctx.creative.listEpisodes()[0]!.id), { readingDirection: 'RTL' })
+    const moka = ctx.creative.createCharacter({ name: 'Moka', role: 'SUPPORTING' })
+    const panel = ctx.manga.createPanel(page.id, {
+      lettering: [
+        { kind: 'SPEECH', characterId: moka.id, text: 'O santuário responde à lua.' },
+        { kind: 'SFX', text: 'TOON!' },
+      ],
+    })
+    if (ctx.manga.listPages(page.episodeId).length !== 1) throw new Error('manga page not listed')
+    if (ctx.manga.listPanels(page.id)[0]!.lettering.length !== 2) throw new Error('lettering not round-tripped')
+    // moving the ONLY page must fail honestly
+    let moveThrew = false
+    try { ctx.manga.movePage(page.id, 'up') } catch { moveThrew = true }
+    if (!moveThrew) throw new Error('moving the only page must throw')
+
+    // the professional lettering script export
+    const script = ctx.manga.exportLetteringScript(page.episodeId)
+    const scriptText = readFileSync(script.path, 'utf8')
+    if (!scriptText.includes('LETTERING SCRIPT')) throw new Error('script header missing')
+    if (!scriptText.includes('Moka (speech): "O santuário responde à lua."')) throw new Error('script dialogue missing')
+    if (!scriptText.includes('RIGHT-TO-LEFT')) throw new Error('script direction missing')
+    if (script.bubbles !== 2) throw new Error('script bubble count wrong')
+
+    // cleanup so later steps stay deterministic
+    ctx.manga.deletePanel(panel.id)
+    ctx.manga.deletePage(page.id)
+    ctx.creative.deleteCharacter(moka.id)
+
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

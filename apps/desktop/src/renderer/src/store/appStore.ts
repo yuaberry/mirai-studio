@@ -14,6 +14,7 @@ export type ProjectView =
   | 'characters'
   | 'locations'
   | 'episodes'
+  | 'manga'
   | 'storyboard'
   | 'timeline'
   | 'render'

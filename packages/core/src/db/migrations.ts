@@ -493,4 +493,35 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0014_manga_pages',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE manga_pages (
+          id TEXT PRIMARY KEY,
+          episode_id TEXT NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+          number INTEGER NOT NULL,
+          reading_direction TEXT NOT NULL DEFAULT 'RTL',
+          layout_notes TEXT,
+          status TEXT NOT NULL DEFAULT 'TODO',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE (episode_id, number)
+        );
+        CREATE INDEX idx_manga_pages_ep ON manga_pages (episode_id, number);
+
+        CREATE TABLE manga_panels (
+          id TEXT PRIMARY KEY,
+          page_id TEXT NOT NULL REFERENCES manga_pages(id) ON DELETE CASCADE,
+          order_index INTEGER NOT NULL,
+          shot_id TEXT REFERENCES shots(id) ON DELETE SET NULL,
+          image_asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL,
+          lettering TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_manga_panels_page ON manga_panels (page_id, order_index);
+      `)
+    },
+  },
 ]
