@@ -30,7 +30,7 @@ import {
   IMPACT_KINDS,
   ImpactResult,
 } from '../entities/ip'
-import { MoodboardItemInput, MoodboardItem } from '../entities/moodboard'
+import { MoodboardItemInput, MoodboardItem, PosterState } from '../entities/moodboard'
 
 import {
   OpenedProject,
@@ -341,6 +341,40 @@ export const ipcContracts = {
     request: z.object({ episodeId: zEntityId }),
     response: z.object({ ok: z.boolean() }),
   },
+  // ------------------------------------------------- Visual Dev Lab poster studio (§7)
+  'poster:build': {
+    request: emptyRequest,
+    response: z.object({
+      svg: z.string(),
+      width: z.number().int().min(1),
+      height: z.number().int().min(1),
+      palette: z.array(z.string()),
+      tagline: z.string().nullable(),
+      state: PosterState,
+    }),
+  },
+  'poster:save': {
+    request: z.object({ state: PosterState }),
+    response: z.object({ state: PosterState }),
+  },
+  'poster:export': {
+    request: emptyRequest,
+    response: z.object({ path: z.string(), bytes: z.number().int().min(0), width: z.number().int().min(1), height: z.number().int().min(1) }),
+  },
+  'poster:reveal': {
+    request: emptyRequest,
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Key-art copywriter: EXACTLY 3 tagline candidates from the bible. */
+  'ai:draftTaglines': {
+    request: emptyRequest,
+    response: z.object({
+      taglines: z.array(z.string().min(1)).length(3),
+      model: z.string(),
+      durationMs: z.number().int().min(0),
+    }),
+  },
+
   // ---------------------------------------------------- Visual Dev Lab moodboard (§7)
   'moodboard:list': {
     request: emptyRequest,

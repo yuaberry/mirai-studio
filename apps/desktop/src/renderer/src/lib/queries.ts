@@ -1547,6 +1547,42 @@ export function useMoodboardMutations() {
   }
 }
 
+export function usePoster() {
+  return useQuery({
+    queryKey: ['poster'],
+    queryFn: () => invoke('poster:build'),
+    staleTime: 5_000,
+  })
+}
+
+export function usePosterSave() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (state: import('@mirai/shared').PosterState) => invoke('poster:save', { state }).then((r) => r.state),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['poster'] })
+    },
+  })
+}
+
+export function usePosterExport() {
+  return useMutation({
+    mutationFn: () => invoke('poster:export'),
+  })
+}
+
+export function usePosterReveal() {
+  return useMutation({
+    mutationFn: () => invoke('poster:reveal'),
+  })
+}
+
+export function useTaglinesDraft() {
+  return useMutation({
+    mutationFn: () => invoke('ai:draftTaglines'),
+  })
+}
+
 export function useEntityImpact(kind: import('@mirai/shared').ImpactKind, id: string | undefined) {
   return useQuery({
     queryKey: ['ip', 'impact', kind, id],

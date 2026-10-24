@@ -31,6 +31,7 @@ export type { ProjectServiceOptions, OpenProjectContext } from './projects/proje
 export { CreativeService } from './creative/creativeService'
 export { MangaService } from './creative/mangaService'
 export { MoodboardService } from './visual/moodboardService'
+export { PosterService } from './visual/posterService'
 
 // prompts
 export { PromptService } from './prompts/promptService'

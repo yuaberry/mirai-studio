@@ -27,6 +27,7 @@ import {
   type EntityId,
 
   PanelLetteringDraft,
+  TaglineDraft,
 } from '@mirai/shared'
 import { assertExplicitCastAllowed, maturePipelineActive } from '@mirai/core'
 import type { DossierAiSections, DossierData } from '@mirai/core'
@@ -39,6 +40,7 @@ import {
   buildImagePrompt,
   draftScreenplayInstruction,
   draftPanelLetteringInstruction,
+  draftTaglinesInstruction,
   estimateCostUsd,
   type ContextCharacter,
   type ContextScene,
@@ -1030,6 +1032,32 @@ export class AiHost {
       durationMs,
     })
     return { bubbles, model: this.deps.settings.get().ai.defaultModel ?? 'unknown', durationMs }
+  }
+
+  // ----------------------------------------------- poster taglines (v0.28 §7)
+
+  /**
+   * Key-art copywriter: EXACTLY 3 tagline candidates for the project
+   * poster, from the living bible facts. Zod-enforced at the boundary;
+   * picking one stays a human decision.
+   */
+  async draftTaglines(): Promise<{ taglines: string[]; model: string; durationMs: number }> {
+    const startedAt = Date.now()
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+
+    const bible = ctx.creative.getBible()
+    const instruction = draftTaglinesInstruction({
+      title: ctx.manifest.config.title,
+      premise: bible.premise,
+      themes: bible.themes,
+      tone: bible.tone,
+    })
+    const draft = await this.chatJsonCore(instruction, TaglineDraft, 0.9, 800)
+
+    const durationMs = Date.now() - startedAt
+    this.deps.logger.log('info', 'AI', 'Poster taglines drafted', { durationMs })
+    return { taglines: draft.taglines, model: this.deps.settings.get().ai.defaultModel ?? 'unknown', durationMs }
   }
 
   // --------------------------------------------------- Frame generation (Phase 4)

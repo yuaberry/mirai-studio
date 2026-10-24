@@ -12,7 +12,7 @@
  * OpenRouterProvider + context builder with an in-memory transport —
  * the network itself is exercised manually in the app.
  */
-import { mkdtempSync, mkdirSync, existsSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, existsSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { deflateSync } from 'node:zlib'
 import { PluginHost } from '../src/main/plugins/pluginHost'
@@ -1911,6 +1911,89 @@ async function main(): Promise<void> {
     if (ctx.moodboard.list().length !== 0) throw new Error('board not emptied')
     if (existsSync(join(ctx.summary.path, 'images', 'assets', `${aAsset}.png`))) throw new Error('asset not pruned')
 
+    rmSync(refPng, { force: true })
+    await projects.close()
+  })
+
+  await step('V28 POSTER: state, live composition, export, AI taglines', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    const ep = ctx.creative.listEpisodes()[0]!
+
+    // ---- state round-trip (kv)
+    if (ctx.poster.getState().tagline) throw new Error('poster state should start empty')
+    ctx.poster.updateState({ tagline: 'Onde as cartas escolhem as guardiãs.' })
+    if (ctx.poster.getState().tagline !== 'Onde as cartas escolhem as guardiãs.') throw new Error('tagline not persisted')
+    let badThrew = false
+    try { ctx.poster.updateState({ paletteOverride: ['rosa'] }) } catch { badThrew = true }
+    if (!badThrew) throw new Error('invalid palette override must throw')
+
+    // ---- live composition with the REAL moodboard palette
+    const refPng = join(ctx.summary.path, '..', 'poster-ref.png')
+    writeFileSync(refPng, Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c626001000000ffff03000006000557bfabd40000000049454e44ae426082', 'hex'))
+    const ref = ctx.moodboard.attachImage(refPng)
+    ctx.moodboard.update(ref.id, { color: '#f472b6' })
+    const hue = [...ctx.summary.id].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) % 360, 7)
+    const posterInput = {
+      title: ctx.manifest.config.title,
+      mediumLabel: 'Anime',
+      genres: ctx.manifest.config.genres ?? [],
+      tagline: ctx.poster.getState().tagline,
+      palette: ctx.poster.moodboardPalette(ctx.moodboard),
+      hue,
+    }
+    const composed = ctx.poster.buildPoster(posterInput)
+    if (!composed.svg.includes('<svg')) throw new Error('poster svg missing')
+    if (!composed.svg.includes('stop-color="#f472b6"')) throw new Error('moodboard palette not baked in')
+    if (!composed.svg.includes('MIRAI STUDIO')) throw new Error('studio mark missing')
+    void ep
+
+    // ---- real file export
+    const exported = ctx.poster.exportPoster(posterInput)
+    if (!existsSync(exported.path)) throw new Error('poster file missing')
+    if (statSync(exported.path).size !== exported.bytes) throw new Error('poster bytes mismatch')
+
+    // ---- AI taglines through the REAL host (mocked transport router)
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (_url: unknown, init?: { body?: string }) => {
+      const body = String(init?.body ?? '')
+      const json = (payload: string) => ({
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(JSON.stringify({ choices: [{ message: { content: payload } }] })))
+            controller.close()
+          },
+        }),
+        text: async () => JSON.stringify({ choices: [{ message: { content: payload } }] }),
+      })
+      if (body.includes('key-art copywriter')) {
+        return json(JSON.stringify({ taglines: [
+          'Cada carta guarda um segredo.',
+          'A academia nunca esquece.',
+          'O que a lua escreve, o coração guarda.',
+        ] }))
+      }
+      return json(JSON.stringify({ ok: true }))
+    }) as typeof fetch
+    const settingsSvc = new SettingsService(appDb)
+    const credentialsSvc = new CredentialStore(appDb, plaintextCodec, systemClock)
+    credentialsSvc.set('openrouter', 'sk-smoke-v28')
+    const ai = new AiHost({
+      credentials: credentialsSvc,
+      settings: settingsSvc,
+      projects,
+      logger,
+      emitter: { send: () => undefined, window: null } as never,
+    })
+    const tag = await ai.draftTaglines()
+    globalThis.fetch = realFetch
+    if (tag.taglines.length !== 3) throw new Error('expected exactly 3 taglines')
+    if (!tag.taglines[2]!.includes('lua')) throw new Error('third tagline wrong')
+
+    // cleanup
+    ctx.moodboard.remove(ref.id)
+    ctx.poster.updateState({})
     rmSync(refPng, { force: true })
     await projects.close()
   })

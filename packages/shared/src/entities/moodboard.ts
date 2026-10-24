@@ -29,3 +29,19 @@ export const MoodboardItem = z.object({
   updatedAt: zIsoDate,
 })
 export type MoodboardItem = z.infer<typeof MoodboardItem>
+
+// ------------------------------------------------------------ poster studio
+
+/** Poster Studio state (kv: 'poster') — the tagline lives with the project. */
+export const PosterState = z.object({
+  tagline: z.string().max(300).optional(),
+  /** Optional palette override (hex list). Empty = use the moodboard palette. */
+  paletteOverride: z.array(z.string().regex(MOODBOARD_COLOR_RE)).max(8).optional(),
+})
+export type PosterState = z.input<typeof PosterState>
+
+/** What the AI proposes: exactly 3 tagline candidates, zod-enforced. */
+export const TaglineDraft = z.object({
+  taglines: z.array(z.string().min(1).max(300)).length(3),
+})
+export type TaglineDraft = z.infer<typeof TaglineDraft>

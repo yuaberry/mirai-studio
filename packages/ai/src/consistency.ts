@@ -172,3 +172,30 @@ RULES:
 
 Return ONLY a JSON object: { "bubbles": [{ "kind": "SPEECH", "characterName": "Ayaka", "text": "…", "tail": "BOTTOM_RIGHT" }] }`
 }
+
+/**
+ * The Poster Studio's tagline instruction (v0.28, §7 slice 2): three
+ * poster tagline candidates from the project's living bible facts. The
+ * response is zod-enforced (exactly 3); picking one stays human.
+ */
+export function draftTaglinesInstruction(input: {
+  title: string
+  premise?: string
+  themes?: string
+  tone?: string
+}): string {
+  const facts = [
+    input.premise ? `PREMISE: ${input.premise}` : null,
+    input.themes ? `THEMES: ${input.themes}` : null,
+    input.tone ? `TONE: ${input.tone}` : null,
+  ].filter(Boolean)
+  return `You are the key-art copywriter of Mirai Studio. Write EXACTLY 3 tagline candidates for the poster of "${input.title}".
+
+${facts.length > 0 ? facts.join('\n') : 'No bible facts yet — sell the title itself with mood and mystery.'}
+
+RULES:
+- Each tagline: max ~14 words, punchy, poster-sized — the kind set in italic serif under a title.
+- Distinct strategies: one emotional, one mysterious/teasing, one bold/thematic.
+- Language: match the premise's language (default English if unclear).
+Return ONLY a JSON object: { "taglines": ["…", "…", "…"] }`
+}

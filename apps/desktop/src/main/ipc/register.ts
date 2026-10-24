@@ -335,6 +335,61 @@ export function registerIpcHandlers(c: Container): void {
     shell.showItemInFolder(ctx.manga.chapterPackagePath(req.episodeId))
     return { ok: true }
   })
+  // ----------------------------------------------- Visual Dev Lab poster studio (§7)
+  const posterInput = () => {
+    const ctx = requireActive(c)
+    const config = ctx.manifest.config
+    const state = ctx.poster.getState()
+    const palette = state.paletteOverride && state.paletteOverride.length > 0
+      ? state.paletteOverride
+      : ctx.poster.moodboardPalette(ctx.moodboard)
+    const hue = [...ctx.summary.id].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) % 360, 7)
+    return {
+      ctx,
+      input: {
+        title: config.title,
+        mediumLabel: MEDIUM_LABEL[config.medium ?? 'ANIME'],
+        genres: config.genres ?? [],
+        tagline: state.tagline,
+        palette,
+        hue,
+      },
+    }
+  }
+
+  handleIpc('poster:build', () => {
+    const { ctx, input } = posterInput()
+    const poster = ctx.poster.buildPoster(input)
+    return {
+      svg: poster.svg,
+      width: poster.width,
+      height: poster.height,
+      palette: poster.palette,
+      tagline: input.tagline ?? null,
+      state: ctx.poster.getState(),
+    }
+  })
+  handleIpc('poster:save', (req) => {
+    const state = requireActive(c).poster.updateState(req.state)
+    return { state }
+  })
+  handleIpc('poster:export', () => {
+    const { ctx, input } = posterInput()
+    const result = ctx.poster.exportPoster(input)
+    c.logger.info('RENDER', `Poster exported: ${result.path}`, { bytes: result.bytes })
+    return result
+  })
+  handleIpc('poster:reveal', () => {
+    const ctx = requireActive(c)
+    shell.showItemInFolder(ctx.poster.posterPath(ctx.manifest.config.title))
+    return { ok: true }
+  })
+  handleIpc('ai:draftTaglines', async () => {
+    requireActive(c)
+    const draft = await c.ai.draftTaglines()
+    return { taglines: draft.taglines, model: draft.model, durationMs: draft.durationMs }
+  })
+
   // -------------------------------------------------- Visual Dev Lab moodboard (§7)
   handleIpc('moodboard:list', () => ({ items: requireActive(c).moodboard.list() }))
   handleIpc('moodboard:attach', async () => {

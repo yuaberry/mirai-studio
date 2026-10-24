@@ -9,6 +9,7 @@ import { Check, Loader2, PencilLine } from 'lucide-react'
 import type { StyleBible } from '@mirai/shared'
 import { Button, Card, Label, Textarea, Spinner } from '../../system/ui'
 import { MoodboardCard } from './MoodboardCard'
+import { PosterCard } from './PosterCard'
 import { useSettings, useStyleBible, useUpdateStyleBible } from '../../lib/queries'
 import { T } from '../../system/T'
 
@@ -212,8 +213,9 @@ export function StyleBiblePage() {
         </div>
       </Card>
 
-      <div className="mt-6">
+      <div className="mt-6 space-y-6">
         <MoodboardCard />
+        <PosterCard />
       </div>
     </div>
   )
