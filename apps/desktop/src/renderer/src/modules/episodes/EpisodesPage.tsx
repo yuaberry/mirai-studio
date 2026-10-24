@@ -16,6 +16,7 @@ import {
 } from '@mirai/shared'
 import { Badge, Button, Input, Label, Select, Spinner, Textarea } from '../../system/ui'
 import { EmptyState, ErrorState } from '../../system/EmptyState'
+import { SkeletonList } from '../../system/Skeleton'
 import { ConfirmModal, Modal } from '../../system/Modal'
 import {
   MEDIA_KIND_LABEL,
@@ -108,9 +109,7 @@ export function EpisodesPage() {
         </div>
         <div className="-mx-1 min-h-0 flex-1 overflow-y-auto">
           {isLoading ? (
-            <div className="flex h-32 items-center justify-center">
-              <Spinner className="h-4 w-4" />
-            </div>
+            <SkeletonList rows={5} />
           ) : isError ? (
             <ErrorState
               title="Episodes failed to load"

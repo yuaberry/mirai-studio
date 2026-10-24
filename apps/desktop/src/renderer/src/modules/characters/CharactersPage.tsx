@@ -10,8 +10,9 @@ import {
   type AssetStatus,
   type CharacterRecord,
 } from '@mirai/shared'
-import { Badge, Button, Input, Label, Select, Spinner, Textarea } from '../../system/ui'
+import { Badge, Button, Input, Label, Select, Textarea } from '../../system/ui'
 import { EmptyState, ErrorState } from '../../system/EmptyState'
+import { SkeletonList } from '../../system/Skeleton'
 import { ConfirmModal } from '../../system/Modal'
 import { VersionHistoryButton, VersionHistoryModal } from '../production/VersionHistoryModal'
 import { useCharacters, useCharacterMutations, useApprovalTransition } from '../../lib/queries'
@@ -77,9 +78,7 @@ export function CharactersPage() {
         </div>
         <div className="-mx-1 min-h-0 flex-1 overflow-y-auto">
           {isLoading ? (
-            <div className="flex h-32 items-center justify-center">
-              <Spinner className="h-4 w-4" />
-            </div>
+            <SkeletonList rows={6} />
           ) : isError ? (
             <ErrorState
               title="Cast failed to load"

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { MiraiError, type ProjectSummary } from '@mirai/shared'
 import { Badge, Button, Card, Spinner } from '../../system/ui'
+import { SkeletonList } from '../../system/Skeleton'
 import { EmptyState, ErrorState } from '../../system/EmptyState'
 import { ConfirmModal } from '../../system/Modal'
 import { formatWhen } from '../../lib/utils'
@@ -41,9 +42,7 @@ export function ProjectHub() {
       <Hero tr={tr} onCreate={() => setNewProjectOpen(true)} onOpen={() => void openFolderFlow()} />
       <div className="mx-auto w-full max-w-5xl px-8 pb-10">
         {isLoading ? (
-          <div className="flex h-40 items-center justify-center">
-            <Spinner className="h-6 w-6" />
-          </div>
+          <SkeletonList rows={6} kind="card" />
         ) : isError ? (
           <ErrorState
             title="Couldn't load projects"
@@ -204,16 +203,23 @@ function ProjectCard({ project, tr, dimmed = false }: { project: ProjectSummary;
 
   return (
     <Card
-      className={`group relative flex cursor-pointer flex-col gap-3 p-4 transition-colors hover:border-mirai-accent/40 ${
+      className={`card-lift group relative flex cursor-pointer flex-col gap-3 overflow-hidden p-4 hover:border-mirai-accent/40 ${
         dimmed ? 'opacity-60 hover:opacity-100' : ''
       }`}
       onClick={openIt}
     >
+      {/* brand spine — a thin gradient edge that lights up on hover */}
+      <span className="absolute top-3 bottom-3 left-0 w-[3px] rounded-r-full bg-gradient-mirai opacity-40 transition-opacity group-hover:opacity-100" />
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate font-display text-sm font-semibold text-mirai-text">
             {project.name}
           </h3>
+          {project.description ? (
+            <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-mirai-dim">
+              {project.description}
+            </p>
+          ) : null}
           <p className="mt-1 flex items-center gap-1 truncate text-[11px] text-mirai-faint">
             <Clock className="h-3 w-3" /> {formatWhen(project.lastOpenedAt ?? project.updatedAt)}
           </p>

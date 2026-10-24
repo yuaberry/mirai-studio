@@ -190,6 +190,9 @@ const PT_BR: Record<string, string> = {
   'Remove from List…': 'Remover da Lista…',
   // ------------------------------------------------------- manga studio (v0.22)
   'Manga Studio': 'Estúdio de Mangá',
+  'Manga & Animatic': 'Mangá & Animático',
+  'Production & Delivery': 'Produção & Entrega',
+  'AI & Library': 'IA & Biblioteca',
   'Pages': 'Páginas',
   'Page': 'Página',
   'New page': 'Nova página',

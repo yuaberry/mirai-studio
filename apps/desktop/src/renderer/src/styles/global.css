@@ -57,6 +57,23 @@
     user-select: text;
   }
 
+  /* THEME TRANSITION (v0.26): surfaces + text cross-fade briefly when the
+     data-theme swaps; hover paints stay snappy because only these
+     elements carry the transition. */
+  body,
+  aside,
+  main,
+  nav,
+  section,
+  header,
+  footer,
+  [role='dialog'] {
+    transition:
+      background-color 160ms ease,
+      color 160ms ease,
+      border-color 160ms ease;
+  }
+
   ::selection {
     background: color-mix(in srgb, var(--accent) 35%, transparent);
   }
@@ -128,6 +145,37 @@
 
   .animate-scale-in {
     animation: mirai-scale-in 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* v0.26 — cards lift on hover (hub project cards, overview cards). */
+  .card-lift {
+    transition:
+      transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+  .card-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px -14px rgba(0, 0, 0, 0.55);
+  }
+  :root[data-theme='light'] .card-lift:hover {
+    box-shadow: 0 12px 28px -16px rgba(20, 22, 28, 0.35);
+  }
+
+  /* v0.26 — view content enters softly on navigation. */
+  .animate-view-in {
+    animation: mirai-view-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes mirai-view-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

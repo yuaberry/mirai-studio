@@ -35,6 +35,7 @@ import {
 } from '@mirai/shared'
 import { Badge, Button, Label, Select, Spinner, Textarea } from '../../system/ui'
 import { EmptyState, ErrorState } from '../../system/EmptyState'
+import { SkeletonList } from '../../system/Skeleton'
 import { ConfirmModal } from '../../system/Modal'
 import {
   useEpisodes,
@@ -278,9 +279,7 @@ export function MangaStudioPage() {
         </div>
         <div className="-mx-1 min-h-0 flex-1 overflow-y-auto">
           {pagesLoading ? (
-            <div className="flex h-24 items-center justify-center">
-              <Spinner className="h-4 w-4" />
-            </div>
+            <SkeletonList rows={4} />
           ) : pagesError ? (
             <ErrorState
               title="Pages failed to load"

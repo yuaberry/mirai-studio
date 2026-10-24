@@ -66,36 +66,50 @@ import { CommandPalette } from './CommandPalette'
 import { ProjectHeader } from './ProjectHeader'
 import { useCurrentProject } from '../lib/queries'
 
-const APP_NAV: ReadonlyArray<{ view: MainView; label: string; icon: LucideIcon }> = [
+interface NavEntry {
+  view: MainView
+  label: string
+  icon: LucideIcon
+}
+
+const APP_NAV: ReadonlyArray<NavEntry> = [
   { view: 'hub', label: 'Project Hub', icon: Home },
   { view: 'settings', label: 'Settings', icon: Settings },
   { view: 'diagnostics', label: 'Diagnostics', icon: Activity },
 ]
 
-const PROJECT_NAV: ReadonlyArray<{ view: MainView; label: string; icon: LucideIcon }> = [
+/* v0.26 — the project section is grouped by WORKFLOW PHASE, not a flat
+ * 18-item list: story → manga/animatic → production → AI/library. */
+const PROJECT_NAV: ReadonlyArray<NavEntry> = [
   { view: 'overview', label: 'Overview', icon: Clapperboard },
   { view: 'bible', label: 'Story Bible', icon: BookOpen },
   { view: 'style', label: 'Style Bible', icon: Palette },
   { view: 'characters', label: 'Characters', icon: Users },
   { view: 'locations', label: 'Locations', icon: Building2 },
   { view: 'episodes', label: 'Episodes & Scenes', icon: ListVideo },
+]
+
+const MANGA_NAV: ReadonlyArray<NavEntry> = [
   { view: 'manga', label: 'Manga Studio', icon: PanelTop },
   { view: 'storyboard', label: 'Storyboard', icon: LayoutGrid },
   { view: 'timeline', label: 'Timeline', icon: AudioWaveform },
-  { view: 'render', label: 'Render & Export', icon: FileVideo },
-  { view: 'production', label: 'Production', icon: BarChart3 },
   { view: 'subtitles', label: 'Subtitles', icon: Captions },
-  { view: 'workflows', label: 'AI Workflows', icon: Workflow },
-  { view: 'producer', label: 'Producer Agent', icon: Wand2 },
-  { view: 'plugins', label: 'Plugins', icon: Puzzle },
-  { view: 'media', label: 'Media Library', icon: Disc3 },
-  { view: 'prompts', label: 'Prompt Library', icon: Wand2 },
-  { view: 'assist', label: 'AI Assist', icon: Sparkles },
 ]
 
-const PRODUCTION_NAV: ReadonlyArray<{ view: MainView; label: string; icon: LucideIcon }> = [
+const PRODUCTION_NAV: ReadonlyArray<NavEntry> = [
+  { view: 'render', label: 'Render & Export', icon: FileVideo },
+  { view: 'production', label: 'Production', icon: BarChart3 },
   { view: 'jobs', label: 'Jobs', icon: Play },
   { view: 'backups', label: 'Backups', icon: HardDriveDownload },
+]
+
+const AI_NAV: ReadonlyArray<NavEntry> = [
+  { view: 'producer', label: 'Producer Agent', icon: Wand2 },
+  { view: 'workflows', label: 'AI Workflows', icon: Workflow },
+  { view: 'assist', label: 'AI Assist', icon: Sparkles },
+  { view: 'prompts', label: 'Prompt Library', icon: Wand2 },
+  { view: 'media', label: 'Media Library', icon: Disc3 },
+  { view: 'plugins', label: 'Plugins', icon: Puzzle },
 ]
 
 function NavGroup({
@@ -103,7 +117,7 @@ function NavGroup({
   items,
 }: {
   title: string
-  items: ReadonlyArray<{ view: MainView; label: string; icon: LucideIcon }>
+  items: ReadonlyArray<NavEntry>
 }) {
   const view = useAppStore((s) => s.view)
   const setView = useAppStore((s) => s.setView)
@@ -123,12 +137,18 @@ function NavGroup({
               key={item.view}
               onClick={() => setView(item.view)}
               className={cn(
-                'flex items-center gap-2.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
+                'relative flex items-center gap-2.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
                 active
                   ? 'bg-mirai-hover text-mirai-text'
                   : 'text-mirai-dim hover:bg-mirai-hover/60 hover:text-mirai-text',
               )}
             >
+              <span
+                className={cn(
+                  'absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full transition-opacity',
+                  active ? 'bg-gradient-mirai opacity-100' : 'opacity-0',
+                )}
+              />
               <Icon className={cn('h-3.5 w-3.5', active && 'text-mirai-accent')} />
               {t(locale, item.label)}
             </button>
@@ -283,9 +303,13 @@ export function AppShell() {
           <nav className="px-2 pb-4">
             <NavGroup title="App" items={APP_NAV} />
             {current && (
-              <NavGroup title={`Project — ${current.name.slice(0, 14)}`} items={PROJECT_NAV} />
+              <>
+                <NavGroup title={current.name.slice(0, 16)} items={PROJECT_NAV} />
+                <NavGroup title="Manga & Animatic" items={MANGA_NAV} />
+                <NavGroup title="Production & Delivery" items={PRODUCTION_NAV} />
+                <NavGroup title="AI & Library" items={AI_NAV} />
+              </>
             )}
-            {current && <NavGroup title="Production" items={PRODUCTION_NAV} />}
           </nav>
           <div className="mt-auto px-4 pb-4">
             <button
@@ -301,7 +325,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                v0.25.0
+                v0.26.0
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio"
@@ -315,7 +339,7 @@ export function AppShell() {
             </div>
           </div>
         </aside>
-        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <main key={view} className="animate-view-in flex min-w-0 flex-1 flex-col overflow-y-auto">
           {current && isProjectView(view) && <ProjectHeader />}
           {view === 'hub' && <ProjectHub />}
           {view === 'overview' && <OverviewPage />}
