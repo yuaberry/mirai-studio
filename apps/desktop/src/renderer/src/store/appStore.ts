@@ -20,6 +20,7 @@ export type ProjectView =
   | 'render'
   | 'production'
   | 'subtitles'
+  | 'localization'
   | 'workflows'
   | 'producer'
   | 'plugins'

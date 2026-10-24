@@ -32,6 +32,7 @@ export { CreativeService } from './creative/creativeService'
 export { MangaService } from './creative/mangaService'
 export { MoodboardService } from './visual/moodboardService'
 export { PosterService } from './visual/posterService'
+export { LocalizationService } from './localization/localizationService'
 
 // prompts
 export { PromptService } from './prompts/promptService'

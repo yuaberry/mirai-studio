@@ -570,4 +570,34 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0017_localization',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE scene_translations (
+          id TEXT PRIMARY KEY,
+          scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+          language TEXT NOT NULL,
+          screenplay TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'DRAFT',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE (scene_id, language)
+        );
+        CREATE INDEX idx_translations_scene ON scene_translations (scene_id);
+
+        CREATE TABLE glossary_terms (
+          id TEXT PRIMARY KEY,
+          source TEXT NOT NULL,
+          target TEXT NOT NULL,
+          language TEXT NOT NULL,
+          notes TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE (source, language)
+        );
+        CREATE INDEX idx_glossary_lang ON glossary_terms (language);
+      `)
+    },
+  },
 ]

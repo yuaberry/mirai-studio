@@ -31,6 +31,14 @@ import {
   ImpactResult,
 } from '../entities/ip'
 import { MoodboardItemInput, MoodboardItem, PosterState } from '../entities/moodboard'
+import {
+  SceneTranslation,
+  TranslationUpsertInput,
+  LanguageCoverage,
+  GlossaryTerm,
+  GlossaryTermInput,
+  zLanguageTag,
+} from '../entities/localization'
 
 import {
   OpenedProject,
@@ -341,6 +349,60 @@ export const ipcContracts = {
     request: z.object({ episodeId: zEntityId }),
     response: z.object({ ok: z.boolean() }),
   },
+  // ------------------------------------------------- Localization Lab (§18)
+  'loc:translations:list': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ translations: z.array(SceneTranslation) }),
+  },
+  'loc:translations:upsert': {
+    request: z.object({ sceneId: zEntityId, input: TranslationUpsertInput }),
+    response: z.object({ translation: SceneTranslation }),
+  },
+  'loc:translations:delete': {
+    request: z.object({ sceneId: zEntityId, language: zLanguageTag }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'loc:coverage': {
+    request: emptyRequest,
+    response: z.object({ coverage: z.array(LanguageCoverage) }),
+  },
+  'loc:glossary:list': {
+    request: z.object({ language: zLanguageTag.optional() }),
+    response: z.object({ terms: z.array(GlossaryTerm) }),
+  },
+  'loc:glossary:upsert': {
+    request: z.object({ input: GlossaryTermInput }),
+    response: z.object({ term: GlossaryTerm }),
+  },
+  'loc:glossary:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** AI translation draft for one scene (human reviews + saves). */
+  'ai:translateScene': {
+    request: z.object({ sceneId: zEntityId, language: zLanguageTag }),
+    response: z.object({
+      screenplay: z.string().min(1),
+      model: z.string(),
+      durationMs: z.number().int().min(0),
+    }),
+  },
+  /** Translated EPUB: translation where it exists, honest fallback to source. */
+  'loc:exportEpub': {
+    request: z.object({ language: zLanguageTag }),
+    response: z.object({
+      epubPath: z.string(),
+      chapters: z.number().int().min(1),
+      translatedScenes: z.number().int().min(0),
+      fallbackScenes: z.number().int().min(0),
+      bytes: z.number().int().min(0),
+    }),
+  },
+  'loc:revealEpub': {
+    request: z.object({ language: zLanguageTag }),
+    response: z.object({ ok: z.boolean() }),
+  },
+
   // ------------------------------------------------- Visual Dev Lab poster studio (§7)
   'poster:build': {
     request: emptyRequest,

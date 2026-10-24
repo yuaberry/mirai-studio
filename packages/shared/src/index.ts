@@ -140,6 +140,18 @@ export {
 } from './entities/ip'
 export { MoodboardItemInput, MoodboardItem, MOODBOARD_COLOR_RE } from './entities/moodboard'
 export { PosterState, TaglineDraft } from './entities/moodboard'
+export {
+  TRANSLATION_STATUSES,
+  TranslationUpsertInput,
+  SceneTranslation,
+  LanguageCoverage,
+  GlossaryTermInput,
+  GlossaryTerm,
+  SceneTranslationDraft,
+  zLanguageTag,
+  zTranslationStatus,
+} from './entities/localization'
+export type { TranslationStatus } from './entities/localization'
 export type { DerivedWorkKind, ImpactKind, ImpactEntry as ImpactEntryType } from './entities/ip'
 export type { ReadingDirection, BubbleKind, BubbleTail } from './entities/manga'
 

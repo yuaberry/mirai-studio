@@ -1583,6 +1583,85 @@ export function useTaglinesDraft() {
   })
 }
 
+export function useTranslationList(sceneId: string | undefined) {
+  return useQuery({
+    queryKey: ['loc', 'translations', sceneId],
+    queryFn: () => invoke('loc:translations:list', { sceneId: sceneId! }).then((r) => r.translations),
+    enabled: sceneId !== undefined,
+  })
+}
+
+export function useTranslationMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['loc'] })
+  }
+  return {
+    upsert: useMutation({
+      mutationFn: (vars: { sceneId: string; input: import('@mirai/shared').TranslationUpsertInput }) =>
+        invoke('loc:translations:upsert', { sceneId: vars.sceneId, input: vars.input }).then((r) => r.translation),
+      onSuccess: () => invalidate(),
+    }),
+    remove: useMutation({
+      mutationFn: (vars: { sceneId: string; language: string }) =>
+        invoke('loc:translations:delete', { sceneId: vars.sceneId, language: vars.language }).then(() => true),
+      onSuccess: () => invalidate(),
+    }),
+  }
+}
+
+export function useCoverage() {
+  return useQuery({
+    queryKey: ['loc', 'coverage'],
+    queryFn: () => invoke('loc:coverage').then((r) => r.coverage),
+  })
+}
+
+export function useGlossary(language: string | undefined) {
+  return useQuery({
+    queryKey: ['loc', 'glossary', language ?? 'all'],
+    queryFn: () =>
+      invoke('loc:glossary:list', language ? { language } : {}).then((r) => r.terms),
+  })
+}
+
+export function useGlossaryMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['loc', 'glossary'] })
+  }
+  return {
+    upsert: useMutation({
+      mutationFn: (input: import('@mirai/shared').GlossaryTermInput) =>
+        invoke('loc:glossary:upsert', { input }).then((r) => r.term),
+      onSuccess: () => invalidate(),
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => invoke('loc:glossary:delete', { id }).then(() => true),
+      onSuccess: () => invalidate(),
+    }),
+  }
+}
+
+export function useSceneTranslate() {
+  return useMutation({
+    mutationFn: (vars: { sceneId: string; language: string }) =>
+      invoke('ai:translateScene', { sceneId: vars.sceneId, language: vars.language }),
+  })
+}
+
+export function useTranslatedEpubExport() {
+  return useMutation({
+    mutationFn: (language: string) => invoke('loc:exportEpub', { language }),
+  })
+}
+
+export function useTranslatedEpubReveal() {
+  return useMutation({
+    mutationFn: (language: string) => invoke('loc:revealEpub', { language }),
+  })
+}
+
 export function useEntityImpact(kind: import('@mirai/shared').ImpactKind, id: string | undefined) {
   return useQuery({
     queryKey: ['ip', 'impact', kind, id],

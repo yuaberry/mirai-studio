@@ -6,6 +6,7 @@ import { clipboard, dialog, shell } from 'electron'
 import { MiraiError, type ProjectConfig } from '@mirai/shared'
 import { handleIpc } from './router'
 import { toOpenedProject, type Container } from '../bootstrap'
+import { readdirSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { newEntityId, LicenseService } from '@mirai/core'
@@ -335,6 +336,96 @@ export function registerIpcHandlers(c: Container): void {
     shell.showItemInFolder(ctx.manga.chapterPackagePath(req.episodeId))
     return { ok: true }
   })
+  // -------------------------------------------------------- Localization Lab (§18)
+  handleIpc('loc:translations:list', (req) => ({
+    translations: requireActive(c).localization.listTranslations(req.sceneId),
+  }))
+  handleIpc('loc:translations:upsert', (req) => ({
+    translation: requireActive(c).localization.upsertTranslation(req.sceneId, req.input),
+  }))
+  handleIpc('loc:translations:delete', (req) => {
+    requireActive(c).localization.deleteTranslation(req.sceneId, req.language)
+    return { ok: true }
+  })
+  handleIpc('loc:coverage', () => {
+    const ctx = requireActive(c)
+    const total = ctx.creative
+      .listEpisodes()
+      .reduce((acc, ep) => acc + ctx.creative.listScenes(ep.id).length, 0)
+    return { coverage: ctx.localization.coverage(total) }
+  })
+  handleIpc('loc:glossary:list', (req) => ({
+    terms: requireActive(c).localization.listGlossary(req.language),
+  }))
+  handleIpc('loc:glossary:upsert', (req) => ({
+    term: requireActive(c).localization.upsertGlossary(req.input),
+  }))
+  handleIpc('loc:glossary:delete', (req) => {
+    requireActive(c).localization.deleteGlossary(req.id)
+    return { ok: true }
+  })
+  handleIpc('ai:translateScene', async (req) => {
+    requireActive(c)
+    const draft = await c.ai.translateScene(req.sceneId, req.language)
+    return { screenplay: draft.screenplay, model: draft.model, durationMs: draft.durationMs }
+  })
+  handleIpc('loc:exportEpub', (req) => {
+    const ctx = requireActive(c)
+    const manifest = ctx.manifest
+    let translatedScenes = 0
+    let fallbackScenes = 0
+    const chapters = ctx.creative.listEpisodes().map((ep) => {
+      const scenes = ctx.creative.listScenes(ep.id)
+      const sceneBodies = scenes
+        .map((sc) => {
+          const original = (sc.screenplay ?? sc.synopsis ?? '').trim()
+          const effective = ctx.localization.effectiveScreenplay(sc.id, original, req.language)
+          if (effective.translated && effective.text.trim().length > 0) translatedScenes += 1
+          else fallbackScenes += 1
+          return effective.text.trim()
+        })
+        .filter((b) => b.length > 0)
+        .join('\n\n')
+      const intro = ep.synopsis ? `${ep.synopsis.trim()}\n\n` : ''
+      return { title: `Capítulo ${ep.number}: ${ep.title}`, body: intro + sceneBodies }
+    })
+    const svc = new EpubService(ctx.summary.path, { now: () => new Date(), isoNow: () => new Date().toISOString() })
+    const result = svc.export({
+      title: `${manifest.config.title} (${req.language})`,
+      author: 'Mirai Studio Author',
+      language: req.language,
+      chapters,
+    })
+    c.logger.info('SYSTEM', `Translated EPUB exported (${req.language}): ${result.path}`, {
+      translatedScenes,
+      fallbackScenes,
+    })
+    return {
+      epubPath: result.path,
+      chapters: result.chapters,
+      translatedScenes,
+      fallbackScenes,
+      bytes: result.bytes,
+    }
+  })
+  handleIpc('loc:revealEpub', (req) => {
+    const ctx = requireActive(c)
+    const dir = join(ctx.summary.path, 'exports', 'epub')
+    const safe = `${ctx.manifest.config.title} (${req.language})`
+      .replace(/[^a-z0-9]+/gi, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase()
+    const candidates = existsSync(dir)
+      ? readdirSync(dir).filter((f) => f.startsWith(safe) && f.endsWith('.epub'))
+      .sort()
+      : []
+    if (candidates.length === 0) {
+      throw new MiraiError('NOT_FOUND', `No ${req.language} EPUB exported yet.`)
+    }
+    shell.showItemInFolder(join(dir, candidates[candidates.length - 1]!))
+    return { ok: true }
+  })
+
   // ----------------------------------------------- Visual Dev Lab poster studio (§7)
   const posterInput = () => {
     const ctx = requireActive(c)

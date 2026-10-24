@@ -28,6 +28,7 @@ import {
 
   PanelLetteringDraft,
   TaglineDraft,
+  SceneTranslationDraft,
 } from '@mirai/shared'
 import { assertExplicitCastAllowed, maturePipelineActive } from '@mirai/core'
 import type { DossierAiSections, DossierData } from '@mirai/core'
@@ -41,6 +42,7 @@ import {
   draftScreenplayInstruction,
   draftPanelLetteringInstruction,
   draftTaglinesInstruction,
+  translateSceneInstruction,
   estimateCostUsd,
   type ContextCharacter,
   type ContextScene,
@@ -1032,6 +1034,56 @@ export class AiHost {
       durationMs,
     })
     return { bubbles, model: this.deps.settings.get().ai.defaultModel ?? 'unknown', durationMs }
+  }
+
+  // ------------------------------------- scene translation (v0.29 §18)
+
+  /**
+   * Localization specialist: one scene's screenplay into the target
+   * language, honoring the project GLOSSARY. Zod-validated; saving the
+   * translation (and its status) stays a human decision.
+   */
+  async translateScene(sceneId: string, targetLanguage: string): Promise<{
+    screenplay: string
+    model: string
+    durationMs: number
+  }> {
+    const startedAt = Date.now()
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+
+    const scene = ctx.creative.getSceneById(sceneId)
+    if (!scene.screenplay || scene.screenplay.trim().length === 0) {
+      throw new MiraiError(
+        'VALIDATION_ERROR',
+        'The scene has no screenplay to translate yet — write or draft it first.',
+      )
+    }
+    const bible = ctx.creative.getBible()
+    const glossary = ctx.localization.listGlossary(targetLanguage).map((t) => ({
+      source: t.source,
+      target: t.target,
+    }))
+
+    const instruction = translateSceneInstruction({
+      sceneTitle: scene.title,
+      targetLanguage,
+      screenplay: scene.screenplay,
+      premise: bible.premise,
+      tone: bible.tone,
+      glossary,
+    })
+    const draft = await this.chatJsonCore(instruction, SceneTranslationDraft, 0.3, 4_096)
+
+    const durationMs = Date.now() - startedAt
+    this.deps.logger.log('info', 'AI', 'Scene translation drafted', {
+      sceneId,
+      targetLanguage,
+      glossaryTerms: glossary.length,
+      chars: draft.screenplay.length,
+      durationMs,
+    })
+    return { screenplay: draft.screenplay, model: this.deps.settings.get().ai.defaultModel ?? 'unknown', durationMs }
   }
 
   // ----------------------------------------------- poster taglines (v0.28 §7)

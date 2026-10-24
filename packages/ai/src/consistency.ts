@@ -199,3 +199,43 @@ RULES:
 - Language: match the premise's language (default English if unclear).
 Return ONLY a JSON object: { "taglines": ["…", "…", "…"] }`
 }
+
+/**
+ * The Localization Lab's translation instruction (v0.29, §18): one
+ * scene's screenplay into the target language, honoring the project's
+ * GLOSSARY (the approved term base) and the work's tone. The response
+ * is zod-validated; saving the translation stays a human decision.
+ */
+export function translateSceneInstruction(input: {
+  sceneTitle: string
+  targetLanguage: string
+  screenplay: string
+  premise?: string
+  tone?: string
+  glossary: Array<{ source: string; target: string }>
+}): string {
+  const glossary =
+    input.glossary.length > 0
+      ? `GLOSSARY (MANDATORY — use EXACTLY these translations, never localize them differently):
+${input.glossary.map((g) => `- "${g.source}" → "${g.target}"`).join('\n')}`
+      : 'No glossary terms for this language yet — keep names and coined terms consistent anyway.'
+  const context = [
+    input.premise ? `PREMISE (for tone, do NOT translate): ${input.premise}` : null,
+    input.tone ? `TONE: ${input.tone}` : null,
+  ].filter(Boolean)
+  return `You are the localization specialist of Mirai Studio. Translate the ENTIRE scene screenplay into ${input.targetLanguage}.
+
+SCENE: ${input.sceneTitle}
+${context.length > 0 ? context.join('\n') : ''}
+
+${glossary}
+
+SOURCE SCREENPLAY (translate everything, keep the format: caps character names, quoted dialogue, action lines):
+${input.screenplay}
+
+RULES:
+- Preserve the screenplay structure (names in caps, quotes, line breaks, beats).
+- Keep character NAMES untranslated unless the glossary says otherwise.
+- Sound effects get natural ${input.targetLanguage} onomatopoeia.
+Return ONLY a JSON object: { "screenplay": "the full translated text with \\n for newlines" }`
+}

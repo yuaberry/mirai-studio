@@ -1998,6 +1998,107 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V29 LOCALIZATION: glossary, translations, AI draft, translated EPUB', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    const ep = ctx.creative.listEpisodes()[0]!
+
+    // ---- glossary: the term base the AI must honor
+    const term = ctx.localization.upsertGlossary({ source: 'Lampião de Prata', target: 'Silver Lantern', language: 'pt-BR' })
+    const termUp = ctx.localization.upsertGlossary({ source: 'Lampião de Prata', target: 'The Silver Lamp', language: 'pt-BR' })
+    if (termUp.id !== term.id) throw new Error('glossary upsert must update in place')
+    if (ctx.localization.listGlossary('pt-BR').length !== 1) throw new Error('glossary row count wrong')
+
+    // ---- scene with screenplay → translation round-trip
+    const locScene = ctx.creative.createScene(ep.id, { title: 'Cena da tradução' })
+    ctx.creative.updateScene(locScene.id, {
+      title: locScene.title,
+      timeOfDay: locScene.timeOfDay,
+      characterIds: locScene.characterIds,
+      synopsis: locScene.synopsis,
+      screenplay: 'AYAKA\n"O lampião responde à lua."',
+    })
+    const saved = ctx.localization.upsertTranslation(locScene.id, {
+      language: 'pt-BR',
+      screenplay: 'PLACEHOLDER',
+      status: 'REVIEW',
+    })
+    if (saved.status !== 'REVIEW') throw new Error('translation status not persisted')
+    const again = ctx.localization.upsertTranslation(locScene.id, { language: 'pt-BR', screenplay: 'UPDATE', status: 'FINAL' })
+    if (again.id !== saved.id || again.status !== 'FINAL') throw new Error('translation upsert must update in place')
+
+    // ---- coverage counts from live queries
+    const total = ctx.creative.listEpisodes().reduce((acc, e) => acc + ctx.creative.listScenes(e.id).length, 0)
+    const cov = ctx.localization.coverage(total).find((c) => c.language === 'pt-BR')!
+    if (cov.translated !== 1 || cov.total < 1) throw new Error('coverage counts wrong')
+
+    // ---- AI translation through the REAL host (mocked transport router)
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (_url: unknown, init?: { body?: string }) => {
+      const body = String(init?.body ?? '')
+      const json = (payload: string) => ({
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(JSON.stringify({ choices: [{ message: { content: payload } }] })))
+            controller.close()
+          },
+        }),
+        text: async () => JSON.stringify({ choices: [{ message: { content: payload } }] }),
+      })
+      if (body.includes('localization specialist')) {
+        if (!body.includes('The Silver Lamp')) throw new Error('glossary not baked into the AI context')
+        return json(JSON.stringify({ screenplay: 'AYAKA\n"O Lampião de Prata responde à lua."' }))
+      }
+      return json(JSON.stringify({ ok: true }))
+    }) as typeof fetch
+    const settingsSvc = new SettingsService(appDb)
+    const credentialsSvc = new CredentialStore(appDb, plaintextCodec, systemClock)
+    credentialsSvc.set('openrouter', 'sk-smoke-v29')
+    const ai = new AiHost({
+      credentials: credentialsSvc,
+      settings: settingsSvc,
+      projects,
+      logger,
+      emitter: { send: () => undefined, window: null } as never,
+    })
+    const draft = await ai.translateScene(locScene.id, 'pt-BR')
+    globalThis.fetch = realFetch
+    if (!draft.screenplay.includes('Lampião de Prata')) throw new Error('AI translation wrong')
+    if (draft.screenplay.includes('The Silver Lamp')) throw new Error('AI must translate the prose, not the glossary keys')
+
+    // ---- translated EPUB: translation where present, fallback where not
+    ctx.localization.upsertTranslation(locScene.id, { language: 'pt-BR', screenplay: 'TRADUZIDO V29', status: 'FINAL' })
+    let translatedCount = 0
+    let fallbackCount = 0
+    const chapters = ctx.creative.listEpisodes().map((e) => {
+      const sceneBodies = ctx.creative
+        .listScenes(e.id)
+        .map((sc) => {
+          const original = (sc.screenplay ?? sc.synopsis ?? '').trim()
+          const eff = ctx.localization.effectiveScreenplay(sc.id, original, 'pt-BR')
+          if (eff.translated && eff.text.trim().length > 0) translatedCount += 1
+          else fallbackCount += 1
+          return eff.text.trim()
+        })
+        .filter((b) => b.length > 0)
+        .join('\n\n')
+      return { title: `Capítulo ${e.number}: ${e.title}`, body: e.synopsis ? `${e.synopsis}\n\n${sceneBodies}` : sceneBodies }
+    })
+    const epubSvc = new EpubService(ctx.summary.path, systemClock)
+    const epubResult = epubSvc.export({ title: 'Smoke (pt-BR)', author: 'Smoke', language: 'pt-BR', chapters })
+    const epubEntries = readZipEntries(readFileSync(epubResult.path))
+    const ch1 = epubEntries.find((e) => e.name === 'OEBPS/chapter1.xhtml')?.data.toString('utf8') ?? ''
+    if (!ch1.includes('TRADUZIDO V29')) throw new Error('translated scene missing from EPUB')
+    if (!translatedCount || !fallbackCount) throw new Error('fallback counts must both be real')
+
+    // cleanup
+    ctx.localization.deleteTranslation(locScene.id, 'pt-BR')
+    ctx.localization.deleteGlossary(term.id)
+    ctx.creative.deleteScene(locScene.id)
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

@@ -20,6 +20,7 @@ import {
   Home,
   LayoutGrid,
   ListVideo,
+  Languages,
   PanelTop,
   Palette,
   Play,
@@ -58,6 +59,7 @@ import { TimelinePage } from '../modules/timeline/TimelinePage'
 import { RenderPage } from '../modules/render/RenderPage'
 import { ProductionPage } from '../modules/production/ProductionPage'
 import { SubtitlesPage } from '../modules/subtitles/SubtitlesPage'
+import { LocalizationPage } from '../modules/localization/LocalizationPage'
 import { WorkflowsPage } from '../modules/workflows/WorkflowsPage'
 import { PluginsPage } from '../modules/plugins/PluginsPage'
 import { ProducerPage } from '../modules/producer/ProducerPage'
@@ -99,6 +101,7 @@ const MANGA_NAV: ReadonlyArray<NavEntry> = [
 const PRODUCTION_NAV: ReadonlyArray<NavEntry> = [
   { view: 'render', label: 'Render & Export', icon: FileVideo },
   { view: 'production', label: 'Production', icon: BarChart3 },
+  { view: 'localization', label: 'Localization', icon: Languages },
   { view: 'jobs', label: 'Jobs', icon: Play },
   { view: 'backups', label: 'Backups', icon: HardDriveDownload },
 ]
@@ -325,7 +328,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                v0.28.0
+                v0.29.0
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio"
@@ -353,6 +356,7 @@ export function AppShell() {
           {view === 'render' && <RenderPage />}
           {view === 'production' && <ProductionPage />}
           {view === 'subtitles' && <SubtitlesPage />}
+          {view === 'localization' && <LocalizationPage />}
           {view === 'workflows' && <WorkflowsPage />}
           {view === 'producer' && <ProducerPage />}
           {view === 'plugins' && <PluginsPage />}
