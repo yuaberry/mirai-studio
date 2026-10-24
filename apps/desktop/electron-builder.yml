@@ -1,0 +1,92 @@
+# Mirai Studio — packaging (electron-builder)
+appId: com.miraistudio.app
+productName: Mirai Studio
+executableName: mirai-studio
+copyright: Copyright © 2026 Mirai Studio
+
+directories:
+  output: release
+  buildResources: build
+
+# The app ships only the built bundles + the native runtime dependency.
+# @mirai/* workspace packages are bundled into out/ (devDependencies).
+files:
+  - out/**
+  - package.json
+  - resources/ffmpeg/**
+
+# Native modules must be unpacked from the asar archive to load.
+# The bundled LGPL FFmpeg binaries must also be unpacked to be spawnable.
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**
+  - resources/ffmpeg/**
+
+# better-sqlite3 is already compiled against Electron's ABI by
+# `bun run rebuild:native` — skip the builder's own rebuild step.
+npmRebuild: false
+
+compression: normal
+
+linux:
+  icon: build/icons
+  category: Graphics
+  target:
+    - target: deb
+      arch: [x64]
+    - target: AppImage
+      arch: [x64]
+    - target: rpm
+      arch: [x64]
+  desktop:
+    Name: Mirai Studio
+    Comment: AI-Native Anime & Animation Production Studio
+    StartupWMClass: mirai-studio
+    GenericName: Production Suite
+
+deb:
+  artifactName: mirai-studio_${version}_${arch}.${ext}
+  maintainer: Mirai Studio Developers <dev@mirai.studio>
+  priority: optional
+  packageCategory: graphics
+  # v0.20: default electron-builder steps + gtk-update-icon-cache — without
+  # the cache refresh Linux Mint/Cinnamon shows the app with NO icon.
+  afterInstall: build/after-install.sh
+  afterRemove: build/after-remove.sh
+
+rpm:
+  # Without artifactName the default uses the package name "@mirai/desktop" —
+  # the slash creates a phantom directory and fpm dies (caught on CI run 2).
+  artifactName: mirai-studio_${version}_${arch}.${ext}
+  # RPM package names cannot contain spaces — productName "Mirai Studio"
+  # would land raw in the spec Name field and rpmbuild rejects it.
+  packageName: mirai-studio
+  # electron-builder maps EVERY xz to xzmt (threaded) which Ubuntu rpmbuild
+  # rejects; the schema wants "gz", fpm wants "gzip" — bzip2 is the only
+  # value valid in the schema, in fpm AND in rpmbuild. Slightly larger
+  # package; the deb and AppImage keep xz.
+  compression: bzip2
+
+appImage:
+  artifactName: mirai-studio_${version}_${arch}.AppImage
+
+# Windows installer — built on GitHub Actions windows runners (v0.16+).
+win:
+  icon: build/icon.png
+  target: nsis
+
+nsis:
+  artifactName: mirai-studio_${version}_${arch}-setup.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+# macOS — built on GitHub Actions macOS runners (v0.16+). Unsigned: users
+# right-click → Open on first launch (Gatekeeper); signing needs Apple Dev ID.
+mac:
+  icon: build/icon.png
+  category: public.app-category.graphics-design
+  target:
+    - dmg
+  artifactName: mirai-studio_${version}_${arch}.${ext}
+dmg:
+  artifactName: mirai-studio_${version}_${arch}.dmg
