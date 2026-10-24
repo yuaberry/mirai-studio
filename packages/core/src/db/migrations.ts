@@ -553,4 +553,21 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0016_moodboard_items',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE moodboard_items (
+          id TEXT PRIMARY KEY,
+          image_asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+          caption TEXT,
+          color TEXT,
+          order_index INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_moodboard_order ON moodboard_items (order_index);
+      `)
+    },
+  },
 ]

@@ -30,6 +30,7 @@ import {
   IMPACT_KINDS,
   ImpactResult,
 } from '../entities/ip'
+import { MoodboardItemInput, MoodboardItem } from '../entities/moodboard'
 
 import {
   OpenedProject,
@@ -340,6 +341,28 @@ export const ipcContracts = {
     request: z.object({ episodeId: zEntityId }),
     response: z.object({ ok: z.boolean() }),
   },
+  // ---------------------------------------------------- Visual Dev Lab moodboard (§7)
+  'moodboard:list': {
+    request: emptyRequest,
+    response: z.object({ items: z.array(MoodboardItem) }),
+  },
+  'moodboard:attach': {
+    request: emptyRequest,
+    response: z.object({ item: MoodboardItem }),
+  },
+  'moodboard:update': {
+    request: z.object({ id: zEntityId, input: MoodboardItemInput }),
+    response: z.object({ item: MoodboardItem }),
+  },
+  'moodboard:remove': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'moodboard:move': {
+    request: z.object({ id: zEntityId, direction: z.enum(['up', 'down']) }),
+    response: z.object({ ok: z.boolean() }),
+  },
+
   /** v0.25 §8 slice 2: SVG page proofs + lettering script zipped per chapter. */
   'manga:exportPackage': {
     request: z.object({ episodeId: zEntityId }),

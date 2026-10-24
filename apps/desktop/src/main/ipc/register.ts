@@ -335,6 +335,38 @@ export function registerIpcHandlers(c: Container): void {
     shell.showItemInFolder(ctx.manga.chapterPackagePath(req.episodeId))
     return { ok: true }
   })
+  // -------------------------------------------------- Visual Dev Lab moodboard (§7)
+  handleIpc('moodboard:list', () => ({ items: requireActive(c).moodboard.list() }))
+  handleIpc('moodboard:attach', async () => {
+    const ctx = requireActive(c)
+    const win = c.emitter.window
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Import a moodboard reference',
+      properties: ['openFile'],
+      filters: [
+        {
+          name: 'Images',
+          extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
+        },
+      ],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      throw new MiraiError('CANCELLED', 'Moodboard import cancelled.')
+    }
+    const item = ctx.moodboard.attachImage(result.filePaths[0]!)
+    c.logger.info('MEDIA', `Moodboard reference imported`, { itemId: item.id, assetId: item.imageAssetId })
+    return { item }
+  })
+  handleIpc('moodboard:update', (req) => ({ item: requireActive(c).moodboard.update(req.id, req.input) }))
+  handleIpc('moodboard:remove', (req) => {
+    requireActive(c).moodboard.remove(req.id)
+    return { ok: true }
+  })
+  handleIpc('moodboard:move', (req) => {
+    requireActive(c).moodboard.move(req.id, req.direction)
+    return { ok: true }
+  })
+
   handleIpc('ai:draftPanelLettering', async (req) => {
     requireActive(c) // honest NOT_FOUND when no project is open
     const draft = await c.ai.draftPanelLettering(req.panelId)

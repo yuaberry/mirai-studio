@@ -1513,6 +1513,40 @@ export function useMangaRevealScript() {
   })
 }
 
+export function useMoodboard() {
+  return useQuery({
+    queryKey: ['moodboard'],
+    queryFn: () => invoke('moodboard:list').then((r) => r.items),
+  })
+}
+
+export function useMoodboardMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['moodboard'] })
+  }
+  return {
+    attach: useMutation({
+      mutationFn: () => invoke('moodboard:attach').then((r) => r.item),
+      onSuccess: () => invalidate(),
+    }),
+    update: useMutation({
+      mutationFn: (vars: { id: string; input: import('@mirai/shared').MoodboardItemInput }) =>
+        invoke('moodboard:update', { id: vars.id, input: vars.input }).then((r) => r.item),
+      onSuccess: () => invalidate(),
+    }),
+    remove: useMutation({
+      mutationFn: (vars: { id: string }) => invoke('moodboard:remove', { id: vars.id }).then(() => true),
+      onSuccess: () => invalidate(),
+    }),
+    move: useMutation({
+      mutationFn: (vars: { id: string; direction: 'up' | 'down' }) =>
+        invoke('moodboard:move', { id: vars.id, direction: vars.direction }).then(() => true),
+      onSuccess: () => invalidate(),
+    }),
+  }
+}
+
 export function useEntityImpact(kind: import('@mirai/shared').ImpactKind, id: string | undefined) {
   return useQuery({
     queryKey: ['ip', 'impact', kind, id],

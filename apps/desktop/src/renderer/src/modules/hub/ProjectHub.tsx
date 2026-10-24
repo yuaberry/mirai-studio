@@ -15,7 +15,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { MiraiError, type ProjectSummary } from '@mirai/shared'
-import { Badge, Button, Card, Spinner } from '../../system/ui'
+import { Button, Card, Spinner } from '../../system/ui'
 import { SkeletonList } from '../../system/Skeleton'
 import { EmptyState, ErrorState } from '../../system/EmptyState'
 import { ConfirmModal } from '../../system/Modal'
@@ -25,6 +25,7 @@ import { useProjectAction, useProjects, useOpenProject, useSettings } from '../.
 import { t } from '../../lib/i18n'
 import { useAppStore, toast } from '../../store/appStore'
 import { NewProjectModal } from './NewProjectModal'
+import { PetalCanvas } from './PetalCanvas'
 
 export function ProjectHub() {
   const { data: projects, isLoading, isError, error, refetch } = useProjects(true)
@@ -39,7 +40,7 @@ export function ProjectHub() {
 
   return (
     <div className="min-h-full">
-      <Hero tr={tr} onCreate={() => setNewProjectOpen(true)} onOpen={() => void openFolderFlow()} />
+      <Hero tr={tr} stats={{ active: active.length, archived: archived.length }} onCreate={() => setNewProjectOpen(true)} onOpen={() => void openFolderFlow()} />
       <div className="mx-auto w-full max-w-5xl px-8 pb-10">
         {isLoading ? (
           <SkeletonList rows={6} kind="card" />
@@ -96,24 +97,42 @@ export function ProjectHub() {
   )
 }
 
-function Hero({ tr, onCreate, onOpen }: { tr: (k: string) => string; onCreate: () => void; onOpen: () => void }) {
+function Hero({ tr, stats, onCreate, onOpen }: { tr: (k: string) => string; stats: { active: number; archived: number }; onCreate: () => void; onOpen: () => void }) {
   return (
     <div className="hero-glow relative overflow-hidden border-b border-mirai-border">
-      <div className="grid-overlay pointer-events-none absolute inset-0 opacity-30" />
-      <div className="relative mx-auto flex w-full max-w-5xl flex-col justify-between gap-6 px-8 py-12 md:flex-row md:items-end">
+      <PetalCanvas className="pointer-events-none absolute inset-0 h-full w-full" />
+      <div className="grid-overlay pointer-events-none absolute inset-0 opacity-25" />
+      <div className="relative mx-auto flex w-full max-w-5xl flex-col justify-between gap-6 px-8 pt-16 pb-12 md:flex-row md:items-end">
         <div>
-          <p className="mb-2 flex items-center gap-2 font-display text-[10px] font-bold tracking-[0.28em] text-mirai-faint uppercase">
+          <p className="mb-3 flex items-center gap-2 font-display text-[10px] font-bold tracking-[0.28em] text-mirai-faint uppercase">
             <span className="inline-block h-px w-8 bg-gradient-mirai" />
             {tr('Mirai Studio · Project Hub')}
           </p>
-          <h1 className="font-display text-4xl leading-tight font-bold text-mirai-text">
-            {tr('Your stories,')} <span className="text-gradient-mirai">{tr('stories')}</span>,
-            <br />
-            {tr('ready to become anime.')}
+          <h1 className="font-display text-5xl leading-[1.05] font-bold tracking-tight text-mirai-text">
+            {tr('Your stories,')}{' '}
+            <span className="text-gradient-mirai">{tr('ready to become anime.')}</span>
           </h1>
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-mirai-dim">
+          <p className="mt-4 max-w-xl text-sm leading-relaxed text-mirai-dim">
             {tr('From story bible to export — characters, scenes, screenplay and a curated manga prompt library. Everything stays on your machine.')}
           </p>
+          {/* real stats from the registry */}
+          <div className="mt-5 flex items-center gap-4 text-[11px] font-semibold text-mirai-faint">
+            <span className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              {stats.active} {stats.active === 1 ? tr('active production') : tr('active productions')}
+            </span>
+            {stats.archived > 0 ? (
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-mirai-faint" />
+                {stats.archived} {tr('archived')}
+              </span>
+            ) : null}
+            <span className="h-3 w-px bg-mirai-border-strong" />
+            <span className="flex items-center gap-1.5 text-mirai-accent">
+              <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
+              100% local-first
+            </span>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button variant="outline" size="lg" onClick={onOpen}>
@@ -201,31 +220,49 @@ function ProjectCard({ project, tr, dimmed = false }: { project: ProjectSummary;
     })
   }
 
+  // a stable hue per project (id hash) — every card gets its own cover tone
+  const hue = [...project.id].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) % 360, 7)
+
   return (
     <Card
-      className={`card-lift group relative flex cursor-pointer flex-col gap-3 overflow-hidden p-4 hover:border-mirai-accent/40 ${
-        dimmed ? 'opacity-60 hover:opacity-100' : ''
+      className={`card-lift group relative flex cursor-pointer flex-col overflow-hidden hover:border-mirai-accent/40 ${
+        dimmed ? 'opacity-70 hover:opacity-100' : ''
       }`}
       onClick={openIt}
     >
-      {/* brand spine — a thin gradient edge that lights up on hover */}
-      <span className="absolute top-3 bottom-3 left-0 w-[3px] rounded-r-full bg-gradient-mirai opacity-40 transition-opacity group-hover:opacity-100" />
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="truncate font-display text-sm font-semibold text-mirai-text">
-            {project.name}
-          </h3>
-          {project.description ? (
-            <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-mirai-dim">
-              {project.description}
+      {/* cover band — per-project gradient with soft grain */}
+      <div
+        className="relative h-20 overflow-hidden"
+        style={{
+          background: `linear-gradient(135deg, hsl(${hue} 70% 24%), hsl(${(hue + 48) % 360} 72% 30%))`,
+        }}
+      >
+        <div className="grid-overlay absolute inset-0 opacity-20" />
+        <span
+          className="absolute -bottom-8 -left-4 h-24 w-24 rounded-full blur-xl"
+          style={{ background: `hsl(${(hue + 96) % 360} 80% 45% / 0.35)` }}
+        />
+        <span
+          className={`absolute top-2.5 left-3 rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wider uppercase ${
+            project.status === 'ACTIVE' ? 'bg-emerald-400/15 text-emerald-300' : 'bg-white/10 text-white/70'
+          }`}
+        >
+          {tr(project.status === 'ACTIVE' ? '● Active' : 'Archived')}
+        </span>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-2 p-4 pt-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="truncate font-display text-sm font-semibold text-mirai-text">
+              {project.name}
+            </h3>
+            <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-mirai-faint">
+              <Clock className="h-3 w-3" /> {formatWhen(project.lastOpenedAt ?? project.updatedAt)}
             </p>
-          ) : null}
-          <p className="mt-1 flex items-center gap-1 truncate text-[11px] text-mirai-faint">
-            <Clock className="h-3 w-3" /> {formatWhen(project.lastOpenedAt ?? project.updatedAt)}
-          </p>
-        </div>
+          </div>
         <div
-          className="relative"
+          className="relative -mt-1"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
@@ -291,25 +328,26 @@ function ProjectCard({ project, tr, dimmed = false }: { project: ProjectSummary;
             </>
           )}
         </div>
-      </div>
+        </div>
 
-      {project.description ? (
-        <p className="line-clamp-2 text-xs leading-relaxed text-mirai-dim">{project.description}</p>
-      ) : (
-        <p className="text-xs italic text-mirai-faint">{tr('No description')}</p>
-      )}
+        {project.description ? (
+          <p className="line-clamp-2 text-xs leading-relaxed text-mirai-dim">{project.description}</p>
+        ) : (
+          <p className="text-xs italic text-mirai-faint">{tr('No description')}</p>
+        )}
 
-      <p className="truncate text-[10px] text-mirai-faint" title={project.path}>
-        {project.path}
-      </p>
+        <p className="mt-auto truncate text-[10px] text-mirai-faint" title={project.path}>
+          {project.path}
+        </p>
 
-      <div className="flex items-center justify-between">
-        <Badge tone={project.status === 'ACTIVE' ? 'success' : 'neutral'}>
-          {tr(project.status === 'ACTIVE' ? '● Active' : 'Archived')}
-        </Badge>
-        {openProject.isPending && openProject.variables === project.path ? (
-          <Spinner className="h-3.5 w-3.5" />
-        ) : null}
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-bold tracking-wider text-mirai-faint uppercase transition-colors group-hover:text-mirai-accent">
+            {tr('Open')} →
+          </span>
+          {openProject.isPending && openProject.variables === project.path ? (
+            <Spinner className="h-3.5 w-3.5" />
+          ) : null}
+        </div>
       </div>
 
       <ConfirmModal

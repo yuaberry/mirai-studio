@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Loader2, PencilLine } from 'lucide-react'
 import type { StyleBible } from '@mirai/shared'
 import { Button, Card, Label, Textarea, Spinner } from '../../system/ui'
+import { MoodboardCard } from './MoodboardCard'
 import { useSettings, useStyleBible, useUpdateStyleBible } from '../../lib/queries'
 import { T } from '../../system/T'
 
@@ -210,6 +211,10 @@ export function StyleBiblePage() {
           ))}
         </div>
       </Card>
+
+      <div className="mt-6">
+        <MoodboardCard />
+      </div>
     </div>
   )
 }

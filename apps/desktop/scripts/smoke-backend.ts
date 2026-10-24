@@ -1880,6 +1880,41 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V27 MOODBOARD: references, palette, ordering, honest prune', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+
+    const refPng = join(ctx.summary.path, '..', 'moodboard-ref.png')
+    writeFileSync(refPng, Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c626001000000ffff03000006000557bfabd40000000049454e44ae426082', 'hex'))
+
+    // import two real references through the REAL service
+    const a = ctx.moodboard.attachImage(refPng)
+    const b = ctx.moodboard.attachImage(refPng)
+    if (ctx.moodboard.list().length !== 2) throw new Error('moodboard items not listed')
+    if (!existsSync(join(ctx.summary.path, 'images', 'assets', `${a.imageAssetId}.png`))) throw new Error('asset file missing')
+
+    // captions + palette (the color script)
+    ctx.moodboard.update(a.id, { caption: 'Templo ao anoitecer', color: '#f472b6' })
+    ctx.moodboard.update(b.id, { color: '#22d3ee' })
+    if (ctx.moodboard.palette().join(',') !== '#f472b6,#22d3ee') throw new Error('palette wrong')
+    let colorThrew = false
+    try { ctx.moodboard.update(a.id, { color: 'rosa' }) } catch { colorThrew = true }
+    if (!colorThrew) throw new Error('invalid hex must throw')
+
+    // ordering round-trip
+    ctx.moodboard.move(a.id, 'down')
+    if (ctx.moodboard.list()[0]!.id !== b.id) throw new Error('move did not reorder')
+
+    // removal prunes the unreferenced asset file
+    const aAsset = a.imageAssetId
+    ctx.moodboard.remove(a.id)
+    ctx.moodboard.remove(b.id)
+    if (ctx.moodboard.list().length !== 0) throw new Error('board not emptied')
+    if (existsSync(join(ctx.summary.path, 'images', 'assets', `${aAsset}.png`))) throw new Error('asset not pruned')
+
+    rmSync(refPng, { force: true })
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

@@ -30,6 +30,7 @@ export type { ProjectServiceOptions, OpenProjectContext } from './projects/proje
 // creative
 export { CreativeService } from './creative/creativeService'
 export { MangaService } from './creative/mangaService'
+export { MoodboardService } from './visual/moodboardService'
 
 // prompts
 export { PromptService } from './prompts/promptService'
