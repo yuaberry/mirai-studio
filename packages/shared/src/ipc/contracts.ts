@@ -21,6 +21,8 @@ import {
   MangaPageRecord,
   MangaPanelInput,
   MangaPanelRecord,
+  BUBBLE_KINDS,
+  BUBBLE_TAILS,
 } from '../entities/manga'
 import {
   CreateDerivedWorkInput,
@@ -337,6 +339,36 @@ export const ipcContracts = {
   'manga:revealScript': {
     request: z.object({ episodeId: zEntityId }),
     response: z.object({ ok: z.boolean() }),
+  },
+  /** v0.25 §8 slice 2: SVG page proofs + lettering script zipped per chapter. */
+  'manga:exportPackage': {
+    request: z.object({ episodeId: zEntityId }),
+    response: z.object({
+      path: z.string(),
+      pages: z.number().int().min(0),
+      bubbles: z.number().int().min(0),
+      bytes: z.number().int().min(0),
+    }),
+  },
+  'manga:revealPackage': {
+    request: z.object({ episodeId: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** AI letterer: draft panel lettering from the linked shot's screenplay. */
+  'ai:draftPanelLettering': {
+    request: z.object({ panelId: zEntityId }),
+    response: z.object({
+      bubbles: z.array(
+        z.object({
+          kind: z.enum(BUBBLE_KINDS),
+          characterId: z.string().optional(),
+          text: z.string().min(1),
+          tail: z.enum(BUBBLE_TAILS),
+        }),
+      ).max(12),
+      model: z.string(),
+      durationMs: z.number().int().min(0),
+    }),
   },
 
   // ---------------------------------------------------------------- IP graph (§4)

@@ -121,6 +121,11 @@ export {
   MangaPageRecord,
   MangaPanelInput,
   MangaPanelRecord,
+  PanelCoords,
+  PanelLetteringDraft,
+  PanelLetteringDraftBubble,
+  mirrorX,
+  mirrorTail,
   zReadingDirection,
 } from './entities/manga'
 export {

@@ -13,9 +13,11 @@ import {
   BookOpen,
   ImagePlus,
   MessageSquarePlus,
+  Package,
   Plus,
   Save,
   Trash2,
+  Wand2,
 } from 'lucide-react'
 import {
   BUBBLE_KINDS,
@@ -44,7 +46,11 @@ import {
   useMangaPanelMutations,
   useMangaScriptExport,
   useMangaRevealScript,
+  useMangaPackageExport,
+  useMangaRevealPackage,
+  usePanelLetteringDraft,
 } from '../../lib/queries'
+import { PageCanvas } from './PageCanvas'
 import { invoke } from '../../lib/ipc'
 import { toast } from '../../store/appStore'
 import { T } from '../../system/T'
@@ -93,6 +99,8 @@ export function MangaStudioPage() {
   const panelMutations = useMangaPanelMutations()
   const scriptExport = useMangaScriptExport()
   const revealScript = useMangaRevealScript()
+  const packageExport = useMangaPackageExport()
+  const revealPackage = useMangaRevealPackage()
 
   const selectedEpisode = useMemo(
     () => (episodes ?? []).find((e) => e.id === selectedEpisodeId) ?? null,
@@ -211,6 +219,41 @@ export function MangaStudioPage() {
               }}
             >
               ↗
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              title="Reveal the chapter proof package in the file manager"
+              onClick={() => {
+                if (!selectedEpisodeId) return
+                revealPackage.mutate(selectedEpisodeId, {
+                  onError: (err) =>
+                    toast({ kind: 'error', title: 'Reveal failed', description: err.message }),
+                })
+              }}
+            >
+              📦↗
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              loading={packageExport.isPending}
+              title="SVG page proofs + lettering script, zipped per chapter"
+              onClick={() => {
+                if (!selectedEpisodeId) return
+                packageExport.mutate(selectedEpisodeId, {
+                  onSuccess: (r) =>
+                    toast({
+                      kind: 'success',
+                      title: 'Chapter package exported',
+                      description: `${r.pages} page proofs, ${r.bubbles} bubbles — ${r.path}`,
+                    }),
+                  onError: (err) =>
+                    toast({ kind: 'error', title: 'Package export failed', description: err.message }),
+                })
+              }}
+            >
+              <Package className="h-3.5 w-3.5" /> <T k="Proofs" />
             </Button>
             <Button
               size="sm"
@@ -475,6 +518,39 @@ function PageEditor(props: {
         />
       </div>
 
+      {/* ------------------------------------------------------- page canvas */}
+      {!isLoading && !isError ? (
+        <PageCanvas
+          page={page}
+          panels={panels ?? []}
+          rtl={page.readingDirection === 'RTL'}
+          onCommit={(panel, coords) => {
+            panelMutations.update.mutate(
+              {
+                id: panel.id,
+                input: {
+                  shotId: panel.shotId,
+                  lettering: panel.lettering.map((b) => ({
+                    kind: b.kind,
+                    characterId: b.characterId,
+                    text: b.text,
+                    x: b.x,
+                    y: b.y,
+                    width: b.width,
+                    tail: b.tail,
+                  })),
+                  coords,
+                },
+              },
+              {
+                onError: (err) =>
+                  toast({ kind: 'error', title: 'Layout save failed', description: err.message }),
+              },
+            )
+          }}
+        />
+      ) : null}
+
       {/* -------------------------------------------------------- panel strip */}
       <div className="space-y-3">
         {isLoading ? (
@@ -539,6 +615,7 @@ function PanelCard(props: {
   const [shotId, setShotId] = useState(panel.shotId ?? '')
   const [bubbles, setBubbles] = useState<BubbleDraft[]>(() => panelToDraft(panel))
   const [dirty, setDirty] = useState(false)
+  const aiDraft = usePanelLetteringDraft()
 
   useEffect(() => {
     setShotId(panel.shotId ?? '')
@@ -812,6 +889,40 @@ function PanelCard(props: {
             }}
           >
             <MessageSquarePlus className="h-3.5 w-3.5" /> <T k="Add bubble" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!shotId}
+            loading={aiDraft.isPending}
+            title={shotId ? 'AI drafts lettering from the linked shot\'s screenplay — you review before saving' : 'Link a storyboard shot first'}
+            onClick={() =>
+              aiDraft.mutate(panel.id, {
+                onSuccess: (r) => {
+                  setBubbles(
+                    r.bubbles.map((b, i) => ({
+                      kind: b.kind,
+                      characterId: b.characterId,
+                      text: b.text,
+                      x: 0.3 + ((i * 0.25) % 0.45),
+                      y: 0.15 + i * 0.18,
+                      width: 0.35,
+                      tail: b.tail,
+                    })),
+                  )
+                  setDirty(true)
+                  toast({
+                    kind: 'success',
+                    title: 'Lettering drafted',
+                    description: `${r.bubbles.length} bubbles — review and save.`,
+                  })
+                },
+                onError: (err) =>
+                  toast({ kind: 'error', title: 'AI draft failed', description: err.message }),
+              })
+            }
+          >
+            <Wand2 className="h-3.5 w-3.5" /> <T k="AI lettering" />
           </Button>
           <Button
             size="sm"

@@ -198,6 +198,8 @@ const PT_BR: Record<string, string> = {
   'Save panel': 'Salvar quadrinho',
   'Panel art': 'Arte do quadrinho',
   'Script': 'Roteiro',
+  'Proofs': 'Provas',
+  'AI lettering': 'Lettering IA',
   'Save': 'Salvar',
 }
 /** Translate: pt-BR when translated, English source otherwise. */

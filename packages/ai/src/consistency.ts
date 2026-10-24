@@ -135,3 +135,40 @@ Keep the scene tight (30–90 seconds of screen time). End on a strong beat.
 ${input.guidance ? `The artist's guidance for this draft: ${input.guidance}` : ''}
 Return ONLY the screenplay text — no explanations, no markdown fences.`
 }
+
+/**
+ * The manga letterer's drafting instruction (v0.25, §8 slice 2): turn a
+ * shot's screenplay into lettering bubbles for its comic panel. The
+ * response is validated against the PanelLetteringDraft zod schema by
+ * the host; applying is a separate, explicit human approval.
+ */
+export function draftPanelLetteringInstruction(input: {
+  sceneTitle: string
+  shotTitle: string
+  screenplay: string
+  castNames: string[]
+}): string {
+  const cast =
+    input.castNames.length > 0
+      ? `Cast (attribute dialogue with EXACT names): ${input.castNames.join(', ')}.`
+      : 'No cast defined — leave characterName out for narrator lines.'
+  const screenplay =
+    input.screenplay.trim().length > 0
+      ? input.screenplay.trim().slice(0, 4_000)
+      : '(no screenplay written for this scene yet — propose minimal lines from the shot title)'
+  return `You are the manga letterer of Mirai Studio. Turn the source material into lettering bubbles for ONE comic panel.
+
+SCENE: ${input.sceneTitle}
+SHOT (the panel adapts this): ${input.shotTitle}
+SOURCE SCREENPLAY:
+${screenplay}
+
+${cast}
+
+RULES:
+- 1–6 bubbles. Speech kept SHORT (manga dialogue is terse — max ~2 sentences).
+- Use kind SPEECH for dialogue (with characterName), SFX for onomatopoeia (text like DOON!, shhh…), CAPTION or NARRATION for scene text, THOUGHT for inner monologue.
+- tail: BOTTOM_LEFT / BOTTOM_CENTER / BOTTOM_RIGHT / TOP_LEFT / TOP_CENTER / TOP_RIGHT / NONE (where the bubble points at the speaker).
+
+Return ONLY a JSON object: { "bubbles": [{ "kind": "SPEECH", "characterName": "Ayaka", "text": "…", "tail": "BOTTOM_RIGHT" }] }`
+}

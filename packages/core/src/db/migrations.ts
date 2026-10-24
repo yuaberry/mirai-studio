@@ -542,4 +542,15 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0015_manga_panel_layout',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE manga_panels ADD COLUMN x REAL;
+        ALTER TABLE manga_panels ADD COLUMN y REAL;
+        ALTER TABLE manga_panels ADD COLUMN w REAL;
+        ALTER TABLE manga_panels ADD COLUMN h REAL;
+      `)
+    },
+  },
 ]

@@ -1489,6 +1489,24 @@ export function useMangaScriptExport() {
   })
 }
 
+export function useMangaPackageExport() {
+  return useMutation({
+    mutationFn: (episodeId: string) => invoke('manga:exportPackage', { episodeId }),
+  })
+}
+
+export function useMangaRevealPackage() {
+  return useMutation({
+    mutationFn: (episodeId: string) => invoke('manga:revealPackage', { episodeId }),
+  })
+}
+
+export function usePanelLetteringDraft() {
+  return useMutation({
+    mutationFn: (panelId: string) => invoke('ai:draftPanelLettering', { panelId }),
+  })
+}
+
 export function useMangaRevealScript() {
   return useMutation({
     mutationFn: (episodeId: string) => invoke('manga:revealScript', { episodeId }),

@@ -43,7 +43,7 @@ export function estimateCostUsd(
 // ------------------------------------------------------- image generation
 export { OpenAIImagesProvider } from './images'
 export type { ImageOptions, ImageResult } from './images'
-export { buildImagePrompt, draftScreenplayInstruction } from './consistency'
+export { buildImagePrompt, draftScreenplayInstruction, draftPanelLetteringInstruction } from './consistency'
 export type { ConsistencyData, ConsistencyScene, ConsistencyShot } from './consistency'
 
 // ------------------------------------------------------- video generation

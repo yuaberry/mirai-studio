@@ -321,6 +321,25 @@ export function registerIpcHandlers(c: Container): void {
     shell.showItemInFolder(ctx.manga.letteringScriptPath(req.episodeId))
     return { ok: true }
   })
+  handleIpc('manga:exportPackage', (req) => {
+    const result = requireActive(c).manga.exportChapterPackage(req.episodeId)
+    c.logger.info('RENDER', `Manga chapter package exported: ${result.path}`, {
+      pages: result.pages,
+      bubbles: result.bubbles,
+      bytes: result.bytes,
+    })
+    return result
+  })
+  handleIpc('manga:revealPackage', (req) => {
+    const ctx = requireActive(c)
+    shell.showItemInFolder(ctx.manga.chapterPackagePath(req.episodeId))
+    return { ok: true }
+  })
+  handleIpc('ai:draftPanelLettering', async (req) => {
+    requireActive(c) // honest NOT_FOUND when no project is open
+    const draft = await c.ai.draftPanelLettering(req.panelId)
+    return { bubbles: draft.bubbles, model: draft.model, durationMs: draft.durationMs }
+  })
 
   // ------------------------------------------------------------------ IP graph (§4)
   handleIpc('ip:impact', (req) => ({ impact: requireActive(c).ip.impact(req.kind, req.id) }))

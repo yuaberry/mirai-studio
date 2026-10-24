@@ -25,6 +25,8 @@ import {
   type AutoproduceSummary,
   type ChatMessage,
   type EntityId,
+
+  PanelLetteringDraft,
 } from '@mirai/shared'
 import { assertExplicitCastAllowed, maturePipelineActive } from '@mirai/core'
 import type { DossierAiSections, DossierData } from '@mirai/core'
@@ -36,6 +38,7 @@ import {
   buildSystemPrompt,
   buildImagePrompt,
   draftScreenplayInstruction,
+  draftPanelLetteringInstruction,
   estimateCostUsd,
   type ContextCharacter,
   type ContextScene,
@@ -955,6 +958,78 @@ export class AiHost {
       chars: result.content.length,
     })
     return { draft: result.content.trim(), model: providerConfig.model, durationMs }
+  }
+
+  // --------------------------------------- manga panel lettering draft (v0.25 §8)
+
+  /**
+   * AI letterer: propose lettering bubbles for a panel from its linked
+   * shot's screenplay. Zod-validated at the boundary; character names are
+   * mapped back to ids; applying stays a human decision in the UI.
+   */
+  async draftPanelLettering(panelId: string): Promise<{
+    bubbles: Array<{ kind: import('@mirai/shared').BubbleKind; characterId?: string; text: string; tail: import('@mirai/shared').BubbleTail }>
+    model: string
+    durationMs: number
+  }> {
+    const startedAt = Date.now()
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+
+    // resolve the panel across all pages of every episode
+    let page: { id: string; episodeId: string } | null = null
+    let panel: import('@mirai/shared').MangaPanelRecord | null = null
+    for (const ep of ctx.creative.listEpisodes()) {
+      for (const p of ctx.manga.listPages(ep.id)) {
+        const found = ctx.manga.listPanels(p.id).find((x) => x.id === panelId)
+        if (found) {
+          panel = found
+          page = p
+          break
+        }
+      }
+      if (panel) break
+    }
+    if (!panel || !page) throw new MiraiError('NOT_FOUND', `Panel ${panelId} not found.`)
+    if (!panel.shotId) {
+      throw new MiraiError(
+        'VALIDATION_ERROR',
+        'Link the panel to a storyboard shot first — the AI drafts lettering from that shot\'s screenplay.',
+      )
+    }
+
+    const shot = ctx.storyboard.getShotById(panel.shotId)
+    const scene = ctx.creative.getSceneById(shot.sceneId)
+    const allCharacters = ctx.creative.listCharacters()
+    const cast = allCharacters.filter((c) => scene.characterIds.includes(c.id))
+    const castNames = cast.map((c) => c.name)
+
+    const instruction = draftPanelLetteringInstruction({
+      sceneTitle: scene.title,
+      shotTitle: shot.title,
+      screenplay: scene.screenplay ?? scene.synopsis ?? '',
+      castNames,
+    })
+
+    const draft = await this.chatJsonCore(instruction, PanelLetteringDraft, 0.7, 1_500)
+
+    // map names back to ids (case-insensitive; unknown names stay unattributed)
+    const byLower = new Map(cast.map((c) => [c.name.toLowerCase(), c.id] as const))
+    const bubbles = draft.bubbles.map((b) => ({
+      kind: b.kind,
+      characterId: b.characterName ? byLower.get(b.characterName.toLowerCase()) : undefined,
+      text: b.text,
+      tail: b.tail ?? 'BOTTOM_LEFT',
+    }))
+
+    const durationMs = Date.now() - startedAt
+    this.deps.logger.log('info', 'AI', 'Panel lettering draft generated', {
+      panelId,
+      bubbles: bubbles.length,
+      attributed: bubbles.filter((b) => b.characterId).length,
+      durationMs,
+    })
+    return { bubbles, model: this.deps.settings.get().ai.defaultModel ?? 'unknown', durationMs }
   }
 
   // --------------------------------------------------- Frame generation (Phase 4)

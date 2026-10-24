@@ -1793,6 +1793,93 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V25 MANGA SLICE 2: layout coords, SVG proof package, AI lettering draft', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    const ep = ctx.creative.listEpisodes()[0]!
+
+    // ---- layout coords round-trip
+    const page = ctx.manga.createPage(ep.id, { readingDirection: 'RTL' })
+    const ayaka = ctx.creative.createCharacter({ name: 'Ayaka', role: 'PROTAGONIST' })
+    const scene = ctx.creative.createScene(ep.id, { title: 'V25 cena', characterIds: [ayaka.id] })
+    const shot = ctx.storyboard.createShot(scene.id, { title: 'V25 shot', durationSeconds: 2 })
+    ctx.creative.updateScene(scene.id, {
+      title: scene.title,
+      timeOfDay: scene.timeOfDay,
+      characterIds: scene.characterIds,
+      synopsis: scene.synopsis,
+      screenplay: 'AYAKA\n"O santuário responde à lua."',
+    })
+    const panel = ctx.manga.createPanel(page.id, { shotId: shot.id, coords: { x: 0.1, y: 0.1, w: 0.8, h: 0.4 } })
+    const stored = ctx.manga.listPanels(page.id)[0]!
+    if (!stored.coords || stored.coords.x !== 0.1 || stored.coords.w !== 0.8) throw new Error('coords not stored')
+    const cleared = ctx.manga.updatePanel(panel.id, {})
+    if (cleared.coords !== null) throw new Error('coords must clear when omitted')
+
+    // ---- chapter package: real SVG proofs + script + manifest
+    ctx.manga.updatePanel(panel.id, {
+      shotId: shot.id,
+      lettering: [{ kind: 'SPEECH', text: 'Prova real.', tail: 'BOTTOM_LEFT' }],
+    })
+    const pkg = ctx.manga.exportChapterPackage(ep.id)
+    if (!existsSync(pkg.path)) throw new Error('package file missing')
+    const byName = new Map(readZipEntries(readFileSync(pkg.path)).map((e) => [e.name, e.data.toString('utf8')]))
+    const proof = byName.get('proofs/page-01.svg')
+    if (!proof || !proof.includes('<svg')) throw new Error('SVG proof missing from package')
+    if (!byName.get('manifest.json')?.includes('"bubbles": 1')) throw new Error('manifest facts wrong')
+    if (!byName.get('lettering-script.txt')?.includes('Prova real.')) throw new Error('script missing from package')
+
+    // ---- AI lettering draft through the REAL host (mocked transport router)
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (_url: unknown, init?: { body?: string }) => {
+      const body = String(init?.body ?? '')
+      const json = (payload: string) => ({
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(JSON.stringify({ choices: [{ message: { content: payload } }] })))
+            controller.close()
+          },
+        }),
+        text: async () => JSON.stringify({ choices: [{ message: { content: payload } }] }),
+      })
+      if (body.includes('manga letterer')) {
+        return json(JSON.stringify({ bubbles: [
+          { kind: 'SPEECH', characterName: 'Ayaka', text: 'O santuário responde à lua.', tail: 'BOTTOM_LEFT' },
+          { kind: 'SFX', text: 'TOON!' },
+        ] }))
+      }
+      return json(JSON.stringify({ ok: true }))
+    }) as typeof fetch
+    const settingsSvc = new SettingsService(appDb)
+    const credentialsSvc = new CredentialStore(appDb, plaintextCodec, systemClock)
+    credentialsSvc.set('openrouter', 'sk-smoke-v25')
+    const ai = new AiHost({
+      credentials: credentialsSvc,
+      settings: settingsSvc,
+      projects,
+      logger,
+      emitter: { send: () => undefined, window: null } as never,
+    })
+    const draft = await ai.draftPanelLettering(panel.id)
+    globalThis.fetch = realFetch
+    if (draft.bubbles.length !== 2) throw new Error('draft bubble count wrong')
+    const speech = draft.bubbles.find((b) => b.kind === 'SPEECH')!
+    if (!speech.text.includes('santuário')) throw new Error('draft text wrong')
+    if (!speech.characterId) throw new Error('characterName was not mapped to an id')
+    if (draft.bubbles[1]!.kind !== 'SFX') throw new Error('SFX kind lost')
+    let draftThrew = false
+    try { await ai.draftPanelLettering('01DOESNOTEXIST00000000000X') } catch { draftThrew = true }
+    if (!draftThrew) throw new Error('draft must reject unknown panels')
+
+    // cleanup
+    ctx.manga.deletePanel(panel.id)
+    ctx.manga.deletePage(page.id)
+    ctx.creative.deleteScene(scene.id)
+    ctx.creative.deleteCharacter(ctx.creative.listCharacters().find((c) => c.name === 'Ayaka')?.id ?? '')
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

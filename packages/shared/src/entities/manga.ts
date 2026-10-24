@@ -87,9 +87,18 @@ export type MangaPageRecord = z.infer<typeof MangaPageRecord>
  * attached through the dedicated manga:panels:attachImage channel —
  * never part of plain updates.
  */
+export const PanelCoords = z.object({
+  /** Page-relative box (0..1). Omitted = auto-stack layout. */
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  w: z.number().min(0.05).max(1),
+  h: z.number().min(0.05).max(1),
+})
+
 export const MangaPanelInput = z.object({
   shotId: z.string().optional(),
   lettering: z.array(BubbleInput).max(30).default([]),
+  coords: PanelCoords.optional(),
 })
 export type MangaPanelInput = z.input<typeof MangaPanelInput>
 
@@ -104,7 +113,46 @@ export const MangaPanelRecord = z.object({
   pageId: zEntityId,
   orderIndex: z.number().int().min(0),
   imageAssetId: zEntityId.nullable(),
+  /** Manual layout box (null = auto-stack). */
+  coords: PanelCoords.nullable(),
   createdAt: zIsoDate,
   updatedAt: zIsoDate,
 })
 export type MangaPanelRecord = z.infer<typeof MangaPanelRecord>
+
+// ------------------------------------------------------------ RTL mirroring
+
+/** Mirror a horizontal coordinate for right-to-left pages. */
+export function mirrorX(x: number, width: number, rtl: boolean): number {
+  return rtl ? 1 - x - width : x
+}
+
+const TAIL_MIRROR: Record<BubbleTail, BubbleTail> = {
+  BOTTOM_LEFT: 'BOTTOM_RIGHT',
+  BOTTOM_CENTER: 'BOTTOM_CENTER',
+  BOTTOM_RIGHT: 'BOTTOM_LEFT',
+  TOP_LEFT: 'TOP_RIGHT',
+  TOP_CENTER: 'TOP_CENTER',
+  TOP_RIGHT: 'TOP_LEFT',
+  NONE: 'NONE',
+}
+
+/** Mirror a tail direction for right-to-left pages. */
+export function mirrorTail(tail: BubbleTail, rtl: boolean): BubbleTail {
+  return rtl ? TAIL_MIRROR[tail] : tail
+}
+
+// ------------------------------------------------- AI panel lettering draft
+
+/** What the AI proposes for one panel (validated by zod at the boundary). */
+export const PanelLetteringDraftBubble = z.object({
+  kind: z.enum(BUBBLE_KINDS),
+  characterName: z.string().max(120).optional(),
+  text: z.string().min(1).max(2_000),
+  tail: z.enum(BUBBLE_TAILS).optional(),
+})
+export const PanelLetteringDraft = z.object({
+  bubbles: z.array(PanelLetteringDraftBubble).min(1).max(12),
+})
+export type PanelLetteringDraft = z.infer<typeof PanelLetteringDraft>
+export type PanelLetteringDraftBubble = z.infer<typeof PanelLetteringDraftBubble>
