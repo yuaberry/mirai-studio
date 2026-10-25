@@ -256,6 +256,14 @@ function ProvidersCard() {
   const [imageBaseUrl, setImageBaseUrl] = useState(settings?.ai.image.baseUrl ?? '')
   const [imageModel, setImageModel] = useState(settings?.ai.image.model ?? '')
   const [imageSize, setImageSize] = useState(settings?.ai.image.size ?? '1344x768')
+  const [videoKey, setVideoKey] = useState('')
+  const [videoBaseUrl, setVideoBaseUrl] = useState(settings?.ai.video.baseUrl ?? '')
+  const [videoModel, setVideoModel] = useState(settings?.ai.video.model ?? '')
+  const [videoUseRef, setVideoUseRef] = useState(settings?.ai.video.useReferenceFrame ?? true)
+  const [ttsKey, setTtsKey] = useState('')
+  const [ttsBaseUrl, setTtsBaseUrl] = useState(settings?.ai.tts?.baseUrl ?? '')
+  const [ttsModel, setTtsModel] = useState(settings?.ai.tts?.model ?? '')
+  const [ttsVoice, setTtsVoice] = useState(settings?.ai.tts?.voice ?? '')
 
   useEffect(() => {
     if (settings) {
@@ -263,12 +271,18 @@ function ProvidersCard() {
       setImageBaseUrl(settings.ai.image.baseUrl ?? '')
       setImageModel(settings.ai.image.model ?? '')
       setImageSize(settings.ai.image.size)
+      setVideoBaseUrl(settings.ai.video.baseUrl ?? '')
+      setVideoModel(settings.ai.video.model ?? '')
+      setVideoUseRef(settings.ai.video.useReferenceFrame ?? true)
+      setTtsBaseUrl(settings.ai.tts?.baseUrl ?? '')
+      setTtsModel(settings.ai.tts?.model ?? '')
+      setTtsVoice(settings.ai.tts?.voice ?? '')
     }
-  }, [settings?.ai.nvidia.model, settings?.ai.nvidia.baseUrl, settings?.ai.image.baseUrl, settings?.ai.image.model, settings?.ai.image.size]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [settings?.ai.nvidia.model, settings?.ai.nvidia.baseUrl, settings?.ai.image.baseUrl, settings?.ai.image.model, settings?.ai.image.size, settings?.ai.video.baseUrl, settings?.ai.video.model, settings?.ai.video.useReferenceFrame, settings?.ai.tts?.baseUrl, settings?.ai.tts?.model, settings?.ai.tts?.voice]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const cred = (key: string) => credentials?.find((c) => c.key === key)
 
-  const saveKey = (key: 'openrouter' | 'nvidia' | 'image', value: string, clear: () => void) => {
+  const saveKey = (key: 'openrouter' | 'nvidia' | 'image' | 'videogen' | 'tts', value: string, clear: () => void) => {
     if (!value.trim()) {
       toast({ kind: 'warning', title: 'Paste the key first' })
       return
@@ -280,7 +294,7 @@ function ProvidersCard() {
           clear()
           toast({
             kind: secure ? 'success' : 'warning',
-            title: `${key === 'nvidia' ? 'NVIDIA' : key === 'image' ? 'Image provider' : 'OpenRouter'} key stored`,
+            title: `${key === 'nvidia' ? 'NVIDIA' : key === 'image' ? 'Image provider' : key === 'videogen' ? 'Video provider' : key === 'tts' ? 'Voice provider' : 'OpenRouter'} key stored`,
             description: secure
               ? 'Encrypted with your OS keychain.'
               : 'Stored WITHOUT encryption — OS secure storage unavailable.',
@@ -590,6 +604,145 @@ function ProvidersCard() {
           <p className="mt-1.5 text-[10px] text-mirai-faint">
             All three fields (key, URL, model) enable the “Generate (AI)” button on storyboard shots.
           </p>
+        </div>
+
+        {/* Video provider (image-to-video — the AI-anime motion piece) */}
+        <div className="rounded-lg border border-mirai-border bg-mirai-panel p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold text-mirai-text">
+              Video provider
+              <span className="ml-2 font-normal text-mirai-faint">image-to-video — animates your frames</span>
+            </p>
+            <Badge tone={cred('videogen')?.configured ? 'success' : 'neutral'}>
+              {cred('videogen')?.configured ? 'key stored' : 'not set'}
+            </Badge>
+          </div>
+          <p className="mb-2 text-[11px] leading-relaxed text-mirai-dim">
+            Any endpoint speaking <code>POST /videos/generations</code>. The shot's storyboard
+            keyframe is sent as the reference — the clip keeps YOUR character designs (the
+            consistency recipe behind AI-anime shorts).
+          </p>
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              placeholder={cred('videogen')?.configured ? 'Replace video provider key…' : 'API key'}
+              value={videoKey}
+              onChange={(e) => setVideoKey(e.target.value)}
+            />
+            <Button
+              variant="primary"
+              className="shrink-0"
+              loading={setCredential.isPending}
+              onClick={() => saveKey('videogen', videoKey, () => setVideoKey(''))}
+            >
+              Save
+            </Button>
+          </div>
+          <div className="mt-3 grid grid-cols-[1fr_1fr_auto] gap-2">
+            <div>
+              <Label htmlFor="pv-vidbase">Base URL</Label>
+              <Input id="pv-vidbase" className="h-8 text-xs" placeholder="https://…/v1" value={videoBaseUrl} onChange={(e) => setVideoBaseUrl(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="pv-vidmodel">Model</Label>
+              <Input id="pv-vidmodel" className="h-8 text-xs" placeholder="seedance / kling / …" value={videoModel} onChange={(e) => setVideoModel(e.target.value)} />
+            </div>
+            <div className="flex items-end">
+              <Button
+                size="sm"
+                variant="primary"
+                loading={updateSettings.isPending}
+                disabled={!videoBaseUrl.trim() || !videoModel.trim()}
+                onClick={() =>
+                  saveProviderPrefs({
+                    video: {
+                      ...(settings?.ai.video ?? {}),
+                      baseUrl: videoBaseUrl.trim(),
+                      model: videoModel.trim(),
+                      useReferenceFrame: videoUseRef,
+                    },
+                  })
+                }
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+          <label className="mt-2 flex items-center gap-2 text-[11px] text-mirai-dim">
+            <input
+              type="checkbox"
+              checked={videoUseRef}
+              onChange={(e) => setVideoUseRef(e.target.checked)}
+              className="accent-mirai-accent"
+            />
+            animate the shot's storyboard frame (image-to-video — recommended)
+          </label>
+        </div>
+
+        {/* AI Voice provider (TTS — the voice-acting piece) */}
+        <div className="rounded-lg border border-mirai-border bg-mirai-panel p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold text-mirai-text">
+              AI voice <span className="ml-2 font-normal text-mirai-faint">OpenAI audio/speech-compatible</span>
+            </p>
+            <Badge tone={cred('tts')?.configured ? 'success' : 'neutral'}>
+              {cred('tts')?.configured ? 'key stored' : 'not set'}
+            </Badge>
+          </div>
+          <p className="mb-2 text-[11px] leading-relaxed text-mirai-dim">
+            Any endpoint speaking <code>POST /audio/speech</code>. Each character can have a
+            TTS voice id (Characters → voice); shots speak their dialogue into REAL audio that
+            flows into the mixer and the final render.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              placeholder={cred('tts')?.configured ? 'Replace voice provider key…' : 'API key'}
+              value={ttsKey}
+              onChange={(e) => setTtsKey(e.target.value)}
+            />
+            <Button
+              variant="primary"
+              className="shrink-0"
+              loading={setCredential.isPending}
+              onClick={() => saveKey('tts', ttsKey, () => setTtsKey(''))}
+            >
+              Save
+            </Button>
+          </div>
+          <div className="mt-3 grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
+            <div>
+              <Label htmlFor="pv-ttsbase">Base URL</Label>
+              <Input id="pv-ttsbase" className="h-8 text-xs" placeholder="https://…/v1" value={ttsBaseUrl} onChange={(e) => setTtsBaseUrl(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="pv-ttsmodel">Model</Label>
+              <Input id="pv-ttsmodel" className="h-8 text-xs" placeholder="tts-1 / eleven-v3 / …" value={ttsModel} onChange={(e) => setTtsModel(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="pv-ttsvoice">Default voice</Label>
+              <Input id="pv-ttsvoice" className="h-8 text-xs" placeholder="voice id" value={ttsVoice} onChange={(e) => setTtsVoice(e.target.value)} />
+            </div>
+            <div className="flex items-end">
+              <Button
+                size="sm"
+                variant="primary"
+                loading={updateSettings.isPending}
+                disabled={!ttsBaseUrl.trim() || !ttsModel.trim()}
+                onClick={() =>
+                  saveProviderPrefs({
+                    tts: {
+                      baseUrl: ttsBaseUrl.trim(),
+                      model: ttsModel.trim(),
+                      ...(ttsVoice.trim() ? { voice: ttsVoice.trim() } : {}),
+                    },
+                  })
+                }
+              >
+                Save
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
       <div className="mt-4 rounded-lg border border-mirai-border bg-mirai-panel p-3">

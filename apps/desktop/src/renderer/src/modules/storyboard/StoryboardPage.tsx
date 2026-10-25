@@ -54,6 +54,8 @@ import {
   useRenderStatus,
   useRenderShot,
   assetUrl,
+
+  useSpeakShot,
 } from '../../lib/queries'
 import { VersionHistoryButton, VersionHistoryModal } from '../production/VersionHistoryModal'
 import { toast } from '../../store/appStore'
@@ -405,6 +407,7 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
   const blender = useBlenderActions()
   const { data: blenderStatus } = useBlenderStatus()
   const voice = useVoiceActions()
+  const speakShot = useSpeakShot()
   const recordDecision = useRecordDecision()
   const { data: renderStatus } = useRenderStatus()
   const renderShot = useRenderShot()
@@ -708,6 +711,24 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="ghost" loading={voice.importVoice.isPending} onClick={importVoice}>
                   <Volume2 className="h-3.5 w-3.5" /> Replace
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title="AI voice acting — speaks this shot's dialogue with the cast voice (Settings → AI voice)"
+                  onClick={() =>
+                    speakShot.mutate(shot.id, {
+                      onSuccess: (r) =>
+                        toast({
+                          kind: 'success',
+                          title: 'AI voice attached',
+                          description: `voice "${r.voice}" — ${(r.text.length > 60 ? r.text.slice(0, 57) + '…' : r.text)}`,
+                        }),
+                      onError: (err) => toast({ kind: 'error', title: 'AI voice failed', description: err.message }),
+                    })
+                  }
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> AI voice
                 </Button>
                 <Button
                   size="sm"

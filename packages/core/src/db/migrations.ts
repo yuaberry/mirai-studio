@@ -600,4 +600,12 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0018_character_tts_voice',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE characters ADD COLUMN tts_voice TEXT;
+      `)
+    },
+  },
 ]

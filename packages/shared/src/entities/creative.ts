@@ -42,6 +42,8 @@ export const CharacterInput = z.object({
   personality: z.string().max(4_000).optional(),
   appearance: z.string().max(4_000).optional(),
   voice: z.string().max(2_000).optional(),
+  /** AI voice acting: the character's TTS voice id (settings.ai.tts provider). */
+  ttsVoice: z.string().max(200).optional(),
   bio: z.string().max(8_000).optional(),
   goals: z.string().max(4_000).optional(),
   fears: z.string().max(4_000).optional(),

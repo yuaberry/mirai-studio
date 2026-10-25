@@ -143,6 +143,7 @@ function CharacterEditor({ character }: { character: CharacterRecord }) {
     personality: character.personality ?? '',
     appearance: character.appearance ?? '',
     voice: character.voice ?? '',
+    ttsVoice: character.ttsVoice ?? '',
     bio: character.bio ?? '',
     goals: character.goals ?? '',
     fears: character.fears ?? '',
@@ -157,6 +158,7 @@ function CharacterEditor({ character }: { character: CharacterRecord }) {
     form.personality !== (character.personality ?? '') ||
     form.appearance !== (character.appearance ?? '') ||
     form.voice !== (character.voice ?? '') ||
+    form.ttsVoice !== (character.ttsVoice ?? '') ||
     form.bio !== (character.bio ?? '') ||
     form.goals !== (character.goals ?? '') ||
     form.fears !== (character.fears ?? '') ||
@@ -176,6 +178,7 @@ function CharacterEditor({ character }: { character: CharacterRecord }) {
           personality: form.personality.trim() || undefined,
           appearance: form.appearance.trim() || undefined,
           voice: form.voice.trim() || undefined,
+          ttsVoice: form.ttsVoice.trim() || undefined,
           bio: form.bio.trim() || undefined,
           goals: form.goals.trim() || undefined,
           fears: form.fears.trim() || undefined,
@@ -236,6 +239,14 @@ function CharacterEditor({ character }: { character: CharacterRecord }) {
         <Field label="Appearance" hint="Hair, eyes, silhouette — used for visual consistency later." value={form.appearance} onChange={(v) => set('appearance', v)} rows={3} id="ch-appearance" />
         <div className="grid grid-cols-2 gap-4">
           <Field label="Voice" hint="Pitch, mannerisms, quirks." value={form.voice} onChange={(v) => set('voice', v)} rows={2} id="ch-voice" />
+          <Field
+            label="TTS voice id"
+            hint="AI voice acting — the voice id this character uses with your TTS provider (Settings → AI voice)."
+            value={form.ttsVoice ?? ''}
+            onChange={(v) => set('ttsVoice', v)}
+            rows={1}
+            id="ch-ttsvoice"
+          />
           <Field label="Goals" hint="What drives them." value={form.goals} onChange={(v) => set('goals', v)} rows={2} id="ch-goals" />
           <Field label="Fears" hint="What stops them." value={form.fears} onChange={(v) => set('fears', v)} rows={2} id="ch-fears" />
           <div>

@@ -43,6 +43,7 @@ import {
   draftPanelLetteringInstruction,
   draftTaglinesInstruction,
   translateSceneInstruction,
+  OpenAITtsProvider,
   estimateCostUsd,
   type ContextCharacter,
   type ContextScene,
@@ -1110,6 +1111,210 @@ export class AiHost {
     const durationMs = Date.now() - startedAt
     this.deps.logger.log('info', 'AI', 'Poster taglines drafted', { durationMs })
     return { taglines: draft.taglines, model: this.deps.settings.get().ai.defaultModel ?? 'unknown', durationMs }
+  }
+
+  // --------------------------------------------- AI voice acting (v0.30 §40)
+
+  resolveTtsProvider(): { apiKey: string; baseUrl: string; model: string; defaultVoice?: string } | null {
+    const settings = this.deps.settings.get()
+    const apiKey = this.deps.credentials.get('tts')
+    const tts = settings.ai.tts
+    if (!apiKey || !tts?.baseUrl || !tts.model) return null
+    return {
+      apiKey,
+      baseUrl: tts.baseUrl,
+      model: tts.model,
+      defaultVoice: tts.voice,
+    }
+  }
+
+  /**
+   * AI VOICE ACTING: speak the shot's dialogue with the character's TTS
+   * voice (falling back to the project default) and attach the REAL audio
+   * to the shot — it flows into preview, mixer and render untouched.
+   */
+  async speakShot(shotId: string, signal?: AbortSignal): Promise<{ assetId: string; voice: string; model: string; text: string }> {
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+    const provider = this.resolveTtsProvider()
+    if (!provider) {
+      throw new MiraiError(
+        'CREDENTIALS_UNAVAILABLE',
+        'No voice provider configured — set baseUrl, model, key and a default voice in Settings → Providers.',
+      )
+    }
+    const shot = ctx.storyboard.getShotById(shotId)
+    const scene = ctx.creative.getSceneById(shot.sceneId)
+
+    // dialogue source: the shot's dialogue, else the scene's screenplay
+    let text = (shot.dialogue ?? '').trim()
+    if (text.length === 0) text = (scene.screenplay ?? '').trim()
+    if (text.length === 0) {
+      throw new MiraiError('VALIDATION_ERROR', 'Nothing to speak — write the shot dialogue (or the scene screenplay) first.')
+    }
+    // strip screenplay markup: keep quoted dialogue + action prose readable
+    const speakable = text
+      .replace(/^[A-Z][A-Z -]*$/gm, '') // NAME speaker lines
+      .replace(/[\u201c\u201d"]/g, '') // quotes
+      .replace(/\(.*?\)/g, ' ') // parentheticals
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (speakable.length === 0) {
+      throw new MiraiError('VALIDATION_ERROR', 'The dialogue has no speakable text — only speaker names.')
+    }
+
+    // voice: the first cast character with a ttsVoice, else project default
+    const cast = ctx.creative.listCharacters().filter((c) => scene.characterIds.includes(c.id))
+    const speaker = cast.find((c) => c.ttsVoice && c.ttsVoice.trim().length > 0)
+    const voice = speaker?.ttsVoice?.trim() || provider.defaultVoice?.trim()
+    if (!voice) {
+      throw new MiraiError(
+        'VALIDATION_ERROR',
+        'No voice to speak with — set a TTS voice on a cast character (Characters → voice section) or a default voice in Settings.',
+      )
+    }
+
+    const tts = new OpenAITtsProvider({
+      apiKey: provider.apiKey,
+      baseUrl: provider.baseUrl,
+      fetchFn: globalFetch(),
+      timeoutMs: this.deps.settings.get().ai.requestTimeoutMs,
+    })
+    const result = await tts.speak({
+      model: provider.model,
+      input: speakable,
+      voice,
+      responseFormat: 'wav',
+      signal,
+    })
+    const asset = ctx.storyboard.registerGeneratedVoice(shotId, result.bytes, result.mimeType)
+    this.deps.logger.log('info', 'AI', 'AI voice generated', {
+      shotId,
+      voice,
+      model: result.model,
+      bytes: result.bytes.length,
+    })
+    return { assetId: asset.id, voice, model: result.model, text: speakable }
+  }
+
+  // --------------------------------------------- AI anime episode assembly (v0.30)
+
+  /**
+   * THE AI-ANIME RECIPE, one click (the Malfoid pipeline, ours):
+   * 1. voice acting — every dialogue shot with a voice gets AI audio
+   * 2. image-to-video — every framed shot becomes a real clip (when a
+   *    video provider is configured)
+   * 3. timeline assembly per scene + episode render → a REAL MP4.
+   * Honest skips are reported, never fabricated.
+   */
+  async assembleEpisode(
+    episodeId: string,
+    opts: { voices: boolean; videos: boolean; render: boolean },
+    progress: (pct: number, detail: string) => void,
+    signal: { aborted: boolean },
+  ): Promise<{
+    scenes: number
+    shots: number
+    voicesGenerated: number
+    videosGenerated: number
+    skippedNoDialogue: number
+    skippedNoFrame: number
+    rendered: string | null
+  }> {
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+    const scenes = ctx.creative.listScenes(episodeId)
+    if (scenes.length === 0) {
+      throw new MiraiError('VALIDATION_ERROR', 'The episode has no scenes to assemble.')
+    }
+
+    const ttsReady = this.resolveTtsProvider() !== null
+    const videoReady = this.resolveVideoProvider() !== null
+    let voicesGenerated = 0
+    let videosGenerated = 0
+    let skippedNoDialogue = 0
+    let skippedNoFrame = 0
+    let shotCount = 0
+
+    let step = 0
+    const steps = scenes.reduce((acc, sc) => acc + ctx.storyboard.listShots(sc.id).length, 0) + scenes.length + (opts.render ? 1 : 0)
+    const tick = (detail: string) => {
+      step += 1
+      progress(Math.min(99, Math.round((step / Math.max(steps, 1)) * 100)), detail)
+    }
+
+    for (const scene of scenes) {
+      if (signal.aborted) throw new MiraiError('CANCELLED', 'Assembly aborted.')
+      const shots = ctx.storyboard.listShots(scene.id)
+      for (const shot of shots) {
+        shotCount += 1
+        if (opts.voices) {
+          const hasDialogue = ((shot.dialogue ?? '').trim().length > 0) || ((ctx.creative.getSceneById(shot.sceneId).screenplay ?? '').trim().length > 0)
+          if (hasDialogue && ttsReady) {
+            try {
+              await this.speakShot(shot.id, signal.aborted ? new AbortController().signal : undefined)
+              voicesGenerated += 1
+            } catch (err) {
+              if (err instanceof MiraiError && (err.code === 'VALIDATION_ERROR' || err.code === 'CANCELLED')) skippedNoDialogue += 1
+              else throw err
+            }
+          } else {
+            skippedNoDialogue += 1
+          }
+        }
+        if (opts.videos) {
+          if (shot.frameAssetId && videoReady) {
+            try {
+              await this.generateVideo(shot.id, undefined, Math.max(2, Math.min(shot.durationSeconds, 10)), signal.aborted ? new AbortController().signal : { aborted: signal.aborted } as AbortSignal, () => undefined)
+              videosGenerated += 1
+            } catch (err) {
+              if (err instanceof MiraiError && err.code === 'CANCELLED') throw err
+              this.deps.logger.warn('AI', `Video generation skipped for shot ${shot.id}: ${(err as Error).message}`)
+              skippedNoFrame += 1
+            }
+          } else {
+            skippedNoFrame += 1
+          }
+        }
+        tick(`scene "${scene.title}" — shot ${shot.title}`)
+      }
+      // timeline from the (now real) shots + media
+      ctx.timeline.buildFromScene(scene.id)
+      tick(`timeline built — scene "${scene.title}"`)
+    }
+
+    let rendered: string | null = null
+    if (opts.render) {
+      progress(99, 'rendering the episode…')
+      // YouTube 1080p preset: the first watch is quick; MASTER/CINEMA live in the Export Center.
+      const result = await ctx.render.renderEpisode({ episodeId, presetId: 'youtube-1080', reportProgress: () => undefined, signal: { aborted: signal.aborted } } as never)
+      rendered = result.outputPath ?? null
+      if (!rendered) {
+        const listed = ctx.render.listOutputs()
+        rendered = listed.length > 0 ? listed[listed.length - 1]!.path : null
+      }
+      tick('episode rendered')
+    }
+    progress(100, 'assembly complete')
+    this.deps.logger.log('info', 'AI', 'AI anime episode assembled', {
+      episodeId,
+      scenes: scenes.length,
+      shots: shotCount,
+      voicesGenerated,
+      videosGenerated,
+      skippedNoDialogue,
+      skippedNoFrame,
+      rendered: rendered ?? '(not rendered)',
+    })
+    return {
+      scenes: scenes.length,
+      shots: shotCount,
+      voicesGenerated,
+      videosGenerated,
+      skippedNoDialogue,
+      skippedNoFrame,
+      rendered,
+    }
   }
 
   // --------------------------------------------------- Frame generation (Phase 4)

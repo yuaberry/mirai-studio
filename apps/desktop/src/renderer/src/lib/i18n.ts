@@ -208,6 +208,7 @@ const PT_BR: Record<string, string> = {
   'Save translation': 'Salvar tradução',
   'Source': 'Original',
   'Glossary': 'Glossário',
+  'AI Episode': 'Episódio IA',
   'Pages': 'Páginas',
   'Page': 'Página',
   'New page': 'Nova página',

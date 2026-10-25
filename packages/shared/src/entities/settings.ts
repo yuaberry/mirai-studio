@@ -37,6 +37,16 @@ export const AppSettings = z.object({
           size: z.string().default('1344x768'),
         })
         .default({}),
+      /** AI voice acting (OpenAI-audio-compatible endpoint) — the
+       *  ElevenLabs-recipe piece: dialogue + voice id → real audio. */
+      tts: z
+        .object({
+          baseUrl: z.string().optional(),
+          model: z.string().optional(),
+          /** Default voice id when a character has none. */
+          voice: z.string().optional(),
+        })
+        .default({}),
       /** Video generation provider (OpenAI-videos-compatible endpoint). */
       video: z
         .object({
@@ -140,7 +150,7 @@ export type AppSettingsPatch = z.input<typeof AppSettingsPatch>
 export const DEFAULT_APP_SETTINGS: AppSettings = AppSettings.parse({})
 
 /** Keys used by the credential store. 'nvidia' = NIM key, 'image' = image-gen key. */
-export const CREDENTIAL_KEYS = ['openrouter', 'nvidia', 'image', 'videogen'] as const
+export const CREDENTIAL_KEYS = ['openrouter', 'nvidia', 'image', 'videogen', 'tts'] as const
 export type CredentialKey = (typeof CREDENTIAL_KEYS)[number]
 
 export const zCredentialKey = z.enum(CREDENTIAL_KEYS)

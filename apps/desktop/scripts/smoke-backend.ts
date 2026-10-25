@@ -2099,6 +2099,108 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V30 AI ANIME: TTS voice acting + episode assembly with real render', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    // a DEDICATED episode: assembly renders every scene, so this episode
+    // contains only shot-bearing scenes (helper scenes from earlier steps
+    // live in other episodes).
+    const ep = ctx.creative.createEpisode({ season: 9, number: 9, title: 'V30 Assembly' })
+
+    // a character with a TTS voice + a shot with dialogue
+    const ayaka = ctx.creative.createCharacter({ name: 'Voz Ayaka', role: 'SUPPORTING', ttsVoice: 'ayaka-soft' })
+    const scene = ctx.creative.createScene(ep.id, { title: 'Cena V30', characterIds: [ayaka.id] })
+    ctx.creative.updateScene(scene.id, {
+      title: scene.title,
+      timeOfDay: scene.timeOfDay,
+      characterIds: scene.characterIds,
+      synopsis: scene.synopsis,
+      screenplay: 'AYAKA\n"O lampião responde à lua."',
+    })
+    const shot = ctx.storyboard.createShot(scene.id, { title: 'V30 shot', durationSeconds: 2, dialogue: 'AYAKA\n"O lampião responde à lua."' })
+
+    // TTS through the REAL host with a mocked /audio/speech (binary wav)
+    const realFetch = globalThis.fetch
+    // a REAL WAV (RIFF/PCM with a data chunk + a 440Hz tone) so FFmpeg
+    // actually decodes the AI voice in the final render
+    const wavSampleRate = 8000
+    const wavSamples = Math.floor(1.5 * wavSampleRate)
+    const wavBytes = Buffer.alloc(44 + wavSamples * 2)
+    wavBytes.write('RIFF', 0)
+    wavBytes.writeUInt32LE(36 + wavSamples * 2, 4)
+    wavBytes.write('WAVE', 8)
+    wavBytes.write('fmt ', 12)
+    wavBytes.writeUInt32LE(16, 16)
+    wavBytes.writeUInt16LE(1, 20)
+    wavBytes.writeUInt16LE(1, 22)
+    wavBytes.writeUInt32LE(wavSampleRate, 24)
+    wavBytes.writeUInt32LE(wavSampleRate * 2, 28)
+    wavBytes.writeUInt16LE(2, 32)
+    wavBytes.writeUInt16LE(16, 34)
+    wavBytes.write('data', 36)
+    wavBytes.writeUInt32LE(wavSamples * 2, 40)
+    for (let i = 0; i < wavSamples; i++) {
+      wavBytes.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / wavSampleRate) * 6000), 44 + i * 2)
+    }
+    let lastTtsBody: Record<string, unknown> = {}
+    globalThis.fetch = (async (url: unknown, init?: { body?: string }) => {
+      const body = String(init?.body ?? '')
+      if (String(url).includes('/audio/speech')) {
+        lastTtsBody = JSON.parse(body) as Record<string, unknown>
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          arrayBuffer: async () => wavBytes.buffer.slice(wavBytes.byteOffset, wavBytes.byteOffset + wavBytes.byteLength),
+        }
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) }
+    }) as typeof fetch
+    const settingsSvc = new SettingsService(appDb)
+    const credentialsSvc = new CredentialStore(appDb, plaintextCodec, systemClock)
+    credentialsSvc.set('tts', 'sk-smoke-v30')
+    settingsSvc.update({
+      ...settingsSvc.get(),
+      ai: {
+        ...settingsSvc.get().ai,
+        tts: { baseUrl: 'https://tts.example/v1', model: 'tts-1', voice: 'default-voice' },
+      },
+    })
+    const ai = new AiHost({
+      credentials: credentialsSvc,
+      settings: settingsSvc,
+      projects,
+      logger,
+      emitter: { send: () => undefined, window: null } as never,
+    })
+    const spoken = await ai.speakShot(shot.id)
+    globalThis.fetch = realFetch
+    if (spoken.voice !== 'ayaka-soft') throw new Error('character voice not resolved (expected ayaka-soft)')
+    if (lastTtsBody['voice'] !== 'ayaka-soft') throw new Error('voice not sent to the provider')
+    if (!ctx.storyboard.getShotById(shot.id).voiceAssetId) throw new Error('AI voice not attached to the shot')
+    const voiceAsset = ctx.storyboard.getAsset(ctx.storyboard.getShotById(shot.id).voiceAssetId!)
+    if (voiceAsset.bytes !== wavBytes.length) throw new Error('voice bytes mismatch')
+
+    // ASSEMBLY with videos disabled (no video provider configured — honest skip)
+    // and render enabled: a REAL MP4 of the scene, from the AI-voiced shot.
+    const assembled = await ai.assembleEpisode(
+      ep.id,
+      { voices: false, videos: false, render: true },
+      () => undefined,
+      { aborted: false },
+    )
+    if (assembled.voicesGenerated !== 0) throw new Error('voices were not requested — none should generate')
+    if (assembled.videosGenerated !== 0) throw new Error('videos were not requested — none should generate')
+    if (assembled.shots < 1 || assembled.scenes < 1) throw new Error('assembly scene/shot counts wrong')
+    if (!assembled.rendered) throw new Error('episode render missing from assembly')
+
+    // cleanup
+    ctx.storyboard.clearVoice(shot.id)
+    ctx.creative.deleteEpisode(ep.id)
+    ctx.creative.deleteCharacter(ayaka.id)
+    settingsSvc.update({ ...settingsSvc.get(), ai: { ...settingsSvc.get().ai, tts: {} } })
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

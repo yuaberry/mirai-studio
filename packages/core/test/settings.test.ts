@@ -175,6 +175,7 @@ describe('CredentialStore', () => {
       { key: 'nvidia', configured: false, secure: false },
       { key: 'image', configured: false, secure: false },
       { key: 'videogen', configured: false, secure: false },
+      { key: 'tts', configured: false, secure: false },
     ])
     db.close()
   })

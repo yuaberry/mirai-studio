@@ -209,7 +209,7 @@ export function useCredentialsStatus() {
 export function useSetCredential() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { key: 'openrouter' | 'nvidia' | 'image'; value: string }) =>
+    mutationFn: (input: { key: import('@mirai/shared').CredentialKey; value: string }) =>
       invoke('credentials:set', input).then((r) => r.secure),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.credentials }),
   })
@@ -1659,6 +1659,19 @@ export function useTranslatedEpubExport() {
 export function useTranslatedEpubReveal() {
   return useMutation({
     mutationFn: (language: string) => invoke('loc:revealEpub', { language }),
+  })
+}
+
+export function useAssembleEpisode() {
+  return useMutation({
+    mutationFn: (input: { episodeId: string; voices: boolean; videos: boolean; render: boolean }) =>
+      invoke('ai:assembleEpisode', input),
+  })
+}
+
+export function useSpeakShot() {
+  return useMutation({
+    mutationFn: (shotId: string) => invoke('ai:speakShot', { shotId }),
   })
 }
 

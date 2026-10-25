@@ -378,6 +378,27 @@ export const ipcContracts = {
     request: z.object({ id: zEntityId }),
     response: z.object({ ok: z.boolean() }),
   },
+  /** AI VOICE ACTING (v0.30): speak the shot's dialogue into a real voice asset. */
+  'ai:speakShot': {
+    request: z.object({ shotId: zEntityId }),
+    response: z.object({
+      assetId: zEntityId,
+      voice: z.string(),
+      model: z.string(),
+      text: z.string().min(1),
+    }),
+  },
+  /** AI ANIME EPISODE (v0.30): voices + image-to-video + timeline + render. */
+  'ai:assembleEpisode': {
+    request: z.object({
+      episodeId: zEntityId,
+      voices: z.boolean().default(true),
+      videos: z.boolean().default(true),
+      render: z.boolean().default(true),
+    }),
+    response: z.object({ jobId: z.string() }),
+  },
+
   /** AI translation draft for one scene (human reviews + saves). */
   'ai:translateScene': {
     request: z.object({ sceneId: zEntityId, language: zLanguageTag }),

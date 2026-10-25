@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, ChevronDown, ChevronUp, FileText, ListVideo, Plus, Trash2, X } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronUp, FileText, ListVideo, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import {
   MiraiError,
   TASK_STATUSES,
@@ -35,6 +35,7 @@ import {
   useMediaMutations,
   useExportEpub,
   useExportDocx,
+  useAssembleEpisode,
 } from '../../lib/queries'
 import { invoke } from '../../lib/ipc'
 import { toast } from '../../store/appStore'
@@ -51,6 +52,7 @@ const TIME_LABEL: Record<TimeOfDay, string> = {
 export function EpisodesPage() {
   const exportEpub = useExportEpub()
   const exportDocx = useExportDocx()
+  const assemble = useAssembleEpisode()
   const { data: episodes, isLoading, isError, error, refetch } = useEpisodes()
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null)
   const [newEpisodeOpen, setNewEpisodeOpen] = useState(false)
@@ -86,6 +88,30 @@ export function EpisodesPage() {
               }
             >
               <BookOpen className="h-3.5 w-3.5" /> EPUB
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              loading={assemble.isPending}
+              title="AI anime episode: voices + image-to-video + timeline + render, in one job (progress in Jobs)"
+              onClick={() => {
+                if (!selected?.id) return
+                assemble.mutate(
+                  { episodeId: selected.id, voices: true, videos: true, render: true },
+                  {
+                    onSuccess: (r) =>
+                      toast({
+                        kind: 'success',
+                        title: 'AI episode assembly started',
+                        description: `Job ${r.jobId} — follow the progress in Jobs.`,
+                      }),
+                    onError: (err) =>
+                      toast({ kind: 'error', title: 'Assembly failed', description: err.message }),
+                  },
+                )
+              }}
+            >
+              <Sparkles className="h-3.5 w-3.5" /> <T k="AI Episode" />
             </Button>
             <Button
               size="sm"

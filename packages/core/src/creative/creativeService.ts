@@ -39,6 +39,7 @@ interface CharacterRow {
   personality: string | null
   appearance: string | null
   voice: string | null
+  tts_voice: string | null
   bio: string | null
   goals: string | null
   fears: string | null
@@ -144,8 +145,8 @@ export class CreativeService {
     this.db
       .prepare(
         `INSERT INTO characters
-         (id, name, role, age, personality, appearance, voice, bio, goals, fears, notes, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, name, role, age, personality, appearance, voice, tts_voice, bio, goals, fears, notes, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -155,6 +156,7 @@ export class CreativeService {
         parsed.personality ?? null,
         parsed.appearance ?? null,
         parsed.voice ?? null,
+        parsed.ttsVoice ?? null,
         parsed.bio ?? null,
         parsed.goals ?? null,
         parsed.fears ?? null,
@@ -173,7 +175,7 @@ export class CreativeService {
       .prepare(
         `UPDATE characters SET
            name = ?, role = ?, age = ?, personality = ?, appearance = ?,
-           voice = ?, bio = ?, goals = ?, fears = ?, notes = ?, status = ?, updated_at = ?
+           voice = ?, tts_voice = ?, bio = ?, goals = ?, fears = ?, notes = ?, status = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -183,6 +185,7 @@ export class CreativeService {
         parsed.personality ?? null,
         parsed.appearance ?? null,
         parsed.voice ?? null,
+        parsed.ttsVoice ?? null,
         parsed.bio ?? null,
         parsed.goals ?? null,
         parsed.fears ?? null,
@@ -641,6 +644,7 @@ function rowToCharacter(row: CharacterRow): CharacterRecord {
     personality: row.personality ?? undefined,
     appearance: row.appearance ?? undefined,
     voice: row.voice ?? undefined,
+  ttsVoice: row.tts_voice ?? undefined,
     bio: row.bio ?? undefined,
     goals: row.goals ?? undefined,
     fears: row.fears ?? undefined,

@@ -310,6 +310,35 @@ export class StoryboardService {
     return this.getAsset(id)
   }
 
+  /**
+   * AI VOICE ACTING (v0.30): store REAL TTS bytes as the shot's voice —
+   * flows into the existing preview/mixer/render pipeline untouched.
+   */
+  registerGeneratedVoice(shotId: EntityId, bytes: Buffer, mime: string): AssetRecord {
+    this.requireShot(shotId)
+    const ext = mime.includes('mpeg') ? '.mp3' : '.wav'
+    const id = newEntityId()
+    const now = this.clock.isoNow()
+    const relativePath = join('audio', 'voice', `${id}${ext}`)
+    const tx = this.db.transaction(() => {
+      mkdirSync(join(this.projectRoot, 'audio', 'voice'), { recursive: true })
+      writeFileSync(join(this.projectRoot, relativePath), bytes)
+      this.db
+        .prepare(
+          `INSERT INTO assets (id, kind, relative_path, original_name, mime, bytes, created_at)
+           VALUES (?, 'AUDIO', ?, ?, ?, ?, ?)`,
+        )
+        .run(id, relativePath, `ai-voice${ext}`, mime, bytes.length, now)
+      const previous = this.requireShot(shotId).voiceAssetId
+      this.db
+        .prepare('UPDATE shots SET audio_asset_id = ?, updated_at = ? WHERE id = ?')
+        .run(id, now, shotId)
+      if (previous) this.pruneAssetIfOrphan(previous)
+    })
+    tx()
+    return this.getAsset(id)
+  }
+
   clearVoice(shotId: EntityId): void {
     const shot = this.requireShot(shotId)
     if (!shot.voiceAssetId) return

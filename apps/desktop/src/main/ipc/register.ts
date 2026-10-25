@@ -336,6 +336,29 @@ export function registerIpcHandlers(c: Container): void {
     shell.showItemInFolder(ctx.manga.chapterPackagePath(req.episodeId))
     return { ok: true }
   })
+  // -------------------------------------------------- AI voice acting + episode assembly (v0.30)
+  handleIpc('ai:speakShot', async (req) => {
+    requireActive(c)
+    const result = await c.ai.speakShot(req.shotId)
+    return result
+  })
+  handleIpc('ai:assembleEpisode', async (req) => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('ai.assembleEpisode', async (job, jobCtx) => {
+      const payload = (job.payload ?? {}) as { episodeId: string; voices: boolean; videos: boolean; render: boolean }
+      if (!payload?.episodeId) throw new MiraiError('VALIDATION_ERROR', 'assembly payload missing episodeId.')
+      return c.ai.assembleEpisode(
+        payload.episodeId,
+        { voices: payload.voices, videos: payload.videos, render: payload.render },
+        jobCtx.reportProgress,
+        { aborted: jobCtx.signal.aborted },
+      )
+    })
+    const job = await ctx.jobs.enqueue('ai.assembleEpisode', { ...req }, { priority: 10, maxAttempts: 1 })
+    c.logger.info('AI', 'AI anime episode assembly started', { episodeId: req.episodeId, voices: req.voices, videos: req.videos, render: req.render })
+    return { jobId: job.id }
+  })
+
   // -------------------------------------------------------- Localization Lab (§18)
   handleIpc('loc:translations:list', (req) => ({
     translations: requireActive(c).localization.listTranslations(req.sceneId),
