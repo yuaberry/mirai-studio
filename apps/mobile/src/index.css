@@ -1,0 +1,116 @@
+:root {
+  --bg: #0a0c10;
+  --panel: #11141b;
+  --raise: #171b24;
+  --line: #232936;
+  --text: #e6e9f0;
+  --dim: #9aa3b5;
+  --faint: #5b6478;
+  --accent: #f472b6;
+  --accent-2: #a78bfa;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root { height: 100dvh; background: var(--bg); }
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 16px);
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.hero { text-align: center; padding: 48px 0 24px; }
+.hero-title { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+.hero-title::after { content: ' 🌸'; }
+.hero-sub { color: var(--accent); font-size: 13px; font-weight: 600; margin-top: 2px; }
+.hero-version { color: var(--faint); font-size: 11px; margin-top: 6px; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  margin-top: 14px;
+}
+.hint { color: var(--dim); font-size: 13px; line-height: 1.6; }
+.hint strong { color: var(--text); }
+
+.buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.file-button {
+  display: block; text-align: center;
+  background: linear-gradient(135deg, #f472b6, #a78bfa);
+  color: #0a0c10; font-weight: 800; font-size: 14px;
+  border-radius: 12px; padding: 14px; cursor: pointer;
+}
+.file-button:nth-child(2) {
+  background: var(--raise); color: var(--text); border: 1px solid var(--line);
+}
+.file-button input { display: none; }
+
+.busy { color: var(--accent); font-size: 12px; margin-top: 10px; }
+.error {
+  margin-top: 10px; color: #f87171; font-size: 12px; line-height: 1.5;
+  background: rgba(248, 113, 113, 0.08); border: 1px solid rgba(248, 113, 113, 0.25);
+  border-radius: 10px; padding: 10px;
+}
+
+.about-title { font-weight: 800; font-size: 13px; margin-bottom: 8px; }
+.about ol { margin-left: 18px; color: var(--dim); font-size: 13px; line-height: 1.9; }
+.about code { background: var(--raise); padding: 1px 5px; border-radius: 5px; font-size: 11px; }
+.fine { color: var(--faint); font-size: 11px; margin-top: 12px; line-height: 1.6; }
+
+.bar { display: flex; gap: 12px; align-items: center; padding: 12px 0; }
+.back {
+  background: var(--raise); color: var(--text); border: 1px solid var(--line);
+  width: 38px; height: 38px; border-radius: 10px; font-size: 17px; cursor: pointer;
+}
+.bar-title { min-width: 0; }
+.doc-title { font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-sub { color: var(--faint); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.chips { display: flex; gap: 8px; flex-wrap: wrap; padding: 2px 0 10px; }
+.chip {
+  background: rgba(244, 114, 182, 0.12); color: var(--accent);
+  border: 1px solid rgba(244, 114, 182, 0.3);
+  font-size: 11px; font-weight: 700; border-radius: 999px; padding: 4px 10px;
+}
+
+.toc {
+  display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 12px;
+  scrollbar-width: none;
+}
+.toc-item {
+  white-space: nowrap; font-size: 11px; font-weight: 600; cursor: pointer;
+  background: var(--panel); color: var(--dim);
+  border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px;
+}
+.toc-item.active {
+  background: rgba(167, 139, 250, 0.14); color: var(--accent-2);
+  border-color: rgba(167, 139, 250, 0.4);
+}
+
+.section { flex: 1; padding-bottom: 24px; }
+.section-title {
+  font-size: 17px; font-weight: 800; line-height: 1.35; margin-bottom: 12px;
+  color: var(--accent);
+}
+.block-h2 { font-size: 14px; font-weight: 800; color: var(--text); margin: 16px 0 6px; }
+.paragraph { color: var(--dim); font-size: 13px; line-height: 1.75; margin-bottom: 10px; }
+.meta {
+  display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line);
+  font-size: 12px; line-height: 1.5;
+}
+.meta-key { color: var(--faint); font-weight: 700; min-width: 118px; flex: none; }
+.meta-value { color: var(--text); }
