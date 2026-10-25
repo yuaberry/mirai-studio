@@ -127,6 +127,8 @@ export const CharacterRecord = Character.extend({
   id: zEntityId,
   createdAt: zIsoDate,
   updatedAt: zIsoDate,
+  /** v0.31: the character's reference sheet image (null = none). */
+  referenceAssetId: zEntityId.nullable(),
 })
 export type CharacterRecord = z.infer<typeof CharacterRecord>
 

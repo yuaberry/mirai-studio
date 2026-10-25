@@ -43,6 +43,7 @@ import { MangaService } from '../creative/mangaService'
 import { MoodboardService } from '../visual/moodboardService'
 import { PosterService } from '../visual/posterService'
 import { LocalizationService } from '../localization/localizationService'
+import { CharacterSheetService } from '../visual/characterSheetService'
 import { ImpactService } from '../production/impactService'
 import type { DerivedWorkKind, DerivedWorkView, InheritFlags } from '@mirai/shared'
 import { MediaService } from '../media/mediaService'
@@ -90,6 +91,8 @@ export interface OpenProjectContext {
   poster: PosterService
   /** Localization Lab (§18): scene translations + glossary. */
   localization: LocalizationService
+  /** AI-anime loop (v0.31): character reference sheets. */
+  sheets: CharacterSheetService
   /** Media library (music/SFX/ambience) for this project. */
   media: MediaService
   /** Render engine (FFmpeg) for this project. */
@@ -765,6 +768,7 @@ export class ProjectService {
     const moodboard = new MoodboardService(db, this.opts.clock, path)
     const poster = new PosterService(db, this.opts.clock, path)
     const localization = new LocalizationService(db, this.opts.clock)
+    const sheets = new CharacterSheetService(db, this.opts.clock, path)
     const media = new MediaService(db, this.opts.clock, path)
     const timeline = new TimelineService(db, this.opts.clock)
     const production = new ProductionService(db, this.opts.clock, path, creative, storyboard, timeline, media)
@@ -776,7 +780,7 @@ export class ProjectService {
     this.upsertRegistry(manifest, path, now)
 
     const summary = this.summaryById(manifest.id)
-    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, manga, moodboard, poster, localization, ip, media, render, timeline, production, subtitles, blender, recoveredCount }
+    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, manga, moodboard, poster, localization, sheets, ip, media, render, timeline, production, subtitles, blender, recoveredCount }
     this.opts.logger.info('PROJECT', `Project opened: "${manifest.name}"`, {
       id: manifest.id,
       recoveredJobs: recoveredCount,

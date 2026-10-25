@@ -336,6 +336,32 @@ export function registerIpcHandlers(c: Container): void {
     shell.showItemInFolder(ctx.manga.chapterPackagePath(req.episodeId))
     return { ok: true }
   })
+  // -------------------------------------------- character reference sheets (v0.31)
+  handleIpc('character:attachReference', async (req) => {
+    const ctx = requireActive(c)
+    const win = c.emitter.window
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Import the character reference sheet',
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      throw new MiraiError('CANCELLED', 'Reference sheet import cancelled.')
+    }
+    const asset = ctx.sheets.attachFile(req.characterId, result.filePaths[0]!)
+    c.logger.info('MEDIA', `Reference sheet attached`, { characterId: req.characterId, assetId: asset.id })
+    return { asset }
+  })
+  handleIpc('character:clearReference', (req) => {
+    requireActive(c).sheets.clearSheet(req.characterId)
+    return { ok: true }
+  })
+  handleIpc('ai:generateCharacterSheet', async (req) => {
+    requireActive(c)
+    const result = await c.ai.generateCharacterSheet(req.characterId)
+    return result
+  })
+
   // -------------------------------------------------- AI voice acting + episode assembly (v0.30)
   handleIpc('ai:speakShot', async (req) => {
     requireActive(c)

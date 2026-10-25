@@ -60,6 +60,81 @@ interface ChatProviderConfig {
   model: string
 }
 
+/** Clean one dialogue segment for speech (names/quotes/parentheticals out). */
+function cleanForSpeech(text: string): string {
+  return text
+    .replace(/^[A-Z][A-Z -]*$/gm, '')
+    .replace(/[\u201c\u201d"]/g, '')
+    .replace(/\(.*?\)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+interface SpeakerSegment {
+  key: string
+  character?: { name: string; ttsVoice?: string }
+  text: string
+}
+
+/**
+ * Parse a screenplay-style dialogue into speaker segments:
+ *   AYAKA
+ *   "Você viu?"
+ *   RIN
+ *   "Também." — or "AYAKA: line" inline style. Unlabeled prose becomes
+ * the NARRATOR segment (default voice).
+ */
+function parseSpeakerSegments(text: string, cast: Array<{ name: string; ttsVoice?: string }>): SpeakerSegment[] {
+  const lines = text.split('\n')
+  const segments: SpeakerSegment[] = []
+  let current: SpeakerSegment | null = null
+  for (const raw of lines) {
+    const line = raw.trim()
+    if (line.length === 0) continue
+    // speaker line: ALL CAPS alone, or "NAME:" prefix
+    const inline = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s-]{0,40}):\s*(.+)$/.exec(line)
+    const caps = /^[A-Z][A-Z\s-]{1,40}$/.test(line)
+    let speakerName: string | null = null
+    let rest = line
+    if (inline) {
+      speakerName = inline[1]!
+      rest = inline[2]!
+    } else if (caps) {
+      speakerName = line
+      rest = ''
+    }
+    if (speakerName) {
+      const character = matchCast(speakerName, cast)
+      if (character || rest.length > 0) {
+        current = { key: character ? character.name.toLowerCase() : `narrator:${speakerName.toLowerCase()}`, character: character ?? undefined, text: rest }
+        segments.push(current)
+      }
+      continue
+    }
+    if (!current) {
+      current = { key: 'narrator', text: line }
+      segments.push(current)
+    } else {
+      current.text += ` ${line}`
+    }
+  }
+  return segments
+}
+
+/** Match a speaker label to a cast member: exact, or any word-token
+ * overlap ("AYAKA" → "Qual Ayaka"); null when nobody matches. */
+function matchCast(speaker: string, cast: Array<{ name: string; ttsVoice?: string }>): { name: string; ttsVoice?: string } | null {
+  const target = speaker.toLowerCase().trim()
+  const exact = cast.find((c) => c.name.toLowerCase() === target)
+  if (exact) return exact
+  const words = target.split(/[\s-]+/).filter((w) => w.length >= 3)
+  for (const word of words) {
+    const hit = cast.find((c) => c.name.toLowerCase().split(/[\s-]+/).includes(word))
+    if (hit) return hit
+  }
+  return null
+}
+
 export class AiHost {
   private readonly registry: ModelRegistry
   private readonly active = new Map<string, AbortController>()
@@ -1152,26 +1227,30 @@ export class AiHost {
     if (text.length === 0) {
       throw new MiraiError('VALIDATION_ERROR', 'Nothing to speak — write the shot dialogue (or the scene screenplay) first.')
     }
-    // strip screenplay markup: keep quoted dialogue + action prose readable
-    const speakable = text
-      .replace(/^[A-Z][A-Z -]*$/gm, '') // NAME speaker lines
-      .replace(/[\u201c\u201d"]/g, '') // quotes
-      .replace(/\(.*?\)/g, ' ') // parentheticals
-      .replace(/\s+/g, ' ')
-      .trim()
-    if (speakable.length === 0) {
+    // MULTI-SPEAKER (v0.31): parse the dialogue into speaker segments and
+    // voice EACH with that character's TTS voice; clips are concatenated
+    // with the bundled FFmpeg. Single-voice dialogues stay one call.
+    const cast = ctx.creative.listCharacters().filter((c) => scene.characterIds.includes(c.id))
+    const segments = parseSpeakerSegments(text, cast)
+    if (segments.length === 0) {
       throw new MiraiError('VALIDATION_ERROR', 'The dialogue has no speakable text — only speaker names.')
     }
 
-    // voice: the first cast character with a ttsVoice, else project default
-    const cast = ctx.creative.listCharacters().filter((c) => scene.characterIds.includes(c.id))
-    const speaker = cast.find((c) => c.ttsVoice && c.ttsVoice.trim().length > 0)
-    const voice = speaker?.ttsVoice?.trim() || provider.defaultVoice?.trim()
-    if (!voice) {
-      throw new MiraiError(
-        'VALIDATION_ERROR',
-        'No voice to speak with — set a TTS voice on a cast character (Characters → voice section) or a default voice in Settings.',
-      )
+    // resolve a voice per segment: the character's voice; unlabeled
+    // narrators fall back to the FIRST voiced cast member before the
+    // project default (single-cast scenes keep their character's voice).
+    const firstVoicedCast = cast.find((c) => c.ttsVoice && c.ttsVoice.trim().length > 0)
+    const voices = new Map<string, string>()
+    for (const segment of segments) {
+      const voice =
+        segment.character?.ttsVoice?.trim() || firstVoicedCast?.ttsVoice?.trim() || provider.defaultVoice?.trim() || ''
+      if (!voice) {
+        throw new MiraiError(
+          'VALIDATION_ERROR',
+          'No voice to speak with — set a TTS voice on a cast character (Characters → voice section) or a default voice in Settings.',
+        )
+      }
+      voices.set(segment.key, voice)
     }
 
     const tts = new OpenAITtsProvider({
@@ -1180,21 +1259,131 @@ export class AiHost {
       fetchFn: globalFetch(),
       timeoutMs: this.deps.settings.get().ai.requestTimeoutMs,
     })
-    const result = await tts.speak({
-      model: provider.model,
-      input: speakable,
-      voice,
-      responseFormat: 'wav',
-      signal,
-    })
-    const asset = ctx.storyboard.registerGeneratedVoice(shotId, result.bytes, result.mimeType)
+
+    // one call per DISTINCT voice (segments of the same voice merge)
+    const mergedByVoice = new Map<string, string>()
+    for (const segment of segments) {
+      const voice = voices.get(segment.key)!
+      const speakable = cleanForSpeech(segment.text)
+      if (speakable.length === 0) continue
+      const prev = mergedByVoice.get(voice)
+      mergedByVoice.set(voice, prev ? `${prev} ${speakable}` : speakable)
+    }
+    if (mergedByVoice.size === 0) {
+      throw new MiraiError('VALIDATION_ERROR', 'The dialogue has no speakable text — only speaker names.')
+    }
+
+    const results: Array<{ voice: string; bytes: Buffer; mime: string }> = []
+    for (const [voice, input] of mergedByVoice) {
+      const result = await tts.speak({ model: provider.model, input, voice, responseFormat: 'wav', signal })
+      results.push({ voice, bytes: result.bytes, mime: result.mimeType })
+    }
+
+    let finalBytes = results[0]!.bytes
+    const finalMime = results[0]!.mime
+    let voiceLabel = results[0]!.voice
+    if (results.length > 1) {
+      // MULTIPLE VOICES: concatenate the clips with the bundled FFmpeg —
+      // the same binary the renderer uses, no new dependency.
+      const { ffmpegBin } = await import('@mirai/core')
+      const { spawnSync } = await import('node:child_process')
+      const os = await import('node:os')
+      const fs = await import('node:fs')
+      const path = await import('node:path')
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mirai-voice-'))
+      try {
+        const listPath = path.join(tmpDir, 'list.txt')
+        fs.writeFileSync(
+          listPath,
+          results.map((_, i) => `file 'clip${i}.wav'`).join('\n'),
+        )
+        results.forEach((r, i) => fs.writeFileSync(path.join(tmpDir, `clip${i}.wav`), r.bytes))
+        const outPath = path.join(tmpDir, 'joined.wav')
+        const proc = spawnSync(
+          ffmpegBin(),
+          ['-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', outPath],
+          { encoding: 'utf8', timeout: 60_000 },
+        )
+        if (proc.status !== 0 || !fs.existsSync(outPath)) {
+          throw new MiraiError('AI_PROVIDER_ERROR', 'Voice concatenation failed.', { retryable: true })
+        }
+        finalBytes = fs.readFileSync(outPath)
+        voiceLabel = results.map((r) => r.voice).join('+')
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    }
+
+    const asset = ctx.storyboard.registerGeneratedVoice(shotId, finalBytes, finalMime)
     this.deps.logger.log('info', 'AI', 'AI voice generated', {
       shotId,
-      voice,
-      model: result.model,
+      voice: voiceLabel,
+      model: provider.model,
+      bytes: finalBytes.length,
+      speakers: mergedByVoice.size,
+    })
+    return { assetId: asset.id, voice: voiceLabel, model: provider.model, text: segments.map((sg) => sg.text).join(' ') }
+  }
+
+  // --------------------------------- character reference sheet (v0.31 §consistency)
+
+  /**
+   * THE AI-ANIME REFERENCE SHEET: generate the character's canonical
+   * turnaround (front/side/back + expression insets) from their data +
+   * the Style Bible — the 'sheet first' step that anchors every later
+   * frame and clip. Bytes land as a REAL asset on the character.
+   */
+  async generateCharacterSheet(characterId: string): Promise<{ assetId: string; prompt: string }> {
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+    const imageProvider = this.resolveImageProvider()
+    if (!imageProvider) {
+      throw new MiraiError(
+        'CREDENTIALS_UNAVAILABLE',
+        'No image provider configured — set baseUrl, model and key in Settings → Providers.',
+      )
+    }
+    const character = ctx.creative.getCharacter(characterId)
+    const style = ctx.storyboard.getStyleBible()
+
+    const prompt = [
+      `CHARACTER REFERENCE SHEET — the canonical design anchor for "${character.name}" (${character.role}).`,
+      'A single image, clean layout: FULL-BODY TURNAROUND with FRONT, SIDE and BACK views side by side, plus 2 small expression insets (neutral + one emotional close-up) in the lower corner.',
+      'Neutral studio background, consistent lighting, no shadows on the background, no text labels.',
+      `CHARACTER: ${character.name}.`,
+      character.age ? `Age: ${character.age}.` : null,
+      character.appearance ? `APPEARANCE (canon — honor every detail): ${character.appearance}` : null,
+      character.personality ? `PERSONALITY (pose/expression guidance): ${character.personality}` : null,
+      character.voice ? `VOICE (carries into posture): ${character.voice}` : null,
+      style.artDirection ? `ART DIRECTION: ${style.artDirection}` : null,
+      style.lineart ? `LINEART: ${style.lineart}` : null,
+      style.shading ? `SHADING: ${style.shading}` : null,
+      style.palette ? `PALETTE: ${style.palette}` : null,
+      style.eyesAndHair ? `EYES AND HAIR: ${style.eyesAndHair}` : null,
+      style.proportions ? `PROPORTIONS: ${style.proportions}` : null,
+      'All three turnaround views must be THE SAME person: same hair, same outfit, same height and proportions — a real production reference.',
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    const { OpenAIImagesProvider } = await import('@mirai/ai')
+    const provider = new OpenAIImagesProvider({
+      apiKey: imageProvider.apiKey,
+      baseUrl: imageProvider.baseUrl,
+      fetchFn: globalFetch(),
+      timeoutMs: this.deps.settings.get().ai.requestTimeoutMs,
+    })
+    const result = await provider.generate({
+      model: imageProvider.model,
+      prompt,
+      size: '768x1344',
+    })
+    const asset = ctx.sheets.registerSheet(characterId, result.bytes, result.mimeType, `sheet-${character.name.replace(/\s+/g, '-')}`)
+    this.deps.logger.log('info', 'AI', 'Character reference sheet generated', {
+      characterId,
       bytes: result.bytes.length,
     })
-    return { assetId: asset.id, voice, model: result.model, text: speakable }
+    return { assetId: asset.id, prompt }
   }
 
   // --------------------------------------------- AI anime episode assembly (v0.30)

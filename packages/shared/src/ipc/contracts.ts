@@ -378,6 +378,22 @@ export const ipcContracts = {
     request: z.object({ id: zEntityId }),
     response: z.object({ ok: z.boolean() }),
   },
+  /** v0.31: character reference sheet — import a real image file. */
+  'character:attachReference': {
+    request: z.object({ characterId: zEntityId }),
+    response: z.object({ asset: AssetRecord }),
+  },
+  /** v0.31: detach the character's reference sheet (honest prune). */
+  'character:clearReference': {
+    request: z.object({ characterId: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** v0.31: AI generates the character's turnaround reference sheet. */
+  'ai:generateCharacterSheet': {
+    request: z.object({ characterId: zEntityId }),
+    response: z.object({ assetId: zEntityId, prompt: z.string() }),
+  },
+
   /** AI VOICE ACTING (v0.30): speak the shot's dialogue into a real voice asset. */
   'ai:speakShot': {
     request: z.object({ shotId: zEntityId }),

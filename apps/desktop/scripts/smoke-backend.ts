@@ -2201,6 +2201,127 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V31 AI QUALITY: AI reference sheet + multi-speaker voice', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    const ep = ctx.creative.createEpisode({ season: 9, number: 8, title: 'V31 Quality' })
+
+    // ---- AI reference sheet: image transport mocked with real PNG bytes
+    const ayaka = ctx.creative.createCharacter({
+      name: 'Qual Ayaka',
+      role: 'PROTAGONIST',
+      appearance: 'Silver hair, amber eyes, school coat.',
+      ttsVoice: 'ayaka-soft',
+    })
+    const rin = ctx.creative.createCharacter({ name: 'Qual Rin', role: 'SUPPORTING', ttsVoice: 'rin-bright' })
+    const png = join(ctx.summary.path, '..', 'v31-sheet.png')
+    writeFileSync(png, Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c626001000000ffff03000006000557bfabd40000000049454e44ae426082', 'hex'))
+
+    const realFetch = globalThis.fetch
+    const makeWav = (marker: number, seconds: number) => {
+      const sampleRate = 8000
+      const samples = Math.floor(seconds * sampleRate)
+      const buf = Buffer.alloc(44 + samples * 2)
+      buf.write('RIFF', 0)
+      buf.writeUInt32LE(36 + samples * 2, 4)
+      buf.write('WAVE', 8)
+      buf.write('fmt ', 12)
+      buf.writeUInt32LE(16, 16)
+      buf.writeUInt16LE(1, 20)
+      buf.writeUInt16LE(1, 22)
+      buf.writeUInt32LE(sampleRate, 24)
+      buf.writeUInt32LE(sampleRate * 2, 28)
+      buf.writeUInt16LE(2, 32)
+      buf.writeUInt16LE(16, 34)
+      buf.write('data', 36)
+      buf.writeUInt32LE(samples * 2, 40)
+      for (let i = 0; i < samples; i++) buf.writeInt16LE((marker + Math.round(Math.sin((2 * Math.PI * 440 * i) / sampleRate) * 6000)) % 32768, 44 + i * 2)
+      return buf
+    }
+    const voicesRequested: string[] = []
+    globalThis.fetch = (async (url: unknown, init?: { body?: string }) => {
+      const u = String(url)
+      const body = String(init?.body ?? '')
+      if (u.includes('/images/generations')) {
+        const parsed = JSON.parse(body) as { prompt: string }
+        if (!parsed.prompt.includes('CHARACTER REFERENCE SHEET')) throw new Error('sheet prompt marker missing')
+        if (!parsed.prompt.includes('Silver hair')) throw new Error('character canon not baked into the sheet prompt')
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ data: [{ b64_json: readFileSync(png).toString('base64') }] }),
+        }
+      }
+      if (u.includes('/audio/speech')) {
+        const parsed = JSON.parse(body) as { voice: string }
+        voicesRequested.push(parsed.voice)
+        const marker = parsed.voice === 'rin-bright' ? 9000 : 1000
+        const ab = makeWav(marker, 1.0)
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          arrayBuffer: async () => ab.buffer.slice(ab.byteOffset, ab.byteOffset + ab.byteLength),
+        }
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) }
+    }) as typeof fetch
+    const settingsSvc = new SettingsService(appDb)
+    const credentialsSvc = new CredentialStore(appDb, plaintextCodec, systemClock)
+    credentialsSvc.set('image', 'sk-smoke-v31-image')
+    credentialsSvc.set('tts', 'sk-smoke-v31-tts')
+    settingsSvc.update({
+      ...settingsSvc.get(),
+      ai: {
+        ...settingsSvc.get().ai,
+        image: { baseUrl: 'https://img.example/v1', model: 'sheet-model', size: '768x1344' },
+        tts: { baseUrl: 'https://tts.example/v1', model: 'tts-1', voice: 'default-voice' },
+      },
+    })
+    const ai = new AiHost({
+      credentials: credentialsSvc,
+      settings: settingsSvc,
+      projects,
+      logger,
+      emitter: { send: () => undefined, window: null } as never,
+    })
+    const sheet = await ai.generateCharacterSheet(ayaka.id)
+    if (!sheet.assetId) throw new Error('AI sheet not attached')
+    if (ctx.creative.getCharacter(ayaka.id).referenceAssetId !== sheet.assetId) throw new Error('sheet id not on the character')
+
+    // ---- multi-speaker voice: two cast voices, one shot, concatenated by the BUNDLED ffmpeg
+    const scene = ctx.creative.createScene(ep.id, { title: 'V31 cena', characterIds: [ayaka.id, rin.id] })
+    const shot = ctx.storyboard.createShot(scene.id, {
+      title: 'V31 shot',
+      durationSeconds: 4,
+      dialogue: 'AYAKA\n"O lampião responde à lua."\nRIN\n"Então diz o nome dele."',
+    })
+    const spoken = await ai.speakShot(shot.id)
+    globalThis.fetch = realFetch
+    if (voicesRequested.filter((v) => v === 'ayaka-soft').length !== 1) throw new Error('ayaka voice not requested')
+    if (voicesRequested.filter((v) => v === 'rin-bright').length !== 1) throw new Error('rin voice not requested')
+    if (!spoken.voice.includes('+')) throw new Error('multi-speaker label missing')
+    // each clip is 1.0s at 8kHz (44 + 16000 bytes); the concatenation is
+    // ~2 clips (FFmpeg rewrites the container header — assert by margin)
+    const voiceAsset = ctx.storyboard.getAsset(ctx.storyboard.getShotById(shot.id).voiceAssetId!)
+    const single = 44 + 16_000
+    if (voiceAsset.bytes < single * 1.9 || voiceAsset.bytes > single * 2.1) {
+      throw new Error(`concat length wrong: ${voiceAsset.bytes} (expected ~${single * 2})`)
+    }
+
+    // cleanup
+    ctx.storyboard.clearVoice(shot.id)
+    ctx.creative.deleteEpisode(ep.id)
+    ctx.sheets.clearSheet(ayaka.id)
+    ctx.creative.deleteCharacter(ayaka.id)
+    ctx.creative.deleteCharacter(rin.id)
+    settingsSvc.update({
+      ...settingsSvc.get(),
+      ai: { ...settingsSvc.get().ai, image: { baseUrl: undefined, model: undefined, size: '1344x768' }, tts: {} },
+    })
+    rmSync(png, { force: true })
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

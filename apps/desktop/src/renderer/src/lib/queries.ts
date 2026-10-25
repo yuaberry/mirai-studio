@@ -1662,6 +1662,24 @@ export function useTranslatedEpubReveal() {
   })
 }
 
+export function useAttachReference() {
+  return useMutation({
+    mutationFn: (characterId: string) => invoke('character:attachReference', { characterId }).then((r) => r.asset),
+  })
+}
+
+export function useClearReference() {
+  return useMutation({
+    mutationFn: (characterId: string) => invoke('character:clearReference', { characterId }).then(() => true),
+  })
+}
+
+export function useGenerateCharacterSheet() {
+  return useMutation({
+    mutationFn: (characterId: string) => invoke('ai:generateCharacterSheet', { characterId }),
+  })
+}
+
 export function useAssembleEpisode() {
   return useMutation({
     mutationFn: (input: { episodeId: string; voices: boolean; videos: boolean; render: boolean }) =>

@@ -45,6 +45,7 @@ interface CharacterRow {
   fears: string | null
   notes: string | null
   status: string
+  reference_asset_id: string | null
   created_at: string
   updated_at: string
 }
@@ -650,6 +651,7 @@ function rowToCharacter(row: CharacterRow): CharacterRecord {
     fears: row.fears ?? undefined,
     notes: row.notes ?? undefined,
     status: row.status,
+    referenceAssetId: row.reference_asset_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   })

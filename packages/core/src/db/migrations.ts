@@ -608,4 +608,12 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0019_character_reference_sheet',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE characters ADD COLUMN reference_asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL;
+      `)
+    },
+  },
 ]

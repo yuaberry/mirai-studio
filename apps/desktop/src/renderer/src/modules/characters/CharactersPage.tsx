@@ -19,6 +19,7 @@ import { useCharacters, useCharacterMutations, useApprovalTransition } from '../
 import { toast } from '../../store/appStore'
 import { T } from '../../system/T'
 import { CharacterRelations } from './CharacterRelations'
+import { CharacterSheet } from './CharacterSheet'
 import { CharacterImpact } from './CharacterImpact'
 
 const ROLE_LABEL: Record<string, string> = {
@@ -289,6 +290,8 @@ function CharacterEditor({ character }: { character: CharacterRecord }) {
         <Field label="Biography" hint="Their story so far." value={form.bio} onChange={(v) => set('bio', v)} rows={5} id="ch-bio" />
         <Field label="Notes" hint="Anything else — continuity details, trivia." value={form.notes} onChange={(v) => set('notes', v)} rows={3} id="ch-notes" />
       </div>
+
+      <CharacterSheet character={character} />
 
       <CharacterRelations character={character} />
 
