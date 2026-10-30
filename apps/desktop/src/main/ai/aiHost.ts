@@ -30,7 +30,7 @@ import {
   TaglineDraft,
   SceneTranslationDraft,
 } from '@mirai/shared'
-import { assertExplicitCastAllowed, maturePipelineActive } from '@mirai/core'
+import { assertExplicitCastAllowed, maturePipelineActive, VisualConsistencyService } from '@mirai/core'
 import type { DossierAiSections, DossierData } from '@mirai/core'
 import {
   ModelRegistry,
@@ -48,6 +48,9 @@ import {
   type ContextCharacter,
   type ContextScene,
 } from '@mirai/ai'
+import {
+  type ConsistencyLock,
+} from '@mirai/shared'
 import type { CredentialStore, LoggerService, ProjectService, SettingsService } from '@mirai/core'
 import type { MainEmitter } from '../bootstrap'
 
@@ -149,6 +152,10 @@ export class AiHost {
       /** v0.21: real usage persistence (cost dashboard). Optional so
        * tests/smoke can construct without it. */
       aiUsage?: { record(e: import('@mirai/core').AiUsageEntry): void }
+      /** v0.33: visual consistency engine — model sheets + palette lock +
+       * style bible enforcement in every image/video generation. Optional
+       * so tests/smoke can construct without it. */
+      visualConsistency?: VisualConsistencyService
     },
   ) {
     this.registry = new ModelRegistry({
@@ -1549,21 +1556,41 @@ export class AiHost {
       )
     }
 
-    // ---- consistency data -------------------------------------------------
+    // ---- consistency data (v0.33: Visual Consistency Engine) -----------
     const shot = ctx.storyboard.getShotById(shotId)
     const scene = ctx.creative.getSceneById(shot.sceneId)
-    const characters = ctx.creative
+    const sceneCharacters = ctx.creative
       .listCharacters()
       .filter((c) => scene.characterIds.includes(c.id))
-      .map(
-        (c): ContextCharacter => ({
-          name: c.name,
-          role: c.role,
-          personality: c.personality,
-          goals: c.goals,
-          fears: c.fears,
-        }),
+    const characters: ContextCharacter[] = sceneCharacters.map((c) => ({
+      name: c.name,
+      role: c.role,
+      personality: c.personality,
+      goals: c.goals,
+      fears: c.fears,
+    }))
+
+    // Build the Visual Consistency Lock from Style Bible + model sheets
+    // + moodboard palette. Every generation must honor it.
+    let consistencyLock: ConsistencyLock | null = null
+    if (this.deps.visualConsistency) {
+      const styleBible = ctx.storyboard.getStyleBible()
+      const moodboardPalette = ctx.moodboard?.palette?.() ?? []
+      consistencyLock = this.deps.visualConsistency.buildLock(
+        ctx.summary.id,
+        styleBible,
+        sceneCharacters,
+        moodboardPalette,
       )
+      // Persist the lock so it survives across sessions.
+      this.deps.visualConsistency.saveLock(consistencyLock)
+    }
+
+    // Inject the consistency prompt fragment into the user's extraPrompt.
+    const consistencyInjectedExtra = consistencyLock
+      ? `${consistencyLock.promptFragment}\n\nEXTRA_DIRECTION: ${extraPrompt ?? ''}`.trim()
+      : extraPrompt
+
     const prompt = buildImagePrompt({
       styleBible: ctx.storyboard.getStyleBible(),
       scene: {
@@ -1582,14 +1609,12 @@ export class AiHost {
         notes: shot.notes,
       },
       characters,
-      extraPrompt,
+      extraPrompt: consistencyInjectedExtra,
       mature: this.matureActive(ctx),
     })
     // Pro: the adults-only policy is enforced in code before any mature prompt.
     if (this.matureActive(ctx)) {
-      assertExplicitCastAllowed(
-        ctx.creative.listCharacters().filter((c) => scene.characterIds.includes(c.id)),
-      )
+      assertExplicitCastAllowed(sceneCharacters)
     }
 
     progress(20)
@@ -1609,11 +1634,37 @@ export class AiHost {
 
     const asset = ctx.storyboard.registerGeneratedFrame(shotId, result.bytes, result.mimeType)
     progress(100)
+
+    // Consistency check: does the generated prompt honor the lock?
+    if (consistencyLock && this.deps.visualConsistency) {
+      const check = this.deps.visualConsistency.checkConsistency(
+        consistencyLock,
+        asset.id,
+        prompt,
+      )
+      if (!check.consistent) {
+        this.deps.logger.warn('AI', `Frame consistency below threshold (${check.score}/100)`, {
+          shotId,
+          assetId: asset.id,
+          score: check.score,
+          issues: check.issues,
+          suggestions: check.suggestions,
+        })
+      }
+    }
+
     this.deps.logger.log('info', 'AI', 'Frame generated & attached', {
       shotId,
       assetId: asset.id,
       bytes: asset.bytes,
       model: imageProvider.model,
+      consistencyScore: consistencyLock
+        ? this.deps.visualConsistency!.checkConsistency(
+            consistencyLock,
+            asset.id,
+            prompt,
+          ).score
+        : null,
     })
     return { assetId: asset.id, prompt }
   }

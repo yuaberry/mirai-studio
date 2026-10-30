@@ -15,6 +15,7 @@ import {
   type Database,
   type OpenProjectContext,
   AiUsageService,
+  VisualConsistencyService,
 } from '@mirai/core'
 import type { IpcEventChannel, IpcEventPayload, OpenedProject } from '@mirai/shared'
 import { ipcEventPayloads } from '@mirai/shared'
@@ -63,6 +64,8 @@ export interface Container {
   projects: ProjectService
   ai: AiHost
   aiUsage: AiUsageService
+  /** v0.33: Visual Consistency Engine — model sheets + palette lock. */
+  visualConsistency: VisualConsistencyService
   emitter: MainEmitter
   health: HealthChecker
   /** App-level plugin registry (Phase 9). */
@@ -105,7 +108,8 @@ export function bootstrap(): Container {
     onJobUpdated: (job) => emitter.send('jobs:updated', { job }),
   })
   const aiUsage = new AiUsageService(appDb)
-  const ai = new AiHost({ credentials, settings, projects, logger, emitter, aiUsage })
+  const visualConsistency = new VisualConsistencyService(appDb, systemClock, dirs.root)
+  const ai = new AiHost({ credentials, settings, projects, logger, emitter, aiUsage, visualConsistency })
 
   // Log batches → renderer (Diagnostics live tail).
   logger.subscribe((entries) => emitter.send('logs:appended', { entries }))
@@ -123,6 +127,7 @@ export function bootstrap(): Container {
     projects,
     ai,
     aiUsage,
+    visualConsistency,
     emitter,
     health,
     plugins,

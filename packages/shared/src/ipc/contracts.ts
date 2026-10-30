@@ -31,6 +31,7 @@ import {
   ImpactResult,
 } from '../entities/ip'
 import { MoodboardItemInput, MoodboardItem, PosterState } from '../entities/moodboard'
+import { type ConsistencyLock } from '../entities/visualConsistency'
 import {
   SceneTranslation,
   TranslationUpsertInput,
@@ -1192,6 +1193,29 @@ export const ipcContracts = {
         byModel: z.array(z.object({ model: z.string(), calls: z.number(), promptTokens: z.number(), completionTokens: z.number() })),
         recentErrors: z.array(z.object({ ts: z.string(), kind: z.string(), model: z.string().nullable(), error: z.string().nullable() })),
       }),
+    }),
+  },
+
+  // ---- Visual Consistency Engine (v0.33, estúdio japonês) ---------------
+  /** Constrói/retorna o ConsistencyLock do projeto: model sheets,
+   *  palette lock, style bible enforcement. Injetado em toda geração. */
+  'visual:consistencyLock': {
+    request: z.object({}),
+    response: z.object({
+      lock: z.custom<ConsistencyLock>((val) => val !== null && typeof val === 'object'),
+    }),
+  },
+  /** Valida um frame gerado contra o lock de consistência (score 0-100). */
+  'visual:checkConsistency': {
+    request: z.object({
+      frameAssetId: zEntityId,
+      generationPrompt: z.string().max(10_000),
+    }),
+    response: z.object({
+      consistent: z.boolean(),
+      score: z.number().min(0).max(100),
+      issues: z.array(z.string()).optional(),
+      suggestions: z.array(z.string()).optional(),
     }),
   },
 

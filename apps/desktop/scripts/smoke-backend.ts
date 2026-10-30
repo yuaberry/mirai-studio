@@ -29,6 +29,7 @@ import {
   PluginRegistry,
   RenderService,
   SettingsService,
+  VisualConsistencyService,
   EpubService,
   DocxService,
   AiUsageService,
@@ -2422,6 +2423,73 @@ async function main(): Promise<void> {
       ai: { ...settingsSvc.get().ai, image: { baseUrl: undefined, model: undefined, size: '1344x768' }, tts: {} },
     })
     rmSync(pngPath, { force: true })
+    await projects.close()
+  })
+
+  await step('V33 VISUAL CONSISTENCY: model sheet lock + palette + style bible enforced', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    // ---- personagem com model sheet (reference sheet)
+    const yuna = ctx.creative.createCharacter({
+      name: 'Yuna Consistency',
+      role: 'PROTAGONIST',
+      age: '17',
+      appearance: 'Cabelo prata, olhos âmbar, casaco escolar vermelho, fita no cabelo.',
+    })
+    const sheetPng = join(ctx.summary.path, '..', 'v33-sheet.png')
+    writeFileSync(sheetPng, makeRealPng(64, 64, [200, 200, 255]))
+    const sheetAsset = ctx.sheets.registerSheet(yuna.id, readFileSync(sheetPng), 'image/png', 'yuna-sheet.png')
+    if (!sheetAsset) throw new Error('reference sheet not attached')
+
+    // ---- Bíblia de Estilo com paleta, traço, iluminação
+    ctx.storyboard.updateStyleBible({
+      artDirection: 'Anime estilo anos 2000, cores vibrantes, cel shading.',
+      lineart: 'Traço limpo, linha preta fina, estilo Toei/Kyoto Animation.',
+      shading: 'Cel shading 2 níveis, sem gradiente suave.',
+      palette: '#F472B6 #22D3EE #FFFFFF #1A1A1A',
+      lighting: 'Iluminação plana de estúdio, sombra suave sob o queixo.',
+      proportions: '8 cabeças, olhos grandes, cabelo longo.',
+      eyesAndHair: 'Olhos âmbar grandes, cabelo prata longo até a cintura.',
+      backgrounds: 'Céu azul claro, nuvens estilizadas.',
+      cameraLanguage: '35mm, profundidade de campo rasa.',
+    })
+
+    // ---- Moodboard com cores travadas
+    ctx.moodboard.attachImage(sheetPng)
+    const board = ctx.moodboard.list()
+    if (board.length > 0) {
+      ctx.moodboard.update(board[0]!.id, { color: '#F472B6' })
+      ctx.moodboard.update(board[0]!.id, { color: '#22D3EE' })
+    }
+
+    // ---- Build do ConsistencyLock
+    const vc = new VisualConsistencyService(ctx.db, systemClock, ctx.summary.path)
+    const styleBible = ctx.storyboard.getStyleBible()
+    const characters = ctx.creative.listCharacters()
+    const moodboardPalette = ctx.moodboard.palette()
+    const lock = vc.buildLock(ctx.summary.id, styleBible, characters, moodboardPalette)
+
+    if (!lock.promptFragment.includes('Yuna Consistency')) throw new Error('model sheet name not in lock')
+    if (!lock.promptFragment.includes('#F472B6')) throw new Error('palette color not in lock')
+    if (!lock.promptFragment.includes('#22D3EE')) throw new Error('palette color 2 not in lock')
+    if (lock.modelSheets.length !== 1) throw new Error('expected 1 model sheet')
+    if (lock.palette.length < 2) throw new Error('expected at least 2 palette locks')
+
+    // ---- Persistir e recarregar
+    vc.saveLock(lock)
+    const loaded = vc.loadLock()
+    if (!loaded) throw new Error('lock not persisted')
+    if (loaded.promptFragment !== lock.promptFragment) throw new Error('lock mismatch after reload')
+
+    // ---- Consistency check de um frame gerado
+    const promptWithLock = lock.promptFragment + '\nEXTRA: Yuna no telhado ao anoitecer.'
+    const check = vc.checkConsistency(lock, yuna.id, promptWithLock)
+    if (!check.consistent) throw new Error(`consistency check failed: score=${check.score}`)
+    if (check.score < 80) throw new Error(`consistency score too low: ${check.score}`)
+
+    // ---- Cleanup
+    ctx.sheets.clearSheet(yuna.id)
+    ctx.creative.deleteCharacter(yuna.id)
+    rmSync(sheetPng, { force: true })
     await projects.close()
   })
 

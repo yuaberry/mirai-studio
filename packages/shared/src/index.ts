@@ -384,6 +384,23 @@ export type { ShortcutAction } from './entities/shortcuts'
 export { BUILTIN_JOB_TYPES, JobRecord, jobIsActive } from './entities/job'
 export type { BuiltinJobType } from './entities/job'
 
+export {
+  zPaletteLock,
+  zCharacterModelSheet,
+  zConsistencyLock,
+  zConsistencyCheck,
+  consistencyPromptFragment,
+} from './entities/visualConsistency'
+export type {
+  PaletteLock as PaletteLockType,
+  CharacterModelSheet as CharacterModelSheetType,
+  ConsistencyLock as ConsistencyLockType,
+  ConsistencyCheck as ConsistencyCheckType,
+  PaletteLock,
+  CharacterModelSheet,
+  ConsistencyLock,
+  ConsistencyCheck,
+} from './entities/visualConsistency'
 export { LogEntry } from './entities/log'
 export type { LogQuery } from './entities/log'
 

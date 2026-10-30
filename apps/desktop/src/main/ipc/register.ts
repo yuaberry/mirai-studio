@@ -1534,6 +1534,41 @@ export function registerIpcHandlers(c: Container): void {
 
   handleIpc('ai:usage', () => ({ summary: c.aiUsage.summary() }))
 
+  // ---- Visual Consistency Engine (v0.33, estúdio japonês) ---------------
+  handleIpc('visual:consistencyLock', async () => {
+    const ctx = requireActive(c)
+    const styleBible = ctx.storyboard.getStyleBible()
+    const characters = ctx.creative.listCharacters()
+    const moodboardPalette = ctx.moodboard.palette()
+    const lock = c.visualConsistency.buildLock(
+      ctx.summary.id,
+      styleBible,
+      characters,
+      moodboardPalette,
+    )
+    c.visualConsistency.saveLock(lock)
+    return { lock }
+  })
+
+  handleIpc('visual:checkConsistency', async (req) => {
+    const ctx = requireActive(c)
+    const styleBible = ctx.storyboard.getStyleBible()
+    const characters = ctx.creative.listCharacters()
+    const moodboardPalette = ctx.moodboard.palette()
+    const lock = c.visualConsistency.buildLock(
+      ctx.summary.id,
+      styleBible,
+      characters,
+      moodboardPalette,
+    )
+    const check = c.visualConsistency.checkConsistency(
+      lock,
+      req.frameAssetId,
+      req.generationPrompt,
+    )
+    return check
+  })
+
   handleIpc('epub:export', () => {
     const ctx = requireActive(c)
     const manifest = ctx.manifest

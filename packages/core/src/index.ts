@@ -34,6 +34,8 @@ export { MoodboardService } from './visual/moodboardService'
 export { PosterService } from './visual/posterService'
 export { LocalizationService } from './localization/localizationService'
 export { CharacterSheetService } from './visual/characterSheetService'
+export { VisualConsistencyService } from './visual/visualConsistencyService'
+export type { ConsistencyLock, CharacterModelSheet, PaletteLock, ConsistencyCheck } from '@mirai/shared'
 
 // prompts
 export { PromptService } from './prompts/promptService'
