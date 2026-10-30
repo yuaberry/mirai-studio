@@ -49,7 +49,7 @@ import {
   type ContextScene,
 } from '@mirai/ai'
 import {
-  type ConsistencyLock,
+  // type ConsistencyLock,
 } from '@mirai/shared'
 import type { CredentialStore, LoggerService, ProjectService, SettingsService } from '@mirai/core'
 import type { MainEmitter } from '../bootstrap'
@@ -282,10 +282,16 @@ export class AiHost {
     }
     const shot = ctx.storyboard.getShotById(shotId)
     const scene = ctx.creative.getSceneById(shot.sceneId)
-    const characters = ctx.creative
+    const sceneCharacters = ctx.creative
       .listCharacters()
       .filter((c) => scene.characterIds.includes(c.id))
-      .map((c) => ({ name: c.name }))
+    const characters: ContextCharacter[] = sceneCharacters.map((c) => ({
+      name: c.name,
+      role: c.role,
+      personality: c.personality,
+      goals: c.goals,
+      fears: c.fears,
+    }))
     if (this.matureActive(ctx)) {
       assertExplicitCastAllowed(
         ctx.creative.listCharacters().filter((c) => scene.characterIds.includes(c.id)),
@@ -304,6 +310,20 @@ export class AiHost {
         this.deps.logger.warn('AI', `Reference frame unavailable: ${(err as Error).message}`)
       }
     }
+
+    // Build the Visual Consistency Lock for video generation too.
+    // Build the Visual Consistency Lock for video generation too.
+    // Build the Visual Consistency Lock for video generation too.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const consistencyLock: any = this.deps.visualConsistency
+      ? this.deps.visualConsistency.buildLock(
+          ctx.summary.id,
+          ctx.storyboard.getStyleBible(),
+          sceneCharacters,
+          ctx.moodboard?.palette?.() ?? [],
+        )
+      : null
+
     const prompt = [
       buildImagePrompt({
         styleBible: ctx.storyboard.getStyleBible(),
@@ -325,6 +345,8 @@ export class AiHost {
         characters,
         extraPrompt,
         mature: this.matureActive(ctx),
+        consistencyLock,
+        imageB64,
       }),
       'MOTION: animate with the camera movement above, subtle natural motion, stable character design across all frames, 24fps, no text overlays, no scene cuts.',
     ].join('\n\n')
@@ -1556,7 +1578,7 @@ export class AiHost {
       )
     }
 
-    // ---- consistency data (v0.33: Visual Consistency Engine) -----------
+    // ---- consistency data (v0.33/0.35: Visual Consistency Engine) -----------
     const shot = ctx.storyboard.getShotById(shotId)
     const scene = ctx.creative.getSceneById(shot.sceneId)
     const sceneCharacters = ctx.creative
@@ -1570,26 +1592,35 @@ export class AiHost {
       fears: c.fears,
     }))
 
+    const styleBible = ctx.storyboard.getStyleBible()
+    const moodboardPalette = ctx.moodboard?.palette?.() ?? []
+
     // Build the Visual Consistency Lock from Style Bible + model sheets
     // + moodboard palette. Every generation must honor it.
-    let consistencyLock: ConsistencyLock | null = null
-    if (this.deps.visualConsistency) {
-      const styleBible = ctx.storyboard.getStyleBible()
-      const moodboardPalette = ctx.moodboard?.palette?.() ?? []
-      consistencyLock = this.deps.visualConsistency.buildLock(
-        ctx.summary.id,
-        styleBible,
-        sceneCharacters,
-        moodboardPalette,
-      )
-      // Persist the lock so it survives across sessions.
-      this.deps.visualConsistency.saveLock(consistencyLock)
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const consistencyLock: any = this.deps.visualConsistency
+      ? this.deps.visualConsistency.buildLock(
+          ctx.summary.id,
+          styleBible,
+          sceneCharacters,
+          moodboardPalette,
+        )
+      : null
+    // Persist the lock so it survives across sessions.
+    this.deps.visualConsistency?.saveLock(consistencyLock)
 
-    // Inject the consistency prompt fragment into the user's extraPrompt.
-    const consistencyInjectedExtra = consistencyLock
-      ? `${consistencyLock.promptFragment}\n\nEXTRA_DIRECTION: ${extraPrompt ?? ''}`.trim()
-      : extraPrompt
+    // IMAGE-TO-IMAGE: if the shot already has a frame, use it as the reference
+    // so new generations keep the same character design locked from board to clip.
+    let imageB64: string | undefined
+    if (shot.frameAssetId) {
+      try {
+        const framePath = ctx.storyboard.assetAbsolutePath(shot.frameAssetId)
+        const frameBytes = await import('node:fs').then((fs) => fs.readFileSync(framePath))
+        imageB64 = frameBytes.toString('base64')
+      } catch (err) {
+        this.deps.logger.warn('AI', `Reference frame unavailable: ${(err as Error).message}`)
+      }
+    }
 
     const prompt = buildImagePrompt({
       styleBible: ctx.storyboard.getStyleBible(),
@@ -1609,8 +1640,10 @@ export class AiHost {
         notes: shot.notes,
       },
       characters,
-      extraPrompt: consistencyInjectedExtra,
+      extraPrompt,
       mature: this.matureActive(ctx),
+      consistencyLock,
+      imageB64,
     })
     // Pro: the adults-only policy is enforced in code before any mature prompt.
     if (this.matureActive(ctx)) {
@@ -1629,6 +1662,7 @@ export class AiHost {
       prompt,
       size: imageProvider.size,
       signal,
+      imageB64,
     })
     progress(80)
 
@@ -1660,11 +1694,13 @@ export class AiHost {
       model: imageProvider.model,
       consistencyScore: consistencyLock
         ? this.deps.visualConsistency!.checkConsistency(
-            consistencyLock,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            consistencyLock as any,
             asset.id,
             prompt,
           ).score
         : null,
+      referenceFrame: imageB64 !== undefined,
     })
     return { assetId: asset.id, prompt }
   }

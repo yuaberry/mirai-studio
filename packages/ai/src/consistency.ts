@@ -4,7 +4,7 @@
  * project's Style Bible + the shot's camera metadata + the scene's cast and
  * setting, so frames look like ONE production, not random generations.
  */
-import type { StyleBible } from '@mirai/shared'
+import type { StyleBible, ConsistencyLock } from '@mirai/shared'
 import type { ContextCharacter } from './contextBuilder'
 
 export interface ConsistencyScene {
@@ -36,6 +36,8 @@ export interface ConsistencyData {
    * adults-only policy before this flag ever reaches here.
    */
   mature?: boolean
+  consistencyLock?: ConsistencyLock
+  imageB64?: string
 }
 
 /**
@@ -84,7 +86,31 @@ export function buildImagePrompt(data: ConsistencyData): string {
     sections.push(`STYLE (canon — never deviate):\n${styleLines.map((l) => `- ${l}`).join('\n')}`)
   }
 
-  // ---- 4b. maturity contract (Pro): R-18 permitted, adults only, story-first
+  // ---- 4b. studio consistency lock: model sheets + palette hex + character canon
+  const lock = data.consistencyLock
+  if (lock) {
+    if (lock.palette.length > 0) {
+      const hexes = lock.palette.map((p) => `${p.element}: ${p.hex}`).join(', ')
+      sections.push(`PALETTE LOCK (use EXACTLY these hex colors — no deviation): ${hexes}`)
+    }
+    if (lock.modelSheets.length > 0) {
+      const modelLines: string[] = []
+      for (const sheet of lock.modelSheets) {
+        const views = sheet.views.map((v) => `${v.view}${v.expression ? ` (${v.expression})` : ''}`).join(', ')
+        modelLines.push(`- ${sheet.characterName}: ${sheet.canonAppearance ?? 'no description'}. Views: ${views}.`)
+      }
+      sections.push(
+        `CHARACTER MODEL SHEETS (same person in every frame — match hair, eyes, outfit, proportions exactly):\n${modelLines.join('\n')}`,
+      )
+    }
+    if (lock.lineart) sections.push(`LINEART (canon): ${lock.lineart}`)
+    if (lock.shading) sections.push(`SHADING (canon): ${lock.shading}`)
+    if (lock.proportions) sections.push(`PROPORTIONS (canon): ${lock.proportions}`)
+    if (lock.eyesAndHair) sections.push(`EYES & HAIR (canon): ${lock.eyesAndHair}`)
+    if (lock.backgrounds) sections.push(`BACKGROUNDS (canon): ${lock.backgrounds}`)
+  }
+
+  // ---- 4c. maturity contract (Pro): R-18 permitted, adults only, story-first
   if (data.mature) {
     sections.push(
       'CONTENT RATING: this production is rated 18+. Mature, sensual or explicit ' +
@@ -102,6 +128,15 @@ export function buildImagePrompt(data: ConsistencyData): string {
 
   if (data.extraPrompt && data.extraPrompt.trim().length > 0) {
     sections.push(`EXTRA DIRECTION FROM THE ARTIST:\n${data.extraPrompt.trim()}`)
+  }
+
+  // ---- 6. reference image for image-to-image / image-to-video
+  if (data.imageB64) {
+    sections.push(
+      'REFERENCE IMAGE: this generation must match the provided reference — same character design, ' +
+        'same outfit, same hair color, same proportions, same lighting. Treat the reference as the ' +
+        'canon anchor; do not invent new colors or details not present in it.',
+    )
   }
 
   return sections.join('\n\n')

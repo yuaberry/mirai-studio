@@ -2561,6 +2561,65 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V35 VISUAL CONSISTENCY: lock + check via IPC contracts', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+
+    // ---- personagem com reference sheet
+    const yuna = ctx.creative.createCharacter({
+      name: 'Yuna V35',
+      role: 'PROTAGONIST',
+      age: '17',
+      appearance: 'Cabelo prata, olhos âmbar, casaco escolar vermelho.',
+    })
+    const sheetPng = join(ctx.summary.path, '..', 'v35-sheet.png')
+    writeFileSync(sheetPng, makeRealPng(64, 64, [200, 200, 255]))
+    ctx.sheets.registerSheet(yuna.id, readFileSync(sheetPng), 'image/png', 'yuna-sheet.png')
+
+    // ---- Bíblia de Estilo com paleta
+    ctx.storyboard.updateStyleBible({
+      artDirection: 'Anime estilo anos 2000, cores vibrantes.',
+      lineart: 'Traço limpo, linha preta fina.',
+      shading: 'Cel shading 2 níveis.',
+      palette: '#F472B6 #22D3EE #FFFFFF #1A1A1A',
+      lighting: 'Iluminação plana de estúdio.',
+      proportions: '8 cabeças, olhos grandes.',
+      eyesAndHair: 'Olhos âmbar grandes, cabelo prata longo.',
+      backgrounds: 'Céu azul claro.',
+      cameraLanguage: '35mm.',
+    })
+
+    // ---- Build do ConsistencyLock via VisualConsistencyService
+    const vc = new VisualConsistencyService(ctx.db, systemClock, ctx.summary.path)
+    const styleBible = ctx.storyboard.getStyleBible()
+    const characters = ctx.creative.listCharacters()
+    const moodboardPalette = ctx.moodboard.palette()
+    const lock = vc.buildLock(ctx.summary.id, styleBible, characters, moodboardPalette)
+
+    if (!lock.promptFragment.includes('Yuna V35')) throw new Error('model sheet name not in lock')
+    if (!lock.promptFragment.includes('#F472B6')) throw new Error('palette color not in lock')
+    if (!lock.promptFragment.includes('#22D3EE')) throw new Error('palette color 2 not in lock')
+    if (lock.modelSheets.length !== 1) throw new Error('expected 1 model sheet')
+    if (lock.palette.length < 2) throw new Error('expected at least 2 palette locks')
+
+    // ---- Persistir e recarregar
+    vc.saveLock(lock)
+    const loaded = vc.loadLock()
+    if (!loaded) throw new Error('lock not persisted')
+    if (loaded.promptFragment !== lock.promptFragment) throw new Error('lock mismatch after reload')
+
+    // ---- Consistency check de um frame
+    const promptWithLock = lock.promptFragment + '\nEXTRA: Yuna no telhado.'
+    const check = vc.checkConsistency(lock, yuna.id, promptWithLock)
+    if (!check.consistent) throw new Error(`consistency check failed: score=${check.score}`)
+    if (check.score < 80) throw new Error(`consistency score too low: ${check.score}`)
+
+    // ---- cleanup
+    ctx.sheets.clearSheet(yuna.id)
+    ctx.creative.deleteCharacter(yuna.id)
+    rmSync(sheetPng, { force: true })
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

@@ -16,6 +16,9 @@ export interface ImageOptions {
   /** e.g. '1344x768' (wide) | '1024x1024' | '768x1344'. */
   size: string
   signal?: AbortSignal
+  /** v0.35: optional reference image (base64) for image-to-image generation,
+   * keeps character design locked from board to clip. */
+  imageB64?: string
 }
 
 export interface ImageResult {
@@ -58,6 +61,7 @@ export class OpenAIImagesProvider {
           size: options.size,
           n: 1,
           response_format: 'b64_json',
+          ...(options.imageB64 !== undefined ? { input_reference: options.imageB64 } : {}),
         }),
         signal: options.signal ?? AbortSignal.timeout(timeoutMs),
       })

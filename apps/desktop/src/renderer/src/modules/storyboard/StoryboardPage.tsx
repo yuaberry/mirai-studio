@@ -56,6 +56,8 @@ import {
   assetUrl,
 
   useSpeakShot,
+  useConsistencyLock,
+  useCheckConsistency,
 } from '../../lib/queries'
 import { VersionHistoryButton, VersionHistoryModal } from '../production/VersionHistoryModal'
 import { toast } from '../../store/appStore'
@@ -411,6 +413,9 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
   const recordDecision = useRecordDecision()
   const { data: renderStatus } = useRenderStatus()
   const renderShot = useRenderShot()
+  const consistencyLock = useConsistencyLock()
+  const checkConsistency = useCheckConsistency()
+  const lock = consistencyLock.data
   const [form, setForm] = useState({
     title: shot.title,
     shotType: shot.shotType,
@@ -690,6 +695,63 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
           {!ai?.imageConfigured && (
             <p className="mt-1.5 text-[10px] text-mirai-faint">
               AI frame generation needs an image provider (Settings → Providers).
+            </p>
+          )}
+        </div>
+
+        {/* Visual Consistency */}
+        <div>
+          <Label>
+            Visual Consistency
+            <span className="ml-2 font-normal text-mirai-faint">
+              Studio consistency lock — model sheets + palette
+            </span>
+          </Label>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge
+              tone={lock ? 'accent' : 'neutral'}
+              className="!px-2 !py-1 !text-[10px]"
+            >
+              {lock ? 'Lock Active' : 'No Lock'}
+            </Badge>
+            {lock?.palette?.map((p: { element: string; hex: string }) => (
+              <div
+                key={p.element}
+                className="flex flex-col items-center gap-1"
+                title={`${p.element}: ${p.hex}`}
+              >
+                <div
+                  className="w-6 h-6 rounded border border-mirai-border"
+                  style={{ backgroundColor: p.hex }}
+                />
+                <span className="text-[9px] text-mirai-faint">{p.element}</span>
+              </div>
+            ))}
+            {lock?.modelSheets?.length && (
+              <Badge tone="info" className="!px-2 !py-1 !text-[10px]">
+                {lock.modelSheets.length} model sheet(s)
+              </Badge>
+            )}
+          </div>
+          {shot.frameAssetId && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              loading={checkConsistency.isPending}
+              onClick={() => {
+                checkConsistency.mutate({
+                  frameAssetId: shot.frameAssetId!,
+                  generationPrompt: '',
+                })
+              }}
+            >
+              <Clock className="h-3 w-3" /> Check Consistency
+            </Button>
+          )}
+          {!shot.frameAssetId && (
+            <p className="mt-1 text-[10px] text-mirai-faint">
+              Generate or import a frame first to check consistency.
             </p>
           )}
         </div>

@@ -1743,3 +1743,30 @@ export function useAiUsage() {
     queryFn: () => invoke('ai:usage').then((r) => r.summary),
   })
 }
+
+/** Visual Consistency Engine (v0.35) — fetch the project's consistency lock. */
+export function useConsistencyLock() {
+  return useQuery({
+    queryKey: ['visual', 'consistencyLock'],
+    queryFn: () =>
+      invoke('visual:consistencyLock', {}).then((r) => r.lock as import('@mirai/shared').ConsistencyLock),
+  })
+}
+
+/** Visual Consistency Engine (v0.35) — check a generated frame against the lock. */
+export function useCheckConsistency() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      frameAssetId: string
+      generationPrompt: string
+    }) =>
+      invoke('visual:checkConsistency', input).then((r) => r as {
+        consistent: boolean
+        score: number
+        issues?: string[]
+        suggestions?: string[]
+      }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['shots'] }),
+  })
+}
