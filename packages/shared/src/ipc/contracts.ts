@@ -13,6 +13,14 @@ import { type ErrorPayload } from '../errors'
 import { AppSettings, AppSettingsPatch, zCredentialKey } from '../entities/settings'
 import { JobRecord } from '../entities/job'
 import { LogEntry } from '../entities/log'
+import type {
+  AnimationPipeline,
+  AnimationFrame,
+} from '../entities/animation'
+import {
+  zAnimationStage,
+  zInbetweenEasing,
+} from '../entities/animation'
 import { NotesImportResult, StoryNotesAnalysis, DossierResult } from '../entities/dossier'
 import { ProjectBriefInput } from '../entities/brief'
 import { RelationshipInput, CostumeInput, CharacterRelationship, CharacterCostume } from '../entities/creative'
@@ -1217,6 +1225,83 @@ export const ipcContracts = {
       issues: z.array(z.string()).optional(),
       suggestions: z.array(z.string()).optional(),
     }),
+  },
+
+  // ---- Animation Pipeline (v0.34, estúdio japonês) -----------------------
+  /** Constrói/retorna o AnimationPipeline de uma cena (configuração do
+   *  pipeline: fps, in-between count, estágio atual, contagem por etapa). */
+  'animation:pipeline': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ pipeline: z.custom<AnimationPipeline>((val) => val !== null && typeof val === 'object') }),
+  },
+  /** Atualiza a configuração do pipeline de uma cena. */
+  'animation:pipeline:update': {
+    request: z.object({
+      sceneId: zEntityId,
+      fps: z.number().int().min(1).max(60).optional(),
+      inbetweenCount: z.number().int().min(0).max(20).optional(),
+      inbetweenEasing: zInbetweenEasing.optional(),
+      enforceConsistency: z.boolean().optional(),
+      currentStage: zAnimationStage.optional(),
+    }),
+    response: z.object({ pipeline: z.custom<AnimationPipeline>((val) => val !== null && typeof val === 'object') }),
+  },
+  /** Avança o pipeline para o próximo estágio. */
+  'animation:pipeline:advance': {
+    request: z.object({ sceneId: zEntityId }),
+    response: z.object({ pipeline: z.custom<AnimationPipeline>((val) => val !== null && typeof val === 'object') }),
+  },
+  /** Registra um keyframe (GENGA) — quadro-chave que define a pose. */
+  'animation:registerKeyframe': {
+    request: z.object({
+      sceneId: zEntityId,
+      atSec: z.number().min(0),
+      assetId: zEntityId,
+    }),
+    response: z.object({ frame: z.custom<AnimationFrame>((val) => val !== null && typeof val === 'object') }),
+  },
+  /** Gera quadros intermediários (DOUGA) entre dois keyframes. */
+  'animation:generateInbetweens': {
+    request: z.object({
+      sceneId: zEntityId,
+      fromKeyframeId: zEntityId,
+      toKeyframeId: zEntityId,
+      count: z.number().int().min(1).max(20).default(2),
+    }),
+    response: z.object({ frames: z.array(z.custom<AnimationFrame>((val) => val !== null && typeof val === 'object')) }),
+  },
+  /** Lista todos os quadros de uma cena, opcionalmente filtrados por estágio. */
+  'animation:listFrames': {
+    request: z.object({
+      sceneId: zEntityId,
+      stage: zAnimationStage.optional(),
+    }),
+    response: z.object({ frames: z.array(z.custom<AnimationFrame>((val) => val !== null && typeof val === 'object')) }),
+  },
+  /** Limpeza de linha (SEITO) — produz line art limpo de um quadro. */
+  'animation:cleanupPass': {
+    request: z.object({
+      sceneId: zEntityId,
+      sourceFrameId: zEntityId,
+    }),
+    response: z.object({ frame: z.custom<AnimationFrame>((val) => val !== null && typeof val === 'object') }),
+  },
+  /** Coloração (TOSO) — aplica a paleta do ConsistencyLock ao quadro. */
+  'animation:colorPass': {
+    request: z.object({
+      sceneId: zEntityId,
+      sourceFrameId: zEntityId,
+      palette: z.array(z.object({ element: z.string(), hex: z.string() })),
+    }),
+    response: z.object({ frame: z.custom<AnimationFrame>((val) => val !== null && typeof val === 'object') }),
+  },
+  /** Compositing/filmagem (SATSUEI) — compõe o quadro final com câmera e blend. */
+  'animation:compositingPass': {
+    request: z.object({
+      sceneId: zEntityId,
+      sourceFrameId: zEntityId,
+    }),
+    response: z.object({ frame: z.custom<AnimationFrame>((val) => val !== null && typeof val === 'object') }),
   },
 
   /** Exports the project's episodes as a REAL EPUB 3 book (Light Novel Pro). */

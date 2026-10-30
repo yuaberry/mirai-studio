@@ -616,4 +616,37 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0020_animation_pipeline',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE animation_pipelines (
+          id TEXT PRIMARY KEY,
+          scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+          fps INTEGER NOT NULL DEFAULT 24,
+          inbetween_count INTEGER NOT NULL DEFAULT 2,
+          inbetween_easing TEXT NOT NULL DEFAULT 'easeInOut',
+          enforce_consistency INTEGER NOT NULL DEFAULT 1,
+          current_stage TEXT NOT NULL DEFAULT 'KEYFRAME',
+          frames_by_stage TEXT NOT NULL DEFAULT '{}',
+          updated_at TEXT NOT NULL,
+          UNIQUE (scene_id)
+        );
+        CREATE INDEX idx_animation_pipelines_scene ON animation_pipelines (scene_id);
+
+        CREATE TABLE animation_frames (
+          id TEXT PRIMARY KEY,
+          scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+          at_sec REAL NOT NULL DEFAULT 0,
+          stage TEXT NOT NULL,
+          asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL,
+          source_keyframe_id TEXT REFERENCES animation_frames(id) ON DELETE SET NULL,
+          inbetween_spec TEXT,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_animation_frames_scene ON animation_frames (scene_id, at_sec);
+        CREATE INDEX idx_animation_frames_stage ON animation_frames (stage);
+      `)
+    },
+  },
 ]

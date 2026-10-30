@@ -405,6 +405,34 @@ export { LogEntry } from './entities/log'
 export type { LogQuery } from './entities/log'
 
 export {
+  ANIMATION_STAGES,
+  ANIMATION_STAGE_LABEL,
+  zAnimationStage,
+  zInbetweenEasing,
+  zAnimationPipeline,
+  zInbetweenSpec,
+  zCleanupPass,
+  zColorPass,
+  zCompositingPass,
+  zAnimationFrame,
+} from './entities/animation'
+export type {
+  AnimationStage as AnimationStageType,
+  AnimationPipeline as AnimationPipelineType,
+  InbetweenSpec as InbetweenSpecType,
+  CleanupPass as CleanupPassType,
+  ColorPass as ColorPassType,
+  CompositingPass as CompositingPassType,
+  AnimationFrame as AnimationFrameType,
+  AnimationStage,
+  AnimationPipeline,
+  InbetweenSpec,
+  CleanupPass,
+  ColorPass,
+  CompositingPass,
+  AnimationFrame,
+} from './entities/animation'
+export {
   CHAT_ROLES,
   zChatRole,
   ChatMessage,

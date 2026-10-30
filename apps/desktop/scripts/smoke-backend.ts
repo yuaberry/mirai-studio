@@ -2493,6 +2493,74 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V34 ANIMATION PIPELINE: keyframe → in-between → cleanup → color → compositing', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    // ---- cria episódio e cena dedicados para V34
+    const ep = ctx.creative.createEpisode({ season: 9, number: 6, title: 'V34 Animation' })
+    const ayaka = ctx.creative.createCharacter({ name: 'V34 Ayaka', role: 'SUPPORTING' })
+    const scene = ctx.creative.createScene(ep.id, { title: 'V34 cena', characterIds: [ayaka.id] })
+    const shot = ctx.storyboard.createShot(scene.id, { title: 'V34 shot', durationSeconds: 2 })
+
+    // ---- create two keyframes (GENGA)
+    const kf1Png = join(ctx.summary.path, '..', 'v34-kf1.png')
+    writeFileSync(kf1Png, makeRealPng(64, 64, [255, 100, 100]))
+    const kf1Asset = ctx.storyboard.registerGeneratedFrame(shot.id, readFileSync(kf1Png), 'image/png')
+    const kf1 = ctx.animation.registerKeyframe(scene.id, 0, kf1Asset.id)
+    if (kf1.stage !== 'KEYFRAME') throw new Error('keyframe stage wrong')
+    const afterKf1 = ctx.animation.listFrames(scene.id)
+    if (afterKf1.length !== 1) throw new Error(`expected 1 frame after kf1, got ${afterKf1.length}`)
+
+    const kf2Png = join(ctx.summary.path, '..', 'v34-kf2.png')
+    writeFileSync(kf2Png, makeRealPng(64, 64, [100, 100, 255]))
+    const kf2Asset = ctx.storyboard.registerGeneratedFrame(shot.id, readFileSync(kf2Png), 'image/png')
+    const kf2 = ctx.animation.registerKeyframe(scene.id, 2, kf2Asset.id)
+    if (kf2.stage !== 'KEYFRAME') throw new Error('keyframe 2 stage wrong')
+    const afterKf2 = ctx.animation.listFrames(scene.id)
+    if (afterKf2.length !== 2) throw new Error(`expected 2 frames after kf2, got ${afterKf2.length}`)
+
+    // ---- generate in-betweens (DOUGA)
+    const inbetweens = ctx.animation.generateInbetweens(scene.id, kf1.id, kf2.id, 2)
+    if (inbetweens.length !== 2) throw new Error(`expected 2 in-betweens, got ${inbetweens.length}`)
+    if (inbetweens.some((f) => f.stage !== 'INBETWEEN')) throw new Error('in-between stage wrong')
+
+    // ---- pipeline config
+    const pipeline = ctx.animation.getOrCreatePipeline(scene.id)
+    if (pipeline.fps !== 24) throw new Error('default fps should be 24')
+    const updated = ctx.animation.updatePipeline(scene.id, { fps: 30, currentStage: 'INBETWEEN' })
+    if (updated.fps !== 30 || updated.currentStage !== 'INBETWEEN') {
+      throw new Error('pipeline update failed')
+    }
+
+    // ---- advance stage
+    const advanced = ctx.animation.advanceStage(scene.id)
+    if (advanced.currentStage !== 'CLEANUP') throw new Error('stage should advance to CLEANUP')
+
+    // ---- cleanup + color + compositing
+    const cleaned = ctx.animation.cleanupPass(scene.id, kf1.id)
+    if (cleaned.stage !== 'CLEANUP') throw new Error('cleanup stage wrong')
+    const colored = ctx.animation.colorPass(scene.id, cleaned.id, [
+      { element: 'hair', hex: '#F472B6' },
+      { element: 'skin', hex: '#22D3EE' },
+    ], true)
+    if (colored.stage !== 'COLOR') throw new Error('color stage wrong')
+    const composed = ctx.animation.compositingPass(scene.id, colored.id)
+    if (composed.stage !== 'COMPOSITING') throw new Error('compositing stage wrong')
+
+    // ---- list frames
+    const allFrames = ctx.animation.listFrames(scene.id)
+    if (allFrames.length < 5) throw new Error(`expected at least 5 frames, got ${allFrames.length}`)
+    const keyframesOnly = ctx.animation.listFrames(scene.id, 'KEYFRAME')
+    if (keyframesOnly.length !== 2) throw new Error(`expected 2 keyframes, got ${keyframesOnly.length}`)
+
+    // ---- cleanup
+    ctx.storyboard.clearFrame(shot.id)
+    ctx.creative.deleteCharacter(ayaka.id)
+    ctx.creative.deleteEpisode(ep.id)
+    rmSync(kf1Png, { force: true })
+    rmSync(kf2Png, { force: true })
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

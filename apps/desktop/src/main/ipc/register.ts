@@ -1569,6 +1569,76 @@ export function registerIpcHandlers(c: Container): void {
     return check
   })
 
+  // ---- Animation Pipeline (v0.34, estúdio japonês) -----------------------
+  handleIpc('animation:pipeline', async (req) => {
+    const ctx = requireActive(c)
+    const pipeline = ctx.animation.getOrCreatePipeline(req.sceneId)
+    return { pipeline }
+  })
+
+  handleIpc('animation:pipeline:update', async (req) => {
+    const ctx = requireActive(c)
+    const pipeline = ctx.animation.updatePipeline(req.sceneId, {
+      fps: req.fps,
+      inbetweenCount: req.inbetweenCount,
+      inbetweenEasing: req.inbetweenEasing,
+      enforceConsistency: req.enforceConsistency,
+      currentStage: req.currentStage,
+    })
+    return { pipeline }
+  })
+
+  handleIpc('animation:pipeline:advance', async (req) => {
+    const ctx = requireActive(c)
+    const pipeline = ctx.animation.advanceStage(req.sceneId)
+    return { pipeline }
+  })
+
+  handleIpc('animation:registerKeyframe', async (req) => {
+    const ctx = requireActive(c)
+    const frame = ctx.animation.registerKeyframe(req.sceneId, req.atSec, req.assetId)
+    return { frame }
+  })
+
+  handleIpc('animation:generateInbetweens', async (req) => {
+    const ctx = requireActive(c)
+    const frames = ctx.animation.generateInbetweens(
+      req.sceneId,
+      req.fromKeyframeId,
+      req.toKeyframeId,
+      req.count,
+    )
+    return { frames }
+  })
+
+  handleIpc('animation:listFrames', async (req) => {
+    const ctx = requireActive(c)
+    const frames = ctx.animation.listFrames(req.sceneId, req.stage)
+    return { frames }
+  })
+
+  handleIpc('animation:cleanupPass', async (req) => {
+    const ctx = requireActive(c)
+    const frame = ctx.animation.cleanupPass(req.sceneId, req.sourceFrameId)
+    return { frame }
+  })
+
+  handleIpc('animation:colorPass', async (req) => {
+    const ctx = requireActive(c)
+    const frame = ctx.animation.colorPass(
+      req.sceneId,
+      req.sourceFrameId,
+      req.palette,
+    )
+    return { frame }
+  })
+
+  handleIpc('animation:compositingPass', async (req) => {
+    const ctx = requireActive(c)
+    const frame = ctx.animation.compositingPass(req.sceneId, req.sourceFrameId)
+    return { frame }
+  })
+
   handleIpc('epub:export', () => {
     const ctx = requireActive(c)
     const manifest = ctx.manifest
