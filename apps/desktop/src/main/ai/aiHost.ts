@@ -1398,12 +1398,13 @@ export class AiHost {
    */
   async assembleEpisode(
     episodeId: string,
-    opts: { voices: boolean; videos: boolean; render: boolean },
+    opts: { frames: boolean; voices: boolean; videos: boolean; render: boolean },
     progress: (pct: number, detail: string) => void,
     signal: { aborted: boolean },
   ): Promise<{
     scenes: number
     shots: number
+    framesGenerated: number
     voicesGenerated: number
     videosGenerated: number
     skippedNoDialogue: number
@@ -1419,6 +1420,8 @@ export class AiHost {
 
     const ttsReady = this.resolveTtsProvider() !== null
     const videoReady = this.resolveVideoProvider() !== null
+    const imageReady = this.resolveImageProvider() !== null
+    let framesGenerated = 0
     let voicesGenerated = 0
     let videosGenerated = 0
     let skippedNoDialogue = 0
@@ -1437,6 +1440,19 @@ export class AiHost {
       const shots = ctx.storyboard.listShots(scene.id)
       for (const shot of shots) {
         shotCount += 1
+        // FRAMES FIRST (v0.32): a frameless shot gets its keyframe drawn
+        // from the scene + Style Bible (studio consistency baked in), so
+        // the video phase has art to animate.
+        if (opts.frames && !shot.frameAssetId && imageReady) {
+          try {
+            await this.generateFrame(shot.id, undefined, (signal.aborted ? new AbortController().signal : AbortSignal.timeout(600_000)), () => undefined)
+            framesGenerated += 1
+          } catch (err) {
+            if (err instanceof MiraiError && err.code === 'CANCELLED') throw err
+            this.deps.logger.warn('AI', `Assembly frame failed for shot ${shot.id}: ${(err as Error).message}`)
+            skippedNoFrame += 1 // provider issue — the video phase reports the rest
+          }
+        }
         if (opts.voices) {
           const hasDialogue = ((shot.dialogue ?? '').trim().length > 0) || ((ctx.creative.getSceneById(shot.sceneId).screenplay ?? '').trim().length > 0)
           if (hasDialogue && ttsReady) {
@@ -1475,7 +1491,6 @@ export class AiHost {
     let rendered: string | null = null
     if (opts.render) {
       progress(99, 'rendering the episode…')
-      // YouTube 1080p preset: the first watch is quick; MASTER/CINEMA live in the Export Center.
       const result = await ctx.render.renderEpisode({ episodeId, presetId: 'youtube-1080', reportProgress: () => undefined, signal: { aborted: signal.aborted } } as never)
       rendered = result.outputPath ?? null
       if (!rendered) {
@@ -1489,6 +1504,7 @@ export class AiHost {
       episodeId,
       scenes: scenes.length,
       shots: shotCount,
+      framesGenerated,
       voicesGenerated,
       videosGenerated,
       skippedNoDialogue,
@@ -1498,6 +1514,7 @@ export class AiHost {
     return {
       scenes: scenes.length,
       shots: shotCount,
+      framesGenerated,
       voicesGenerated,
       videosGenerated,
       skippedNoDialogue,

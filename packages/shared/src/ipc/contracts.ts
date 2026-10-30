@@ -408,6 +408,8 @@ export const ipcContracts = {
   'ai:assembleEpisode': {
     request: z.object({
       episodeId: zEntityId,
+      /** v0.32: generate the missing keyframes BEFORE animating. */
+      frames: z.boolean().default(true),
       voices: z.boolean().default(true),
       videos: z.boolean().default(true),
       render: z.boolean().default(true),

@@ -2322,6 +2322,109 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V32 ASSEMBLY FRAMES: keyframes first, then voices + honest skips + render', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    const ep = ctx.creative.createEpisode({ season: 9, number: 7, title: 'V32 Frames' })
+
+    // cast with a TTS voice + a FRAMELESS shot (the frames phase must draw it)
+    const ayaka = ctx.creative.createCharacter({ name: 'Frames Ayaka', role: 'SUPPORTING', ttsVoice: 'frames-voice' })
+    const scene = ctx.creative.createScene(ep.id, { title: 'V32 cena', characterIds: [ayaka.id] })
+    ctx.creative.updateScene(scene.id, {
+      title: scene.title,
+      timeOfDay: scene.timeOfDay,
+      characterIds: scene.characterIds,
+      synopsis: scene.synopsis,
+      screenplay: 'FRAMES AYAKA\n"O quadro responde ao lápis."',
+    })
+    const shot = ctx.storyboard.createShot(scene.id, {
+      title: 'V32 shot',
+      durationSeconds: 2,
+      dialogue: 'FRAMES AYAKA\n"O quadro responde ao lápis."',
+    })
+    if (ctx.storyboard.getShotById(shot.id).frameAssetId) throw new Error('shot should start frameless')
+
+    // image provider returns a REAL PNG; TTS returns a REAL WAV
+    const pngPath = join(ctx.summary.path, '..', 'v32-frame.png')
+    writeFileSync(pngPath, makeRealPng(32, 32, [240, 130, 200]))
+    const makeWav = (seconds: number) => {
+      const sampleRate = 8000
+      const samples = Math.floor(seconds * sampleRate)
+      const buf = Buffer.alloc(44 + samples * 2)
+      buf.write('RIFF', 0); buf.writeUInt32LE(36 + samples * 2, 4); buf.write('WAVE', 8); buf.write('fmt ', 12)
+      buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22)
+      buf.writeUInt32LE(sampleRate, 24); buf.writeUInt32LE(sampleRate * 2, 28)
+      buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34); buf.write('data', 36); buf.writeUInt32LE(samples * 2, 40)
+      for (let i = 0; i < samples; i++) buf.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / sampleRate) * 6000), 44 + i * 2)
+      return buf
+    }
+    const realFetch = globalThis.fetch
+    const voicesRequested: string[] = []
+    globalThis.fetch = (async (url: unknown, init?: { body?: string }) => {
+      const u = String(url)
+      const body = String(init?.body ?? '')
+      if (u.includes('/images/generations')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ data: [{ b64_json: readFileSync(pngPath).toString('base64') }] }),
+        }
+      }
+      if (u.includes('/audio/speech')) {
+        voicesRequested.push(JSON.parse(body).voice)
+        const ab = makeWav(1.2)
+        return { ok: true, status: 200, text: async () => '', arrayBuffer: async () => ab.buffer.slice(ab.byteOffset, ab.byteOffset + ab.byteLength) }
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) }
+    }) as typeof fetch
+    const settingsSvc = new SettingsService(appDb)
+    const credentialsSvc = new CredentialStore(appDb, plaintextCodec, systemClock)
+    credentialsSvc.set('image', 'sk-smoke-v32')
+    credentialsSvc.set('tts', 'sk-smoke-v32')
+    settingsSvc.update({
+      ...settingsSvc.get(),
+      ai: {
+        ...settingsSvc.get().ai,
+        image: { baseUrl: 'https://img.example/v1', model: 'frame-model', size: '1344x768' },
+        tts: { baseUrl: 'https://tts.example/v1', model: 'tts-1', voice: 'default-voice' },
+      },
+    })
+    const ai = new AiHost({
+      credentials: credentialsSvc,
+      settings: settingsSvc,
+      projects,
+      logger,
+      emitter: { send: () => undefined, window: null } as never,
+    })
+
+    // THE ASSEMBLY: frames first → voice → (no video provider: honest skip) → real render
+    const result = await ai.assembleEpisode(
+      ep.id,
+      { frames: true, voices: true, videos: true, render: true },
+      () => undefined,
+      { aborted: false },
+    )
+    globalThis.fetch = realFetch
+    if (result.framesGenerated !== 1) throw new Error('frame phase did not draw the frameless shot')
+    if (!ctx.storyboard.getShotById(shot.id).frameAssetId) throw new Error('frame not attached to the shot')
+    if (result.voicesGenerated !== 1) throw new Error('voice phase did not speak')
+    if (voicesRequested.filter((v) => v === 'frames-voice').length !== 1) throw new Error('cast voice not used')
+    if (result.skippedNoFrame < 1) throw new Error('video skips must be reported (no video provider configured)')
+    if (result.shots !== 1 || result.scenes !== 1) throw new Error('assembly counts wrong')
+    if (!result.rendered) throw new Error('real episode render missing from assembly')
+
+    // cleanup
+    ctx.storyboard.clearFrame(shot.id)
+    ctx.storyboard.clearVoice(shot.id)
+    ctx.creative.deleteEpisode(ep.id)
+    ctx.creative.deleteCharacter(ayaka.id)
+    settingsSvc.update({
+      ...settingsSvc.get(),
+      ai: { ...settingsSvc.get().ai, image: { baseUrl: undefined, model: undefined, size: '1344x768' }, tts: {} },
+    })
+    rmSync(pngPath, { force: true })
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

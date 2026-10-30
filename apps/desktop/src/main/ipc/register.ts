@@ -371,11 +371,11 @@ export function registerIpcHandlers(c: Container): void {
   handleIpc('ai:assembleEpisode', async (req) => {
     const ctx = requireActive(c)
     ctx.jobs.register('ai.assembleEpisode', async (job, jobCtx) => {
-      const payload = (job.payload ?? {}) as { episodeId: string; voices: boolean; videos: boolean; render: boolean }
+      const payload = (job.payload ?? {}) as { episodeId: string; frames: boolean; voices: boolean; videos: boolean; render: boolean }
       if (!payload?.episodeId) throw new MiraiError('VALIDATION_ERROR', 'assembly payload missing episodeId.')
       return c.ai.assembleEpisode(
         payload.episodeId,
-        { voices: payload.voices, videos: payload.videos, render: payload.render },
+        { frames: payload.frames, voices: payload.voices, videos: payload.videos, render: payload.render },
         jobCtx.reportProgress,
         { aborted: jobCtx.signal.aborted },
       )

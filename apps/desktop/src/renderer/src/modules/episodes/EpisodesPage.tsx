@@ -53,6 +53,8 @@ export function EpisodesPage() {
   const exportEpub = useExportEpub()
   const exportDocx = useExportDocx()
   const assemble = useAssembleEpisode()
+  const [assembleOpen, setAssembleOpen] = useState(false)
+  const [assembleOpts, setAssembleOpts] = useState({ frames: true, voices: true, videos: true, render: true })
   const { data: episodes, isLoading, isError, error, refetch } = useEpisodes()
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null)
   const [newEpisodeOpen, setNewEpisodeOpen] = useState(false)
@@ -94,22 +96,7 @@ export function EpisodesPage() {
               variant="outline"
               loading={assemble.isPending}
               title="AI anime episode: voices + image-to-video + timeline + render, in one job (progress in Jobs)"
-              onClick={() => {
-                if (!selected?.id) return
-                assemble.mutate(
-                  { episodeId: selected.id, voices: true, videos: true, render: true },
-                  {
-                    onSuccess: (r) =>
-                      toast({
-                        kind: 'success',
-                        title: 'AI episode assembly started',
-                        description: `Job ${r.jobId} — follow the progress in Jobs.`,
-                      }),
-                    onError: (err) =>
-                      toast({ kind: 'error', title: 'Assembly failed', description: err.message }),
-                  },
-                )
-              }}
+              onClick={() => setAssembleOpen(true)}
             >
               <Sparkles className="h-3.5 w-3.5" /> <T k="AI Episode" />
             </Button>
@@ -189,6 +176,71 @@ export function EpisodesPage() {
         )}
       </div>
 
+        <Modal
+          open={assembleOpen}
+          onClose={() => setAssembleOpen(false)}
+          title="Assemble the AI episode"
+        >
+          <div className="space-y-3">
+            <p className="text-[11px] leading-relaxed text-mirai-dim">
+              One job, four honest phases — the AI-anime recipe in order: <strong>keyframes</strong> →{' '}
+              <strong>voices</strong> → <strong>image-to-video clips</strong> → <strong>timeline + render</strong>.
+              Anything not configured is skipped and reported, never faked.
+            </p>
+            {(
+              [
+                ['frames', 'Keyframes first', 'generates the missing frames from the scene + Style Bible'],
+                ['voices', 'AI voices', 'dialogue shots speak with the cast voices'],
+                ['videos', 'Image-to-video', 'framed shots become real clips (video provider)'],
+                ['render', 'Render episode', 'renders the final MP4 (every scene needs shots first)'],
+              ] as const
+            ).map(([key, label, hint]) => (
+              <label key={key} className="flex cursor-pointer items-start gap-2 rounded-md border border-mirai-border/70 bg-mirai-bg/40 p-3">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-mirai-accent"
+                  checked={assembleOpts[key]}
+                  onChange={(e) => setAssembleOpts((o) => ({ ...o, [key]: e.target.checked }))}
+                />
+                <span>
+                  <span className="text-xs font-semibold text-mirai-text">{label}</span>
+                  <span className="block text-[10px] text-mirai-faint">{hint}</span>
+                </span>
+              </label>
+            ))}
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setAssembleOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                loading={assemble.isPending}
+                disabled={!selected?.id}
+                onClick={() => {
+                  if (!selected?.id) return
+                  assemble.mutate(
+                    { episodeId: selected.id, ...assembleOpts },
+                    {
+                      onSuccess: (r) => {
+                        setAssembleOpen(false)
+                        toast({
+                          kind: 'success',
+                          title: 'AI episode assembly started',
+                          description: `Job ${r.jobId} — follow the progress in Jobs.`,
+                        })
+                      },
+                      onError: (err) =>
+                        toast({ kind: 'error', title: 'Assembly failed', description: err.message }),
+                    },
+                  )
+                }}
+              >
+                <Sparkles className="h-3.5 w-3.5" /> Start assembly
+              </Button>
+            </div>
+          </div>
+        </Modal>
       <NewEpisodeModal
         open={newEpisodeOpen}
         onClose={() => setNewEpisodeOpen(false)}
@@ -389,6 +441,7 @@ function EpisodeDetail({ episode }: { episode: EpisodeWithStats }) {
             </ul>
           )}
         </div>
+
 
         <ConfirmModal
           open={confirmDelete}
