@@ -1501,6 +1501,20 @@ export function useMangaRevealPackage() {
   })
 }
 
+export function useMangaProofsExport() {
+  return useMutation({
+    mutationFn: ({ episodeId, format }: { episodeId: string; format: 'png' | 'pdf' | 'both' }) =>
+      invoke('manga:exportProofs', { episodeId, format }),
+  })
+}
+
+export function useMangaAutoBoard() {
+  return useMutation({
+    mutationFn: ({ episodeId, panelsPerPage }: { episodeId: string; panelsPerPage?: number }) =>
+      invoke('manga:autoBoard', { episodeId, panelsPerPage }),
+  })
+}
+
 export function usePanelLetteringDraft() {
   return useMutation({
     mutationFn: (panelId: string) => invoke('ai:draftPanelLettering', { panelId }),

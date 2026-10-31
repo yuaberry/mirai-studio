@@ -11,7 +11,9 @@ import {
   ArrowDown,
   ArrowUp,
   BookOpen,
+  FileImage,
   ImagePlus,
+  LayoutGrid,
   MessageSquarePlus,
   Package,
   Plus,
@@ -49,6 +51,8 @@ import {
   useMangaRevealScript,
   useMangaPackageExport,
   useMangaRevealPackage,
+  useMangaProofsExport,
+  useMangaAutoBoard,
   usePanelLetteringDraft,
 } from '../../lib/queries'
 import { PageCanvas } from './PageCanvas'
@@ -102,6 +106,8 @@ export function MangaStudioPage() {
   const revealScript = useMangaRevealScript()
   const packageExport = useMangaPackageExport()
   const revealPackage = useMangaRevealPackage()
+  const proofsExport = useMangaProofsExport()
+  const autoBoard = useMangaAutoBoard()
 
   const selectedEpisode = useMemo(
     () => (episodes ?? []).find((e) => e.id === selectedEpisodeId) ?? null,
@@ -255,6 +261,54 @@ export function MangaStudioPage() {
               }}
             >
               <Package className="h-3.5 w-3.5" /> <T k="Proofs" />
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              loading={proofsExport.isPending}
+              title="Render page proofs to PNG and/or PDF per chapter"
+              onClick={() => {
+                if (!selectedEpisodeId) return
+                proofsExport.mutate(
+                  { episodeId: selectedEpisodeId, format: 'both' },
+                  {
+                    onSuccess: (r) =>
+                      toast({
+                        kind: 'success',
+                        title: 'Page proofs exported',
+                        description: `${r.pages} pages, ${r.format} — ${r.path}`,
+                      }),
+                    onError: (err) =>
+                      toast({ kind: 'error', title: 'Proofs export failed', description: err.message }),
+                  },
+                )
+              }}
+            >
+              <FileImage className="h-3.5 w-3.5" /> <T k="Proofs PNG/PDF" />
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              loading={autoBoard.isPending}
+              title="Auto-board: create manga pages from this chapter's storyboard shots"
+              onClick={() => {
+                if (!selectedEpisodeId) return
+                autoBoard.mutate(
+                  { episodeId: selectedEpisodeId, panelsPerPage: 4 },
+                  {
+                    onSuccess: (r) =>
+                      toast({
+                        kind: 'success',
+                        title: 'Chapter auto-boarded',
+                        description: `${r.pages} pages, ${r.panels} panels from storyboard shots`,
+                      }),
+                    onError: (err) =>
+                      toast({ kind: 'error', title: 'Auto-board failed', description: err.message }),
+                  },
+                )
+              }}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" /> <T k="Auto-board" />
             </Button>
             <Button
               size="sm"

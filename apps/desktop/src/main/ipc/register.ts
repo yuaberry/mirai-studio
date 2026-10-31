@@ -336,6 +336,16 @@ export function registerIpcHandlers(c: Container): void {
     shell.showItemInFolder(ctx.manga.chapterPackagePath(req.episodeId))
     return { ok: true }
   })
+  handleIpc('manga:exportProofs', async (req) => {
+    const result = await requireActive(c).manga.exportProofs(req.episodeId, req.format)
+    c.logger.info('RENDER', `Manga proofs exported: ${result.path}`, { format: result.format, pages: result.pages, bytes: result.bytes })
+    return result
+  })
+  handleIpc('manga:autoBoard', (req) => {
+    const result = requireActive(c).manga.autoBoard(req.episodeId, req.panelsPerPage)
+    c.logger.info('RENDER', `Auto-boarded episode ${req.episodeId}: ${result.pages} pages, ${result.panels} panels`)
+    return result
+  })
   // -------------------------------------------- character reference sheets (v0.31)
   handleIpc('character:attachReference', async (req) => {
     const ctx = requireActive(c)

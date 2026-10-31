@@ -1,6 +1,6 @@
 {
   "name": "@mirai/desktop",
-  "version": "0.31.0",
+  "version": "1.0.0-beta.1",
   "private": true,
   "description": "Mirai Studio \u2014 desktop application (Electron + React)",
   "author": {

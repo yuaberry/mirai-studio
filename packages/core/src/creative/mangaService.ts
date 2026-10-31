@@ -11,6 +11,7 @@
 import type { Database } from 'better-sqlite3'
 import { basename, extname, join } from 'node:path'
 import { copyFileSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import sharp from 'sharp'
 import { z } from 'zod'
 import {
   IMAGE_EXTENSIONS,
@@ -748,6 +749,255 @@ export class MangaService {
       'manga',
       `S${episode.season}E${episode.number}-package-${this.clock.isoNow().slice(0, 10)}.zip`,
     )
+  }
+
+  // ------------------------------------------------------- proofs (PNG/PDF)
+
+  /**
+   * Export page proofs for every page of an episode as PNG and/or PDF.
+   * Returns the primary output path (PDF if requested, else first PNG).
+   */
+  async exportProofs(episodeId: EntityId, format: 'png' | 'pdf' | 'both'): Promise<{ path: string; format: 'png' | 'pdf' | 'both'; pages: number; bytes: number }> {
+    const episode = this.requireEpisode(episodeId) as EpisodeRow
+    const pages = this.listPages(episodeId)
+    if (pages.length === 0) {
+      throw new MiraiError('VALIDATION_ERROR', `Episode S${episode.season}E${episode.number} has no pages to prove.`)
+    }
+
+    const dir = join(this.projectRoot, 'exports', 'manga', 'proofs')
+    mkdirSync(dir, { recursive: true })
+    const stamp = this.clock.isoNow().slice(0, 13).replace(/:/g, '-')
+    const baseName = `S${episode.season}E${episode.number}-proofs-${stamp}`
+
+    const pngPaths: string[] = []
+    let totalBytes = 0
+
+    if (format === 'png' || format === 'both') {
+      for (const page of pages) {
+        const proof = this.pageProofSvg(page.id)
+        const pngPath = join(dir, `${baseName}-page-${String(page.number).padStart(2, '0')}.png`)
+        await sharp(Buffer.from(proof.svg, 'utf8')).png().toFile(pngPath)
+        pngPaths.push(pngPath)
+        totalBytes += statSync(pngPath).size
+      }
+    }
+
+    let pdfPath = ''
+    if (format === 'pdf' || format === 'both') {
+      pdfPath = join(dir, `${baseName}.pdf`)
+      await this.writeProofsPdf(pdfPath, pages)
+      totalBytes += statSync(pdfPath).size
+    }
+
+    const primaryPath = format === 'png' ? (pngPaths[0] ?? pdfPath) : pdfPath
+    if (!primaryPath) throw new MiraiError('INTERNAL', 'No proof output was produced.')
+    return { path: primaryPath, format, pages: pages.length, bytes: totalBytes }
+  }
+
+  /**
+   * Write a multi-page PDF with one proof page per manga page.
+   * Pure manual PDF (no extra dependency): each page embeds the PNG-proof
+   * as an image XObject, sized to B5 (1200×1697 @72dpi → 1200×1697 pt).
+   */
+  private async writeProofsPdf(pdfPath: string, pages: MangaPageRecord[]): Promise<void> {
+    const W = 1200
+    const H = 1697
+    const objects: string[] = []
+    let xref = 1
+
+    // ---- catalog (xref 1)
+    const catalogId = xref++
+    const pagesId = xref++
+    const resourcesId = xref++
+    const fontId = xref++
+
+    // ---- per-page objects
+    const pageObjs: string[] = []
+    const contentObjs: string[] = []
+    const xobjIds: number[] = []
+
+    for (const page of pages) {
+      const proof = this.pageProofSvg(page.id)
+      const png = await sharp(Buffer.from(proof.svg, 'utf8')).png().toBuffer()
+      const xobjId = xref++
+      xobjIds.push(xobjId)
+
+      // image XObject
+      objects.push(
+        `${xobjId} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${png.length} >>\nstream\n`,
+      )
+      objects.push(png.toString('latin1'))
+      objects.push('\nendstream\nendobj\n')
+
+      // content stream: place image filling the page
+      const contentId = xref++
+      const content = `q ${W} 0 0 ${H} 0 0 cm /Im${xobjId} Do Q`
+      contentObjs.push(
+        `${contentId} 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`,
+      )
+
+      // page object
+      pageObjs.push(
+        `${xref} 0 obj\n<< /Type /Page /Parent ${pagesId} 0 R /Resources ${resourcesId} 0 R /Contents ${contentId} 0 R /MediaBox [0 0 ${W} ${H}] >>\nendobj\n`,
+      )
+      xref++
+    }
+
+    // ---- resources (font + XObjects)
+    const xobjDict = xobjIds.map((id) => `/Im${id} ${id} 0 R`).join(' ')
+    objects.splice(
+      0,
+      0,
+      `${resourcesId} 0 obj\n<< /Font << /F1 ${fontId} 0 R >> /XObject << ${xobjDict} >> >>\nendobj\n`,
+    )
+
+    // ---- font
+    objects.push(
+      `${fontId} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`,
+    )
+
+    // ---- pages tree
+    const kids = pageObjs.map((_, i) => {
+      // page objects start at xref (after objects that were already pushed)
+      return `${xref + i} 0 R`
+    }).join(' ')
+    // page objects were pushed after the initial objects; recalc their xref numbers
+    // (resourcesId, fontId, xobjIds, page ids come before the pages tree)
+    objects.push(
+      `${pagesId} 0 obj\n<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>\nendobj\n`,
+    )
+    objects.push(
+      `${catalogId} 0 obj\n<< /Type /Catalog /Pages ${pagesId} 0 R >>\nendobj\n`,
+    )
+
+    // ---- build xref
+    const offsets: number[] = []
+    const pdfParts: Buffer[] = []
+    let pos = 0
+
+    // header
+    pdfParts.push(Buffer.from('%PDF-1.4\n'))
+    pos += pdfParts.at(-1)!.length
+
+    // body: all objects in order
+    const ordered: Array<{ id: number; content: string }> = []
+    ordered.push({ id: catalogId, content: objects.pop()! }) // catalog
+    ordered.push({ id: pagesId, content: objects.pop()! }) // pages
+    ordered.push({ id: resourcesId, content: objects.shift()! }) // resources (we unshifted it)
+    ordered.push({ id: fontId, content: objects.pop()! }) // font
+    for (const id of xobjIds) ordered.push({ id, content: objects.shift()! })
+    for (const co of contentObjs) {
+      const id = xref - contentObjs.length + contentObjs.indexOf(co)
+      ordered.push({ id, content: co })
+    }
+    // page objects were pushed after everything else; find them
+    const pageObjStart = ordered.length
+    for (let i = 0; i < pages.length; i++) {
+      ordered.push({ id: pageObjStart + 1 + i, content: pageObjs[i]! })
+    }
+    // sort by id
+    ordered.sort((a, b) => a.id - b.id)
+
+    for (const o of ordered) {
+      offsets.push(pos)
+      const buf = Buffer.from(`${o.id} 0 obj\n${o.content}endobj\n`, 'latin1')
+      pdfParts.push(buf)
+      pos += buf.length
+    }
+
+    const xrefOffset = pos
+    pdfParts.push(Buffer.from('xref\n'))
+    pos += 5
+    pdfParts.push(Buffer.from(`0 ${ordered.length + 1}\n`))
+    pos += `0 ${ordered.length + 1}\n`.length
+    pdfParts.push(Buffer.from('0000000000 65535 f \n'))
+    pos += 21
+    for (const off of offsets) {
+      pdfParts.push(Buffer.from(`${String(off).padStart(10, '0')} 00000 n \n`))
+      pos += 21
+    }
+    pdfParts.push(
+      Buffer.from(
+        `trailer\n<< /Size ${ordered.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`,
+        'latin1',
+      ),
+    )
+
+    writeFileSync(pdfPath, Buffer.concat(pdfParts))
+  }
+
+  // ------------------------------------------------------- auto-boarding
+
+  /**
+   * Auto-board a chapter from its storyboard shots: create manga pages and
+   * link one panel per shot, distributing panels across pages.
+   * Returns { pages, panels } created.
+   */
+  autoBoard(episodeId: EntityId, panelsPerPage = 4): { pages: number; panels: number } {
+    this.requireEpisode(episodeId)
+    if (panelsPerPage < 1 || panelsPerPage > 12) {
+      throw new MiraiError('VALIDATION_ERROR', 'panelsPerPage must be between 1 and 12.')
+    }
+
+    // Collect all shots across all scenes of this episode, in scene+shot order.
+    const scenes = this.db
+      .prepare('SELECT id FROM scenes WHERE episode_id = ? ORDER BY id')
+      .all(episodeId) as { id: string }[]
+
+    const shotIds: string[] = []
+    for (const scene of scenes) {
+      const shots = this.db
+        .prepare('SELECT id FROM shots WHERE scene_id = ? ORDER BY id')
+        .all(scene.id) as { id: string }[]
+      for (const s of shots) shotIds.push(s.id)
+    }
+
+    if (shotIds.length === 0) {
+      throw new MiraiError('VALIDATION_ERROR', `Episode has no shots — create a storyboard first.`)
+    }
+
+    // Delete any existing manga pages for this episode (clean slate).
+    const existing = this.listPages(episodeId)
+    for (const p of existing) {
+      const panels = this.listPanels(p.id)
+      for (const panel of panels) {
+        if (panel.imageAssetId) this.pruneAssetIfOrphan(panel.imageAssetId)
+      }
+      this.db.prepare('DELETE FROM manga_pages WHERE id = ?').run(p.id)
+    }
+
+    const now = this.clock.isoNow()
+    let pageCount = 0
+    let panelCount = 0
+
+    const tx = this.db.transaction(() => {
+      for (let i = 0; i < shotIds.length; i += panelsPerPage) {
+        const pageId = newEntityId()
+        const pageNumber = ++pageCount
+        this.db
+          .prepare(
+            `INSERT INTO manga_pages (id, episode_id, number, reading_direction, layout_notes, status, created_at, updated_at)
+             VALUES (?, ?, ?, 'RTL', NULL, 'TODO', ?, ?)`,
+          )
+          .run(pageId, episodeId, pageNumber, now, now)
+
+        const batch = shotIds.slice(i, i + panelsPerPage)
+        let order = 0
+        for (const shotId of batch) {
+          const panelId = newEntityId()
+          this.db
+            .prepare(
+              `INSERT INTO manga_panels (id, page_id, order_index, shot_id, image_asset_id, lettering, x, y, w, h, created_at, updated_at)
+               VALUES (?, ?, ?, ?, NULL, '[]', NULL, NULL, NULL, NULL, ?, ?)`,
+            )
+            .run(panelId, pageId, order++, shotId, now, now)
+          panelCount++
+        }
+      }
+    })
+    tx()
+
+    return { pages: pageCount, panels: panelCount }
   }
 
   // ----------------------------------------------------------------- helpers

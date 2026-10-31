@@ -525,6 +525,24 @@ export const ipcContracts = {
     request: z.object({ episodeId: zEntityId }),
     response: z.object({ ok: z.boolean() }),
   },
+  /** v0.V1 Beta Experimental §8 slice 3: PNG + PDF page proofs per chapter. */
+  'manga:exportProofs': {
+    request: z.object({ episodeId: zEntityId, format: z.enum(['png', 'pdf', 'both']) }),
+    response: z.object({
+      path: z.string(),
+      format: z.enum(['png', 'pdf', 'both']),
+      pages: z.number().int().min(0),
+      bytes: z.number().int().min(0),
+    }),
+  },
+  /** v0.V1 Beta Experimental §8 slice 3: auto-board a chapter from its storyboard shots. */
+  'manga:autoBoard': {
+    request: z.object({ episodeId: zEntityId, panelsPerPage: z.number().int().min(1).max(12).optional() }),
+    response: z.object({
+      pages: z.number().int().min(0),
+      panels: z.number().int().min(0),
+    }),
+  },
   /** AI letterer: draft panel lettering from the linked shot's screenplay. */
   'ai:draftPanelLettering': {
     request: z.object({ panelId: zEntityId }),

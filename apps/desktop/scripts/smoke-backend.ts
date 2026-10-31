@@ -2686,6 +2686,50 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V37 MANGA PRO SLICE 3: auto-board + proofs PNG/PDF', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+
+    // Ensure an episode exists with at least one scene + shot
+    const creative = ctx.creative
+    const storyboard = ctx.storyboard
+    let episode = creative.listEpisodes()[0]
+    if (!episode) {
+      episode = creative.createEpisode({ season: 1, number: 1, title: 'Smoke Chapter' })
+    }
+    let scenes = creative.listScenes(episode.id)
+    if (scenes.length === 0) {
+      scenes = [creative.createScene({ episodeId: episode.id, title: 'Scene 1' })]
+    }
+    let shots: import('@mirai/shared').ShotRecord[] = []
+    for (const scene of scenes) {
+      shots = storyboard.listShots(scene.id)
+      if (shots.length > 0) break
+    }
+    if (shots.length === 0) {
+      shots = [storyboard.createShot({ sceneId: scenes[0]!.id, title: 'Shot 1', shotType: 'MEDIUM' })]
+    }
+
+    // Auto-board: one panel per shot, 4 panels per page
+    const manga = ctx.manga
+    const board = manga.autoBoard(episode.id, 4)
+    if (board.pages < 1) throw new Error('auto-board created no pages')
+    if (board.panels < 1) throw new Error('auto-board created no panels')
+
+    // Export proofs: both PNG and PDF
+    const pngResult = await manga.exportProofs(episode.id, 'png')
+    if (!existsSync(pngResult.path)) throw new Error('PNG proof not written')
+    const pdfResult = await manga.exportProofs(episode.id, 'pdf')
+    if (!existsSync(pdfResult.path)) throw new Error('PDF proof not written')
+    const bothResult = await manga.exportProofs(episode.id, 'both')
+    if (!existsSync(bothResult.path)) throw new Error('both proof not written')
+
+    // Reveal should not throw
+    manga.letteringScriptPath(episode.id)
+    manga.chapterPackagePath(episode.id)
+
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({
