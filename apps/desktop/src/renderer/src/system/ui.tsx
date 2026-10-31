@@ -285,3 +285,65 @@ export function Tabs<T extends string>({
     </div>
   )
 }
+
+// ------------------------------------------------------------------- Separator
+
+export function Separator({ className }: { className?: string }) {
+  return (
+    <div className={cn('h-[1px] bg-mirai-border my-4', className)} />
+  )
+}
+
+// --------------------------------------------------------------- PageHeader
+
+export interface PageHeaderProps {
+  title: string
+  subtitle?: string
+  actions?: ReactNode
+}
+
+export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
+  return (
+    <div className="border-b border-mirai-border bg-mirai-panel/60 px-6 py-4 flex items-center justify-between">
+      <div>
+        <h1 className="text-sm font-display font-bold text-mirai-text tracking-tight">{title}</h1>
+        {subtitle && <p className="text-[11px] text-mirai-faint">{subtitle}</p>}
+      </div>
+      {actions && <div className="flex items-center gap-2">{actions}</div>}
+    </div>
+  )
+}
+
+// --------------------------------------------------------------- StatCard
+
+export interface StatCardProps {
+  label: string
+  value: string | number
+  icon?: ReactNode
+  tone?: 'accent' | 'success' | 'warn' | 'info' | 'violet'
+  className?: string
+}
+
+export function StatCard(props: StatCardProps) {
+  const { label, value, icon, tone = 'accent', className } = props
+  return (
+    <Card
+      className={cn(
+        'border border-mirai-border/50 bg-mirai-bg/40 p-3 hover:border-mirai-accent/50 transition-colors',
+        className,
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[10px] font-medium text-mirai-dim uppercase tracking-wide">{label}</p>
+          <p className="text-sm font-semibold text-mirai-text">{value}</p>
+        </div>
+        {icon && (
+          <div className={`p-1.5 rounded bg-${tone}-500/10 text-${tone}-500`}>
+            {icon}
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}

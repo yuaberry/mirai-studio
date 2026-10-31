@@ -20,7 +20,7 @@ import {
   Clock,
   BarChart3,
 } from 'lucide-react'
-import { Button, Card } from '../../system/ui'
+import { Button, Card, PageHeader, Separator } from '../../system/ui'
 import { EmptyState } from '../../system/EmptyState'
 import { Skeleton } from '../../system/Skeleton'
 import {
@@ -108,17 +108,10 @@ export function AssetIntelligencePage() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* ------------------------------------------------------------- header */}
-      <header className="border-b border-mirai-border bg-mirai-panel/60 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-sm font-display font-bold text-mirai-text tracking-tight">
-            Asset Intelligence
-          </h1>
-          <p className="text-[11px] text-mirai-faint">
-            {assets.length} assets · {edges.length} dependencies · usage history tracked
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        title="Asset Intelligence"
+        subtitle={`${assets.length} assets · ${edges.length} dependencies · usage history tracked`}
+        actions={
           <Button
             size="sm"
             variant="outline"
@@ -129,8 +122,9 @@ export function AssetIntelligencePage() {
           >
             <ArrowRight className="h-3.5 w-3.5" /> <span className="text-xs">Refresh</span>
           </Button>
-        </div>
-      </header>
+        }
+      />
+      <Separator />
 
       <div className="flex flex-1 overflow-hidden">
         {/* ------------------------------------------------------------- left: graph */}

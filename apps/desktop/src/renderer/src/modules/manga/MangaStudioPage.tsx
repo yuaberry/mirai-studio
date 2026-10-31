@@ -35,7 +35,7 @@ import {
   type ReadingDirection,
   type ShotRecord,
 } from '@mirai/shared'
-import { Badge, Button, Label, Select, Spinner, Textarea } from '../../system/ui'
+import { Badge, Button, Label, PageHeader, Select, Separator, Spinner, StatCard, Textarea } from '../../system/ui'
 import { EmptyState, ErrorState } from '../../system/EmptyState'
 import { SkeletonList } from '../../system/Skeleton'
 import { ConfirmModal } from '../../system/Modal'
@@ -524,6 +524,25 @@ function PageEditor(props: {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
+      <PageHeader
+        title={`Page ${page.number}`}
+        subtitle={episode ? `S${episode.season}E${episode.number} — ${episode.title}` : undefined}
+        actions={
+          <div className="flex items-center gap-2">
+            <StatCard label="Panels" value={(panels ?? []).length} icon={<LayoutGrid className="h-4 w-4" />} />
+            <StatCard
+              label="Bubbles"
+              value={(panels ?? []).reduce((sum, p) => sum + p.lettering.length, 0)}
+              icon={<MessageSquarePlus className="h-4 w-4" />}
+              tone="violet"
+            />
+            <Badge tone={page.readingDirection === 'RTL' ? 'accent' : 'info'}>
+              {page.readingDirection === 'RTL' ? 'RTL' : 'LTR'}
+            </Badge>
+          </div>
+        }
+      />
+      <Separator />
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <Label>

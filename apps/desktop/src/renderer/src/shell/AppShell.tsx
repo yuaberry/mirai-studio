@@ -333,16 +333,16 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                v0.31.0
+                V1 Beta Experimental 3
               </span>
               <a
-                href="https://github.com/yuaberry/mirai-studio"
+                href="https://github.com/yuaberry/mirai-studio/releases"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[10px] text-mirai-faint transition-colors hover:text-mirai-accent"
-                title="Star Mirai Studio on GitHub"
+                title="Download all platforms on GitHub"
               >
-                ★ on GitHub
+                ↓ Downloads
               </a>
             </div>
           </div>
