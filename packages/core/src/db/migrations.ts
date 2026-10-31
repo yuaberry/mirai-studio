@@ -712,4 +712,53 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0023_experiments',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE experiment_runs (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          source_entity_type TEXT NOT NULL,   -- 'SHOT' | 'SCENE' | 'PAGE' | 'PANEL'
+          source_entity_id TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'ACTIVE', -- 'ACTIVE' | 'ARCHIVED' | 'COMPLETED'
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_experiment_runs_source ON experiment_runs (source_entity_type, source_entity_id);
+
+        CREATE TABLE experiment_variations (
+          id TEXT PRIMARY KEY,
+          experiment_id TEXT NOT NULL REFERENCES experiment_runs(id) ON DELETE CASCADE,
+          variation_index INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          prompt TEXT,
+          model TEXT,
+          asset_kind TEXT NOT NULL,              -- 'IMAGE' | 'AUDIO' | 'VIDEO'
+          asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL,
+          generated_bytes INTEGER NOT NULL DEFAULT 0,
+          score INTEGER,                          -- 1-5 user rating
+          notes TEXT,
+          promoted INTEGER NOT NULL DEFAULT 0,   -- 0 = no, 1 = yes
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_experiment_variations_exp ON experiment_variations (experiment_id);
+        CREATE UNIQUE INDEX idx_experiment_variations_idx ON experiment_variations (experiment_id, variation_index);
+
+        CREATE TABLE experiment_promotions (
+          id TEXT PRIMARY KEY,
+          experiment_id TEXT NOT NULL REFERENCES experiment_runs(id) ON DELETE CASCADE,
+          variation_id TEXT NOT NULL REFERENCES experiment_variations(id) ON DELETE CASCADE,
+          target_entity_type TEXT NOT NULL,
+          target_entity_id TEXT NOT NULL,
+          target_column TEXT NOT NULL,           -- 'frame_asset_id' | 'audio_asset_id' | 'video_asset_id' | 'image_asset_id'
+          previous_asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL,
+          promoted_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_experiment_promotions_exp ON experiment_promotions (experiment_id);
+      `)
+    },
+  },
 ]

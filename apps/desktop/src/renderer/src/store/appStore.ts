@@ -30,6 +30,7 @@ export type ProjectView =
   | 'jobs'
   | 'backups'
   | 'assetIntelligence'
+  | 'experiments'
 
 export type MainView = AppView | ProjectView
 
@@ -54,6 +55,7 @@ export const PROJECT_VIEWS: readonly ProjectView[] = [
   'jobs',
   'backups',
   'assetIntelligence',
+  'experiments',
 ]
 
 export function isProjectView(view: MainView): view is ProjectView {

@@ -2776,6 +2776,103 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V39 EXPERIMENTS: create, variations, promote, delete', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+
+    const experiments = ctx.experiments
+    if (!experiments) throw new Error('ExperimentService not available in project context')
+
+    // Need a shot to experiment on
+    const creative = ctx.creative
+    const storyboard = ctx.storyboard
+    let episode = creative.listEpisodes()[0]
+    if (!episode) {
+      episode = creative.createEpisode({ season: 1, number: 1, title: 'Smoke Chapter' })
+    }
+    let scenes = creative.listScenes(episode.id)
+    if (scenes.length === 0) {
+      scenes = [creative.createScene({ episodeId: episode.id, title: 'Scene 1' })]
+    }
+    let shots = storyboard.listShots(scenes[0]!.id)
+    if (shots.length === 0) {
+      shots = [storyboard.createShot({ sceneId: scenes[0]!.id, title: 'Shot 1', shotType: 'MEDIUM' })]
+    }
+    const shotId = shots[0]!.id
+
+    // Create experiment
+    const exp = experiments.createExperiment({
+      name: 'Smoke Test Experiment',
+      description: 'Testing experiments §19',
+      sourceEntityType: 'SHOT',
+      sourceEntityId: shotId,
+    })
+    if (exp.name !== 'Smoke Test Experiment') throw new Error('experiment name mismatch')
+    if (exp.sourceEntityId !== shotId) throw new Error('experiment source mismatch')
+
+    // List experiments
+    const allExps = experiments.listExperiments()
+    if (allExps.length < 1) throw new Error('expected at least 1 experiment')
+
+    // Get experiment
+    const gotExp = experiments.getExperiment(exp.id)
+    if (gotExp.id !== exp.id) throw new Error('get experiment mismatch')
+
+    // Insert a real asset for the variation
+    const assetId = 'test-exp-asset-' + Date.now()
+    ctx.db.prepare(`INSERT INTO assets (id, kind, relative_path, original_name, mime, bytes, created_at) VALUES (?, 'IMAGE', 'images/assets/test.png', 'test.png', 'image/png', 1024, ?)`).run(assetId, new Date().toISOString())
+
+    // Create variation
+    const variation = experiments.createVariation({
+      experimentId: exp.id,
+      variationIndex: 0,
+      name: 'Style Test A',
+      prompt: 'anime style, cinematic lighting',
+      model: 'test/model',
+      assetKind: 'IMAGE',
+      assetId,
+      generatedBytes: 1024,
+      score: 5,
+      notes: 'Great composition',
+    })
+    if (variation.name !== 'Style Test A') throw new Error('variation name mismatch')
+    if (variation.score !== 5) throw new Error('variation score mismatch')
+
+    // List variations
+    const variations = experiments.listVariations(exp.id)
+    if (variations.length !== 1) throw new Error(`expected 1 variation, got ${variations.length}`)
+
+    // Update variation
+    const updated = experiments.updateVariation(variation.id, { score: 4, notes: 'Updated notes' })
+    if (updated.score !== 4) throw new Error('variation update score mismatch')
+    if (updated.notes !== 'Updated notes') throw new Error('variation update notes mismatch')
+
+    // Promote variation
+    const promotion = experiments.promoteVariation({
+      experimentId: exp.id,
+      variationId: variation.id,
+      targetEntityType: 'SHOT',
+      targetEntityId: shotId,
+      targetColumn: 'frame_asset_id',
+    })
+    if (!promotion.id) throw new Error('promotion id missing')
+
+    // List promotions
+    const promotions = experiments.listPromotions(exp.id)
+    if (promotions.length !== 1) throw new Error(`expected 1 promotion, got ${promotions.length}`)
+
+    // Delete variation
+    experiments.deleteVariation(variation.id)
+    const variationsAfter = experiments.listVariations(exp.id)
+    if (variationsAfter.length !== 0) throw new Error('expected 0 variations after deletion')
+
+    // Delete experiment
+    experiments.deleteExperiment(exp.id)
+    const expsAfter = experiments.listExperiments()
+    if (expsAfter.length !== 0) throw new Error('expected 0 experiments after deletion')
+
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

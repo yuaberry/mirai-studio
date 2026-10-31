@@ -88,6 +88,15 @@ export type {
   AssetGraphEdge,
 } from '@mirai/shared'
 
+// creative experiments (§19)
+export { ExperimentService } from './experiments/experimentService'
+export type {
+  ExperimentRunRecord as ExperimentRunRecordType,
+  ExperimentVariationRecord as ExperimentVariationRecordType,
+  ExperimentPromotionRecord as ExperimentPromotionRecordType,
+  ExperimentRunSummary as ExperimentRunSummaryType,
+} from '@mirai/shared'
+
 // plugins (Phase 9)
 export { PluginRegistry, EXAMPLE_MANIFESTS } from './plugins/pluginRegistry'
 

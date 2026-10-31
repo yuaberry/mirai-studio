@@ -201,6 +201,31 @@ export type {
   AudioMixResult,
 } from './entities/audio'
 export {
+  // Creative Experiments (§19)
+  EXPERIMENT_STATUSES,
+  SOURCE_ENTITY_TYPES,
+  VARIATION_ASSET_KINDS,
+  zExperimentStatus,
+  zSourceEntityType,
+  zVariationAssetKind,
+  ExperimentRunInput,
+  ExperimentRunRecord,
+  ExperimentVariationInput,
+  ExperimentVariationRecord,
+  ExperimentPromotionInput,
+  ExperimentPromotionRecord,
+  ExperimentRunSummary,
+} from './entities/experiments'
+export type {
+  ExperimentStatus,
+  SourceEntityType,
+  VariationAssetKind,
+  ExperimentRunRecord as ExperimentRunRecordType,
+  ExperimentVariationRecord as ExperimentVariationRecordType,
+  ExperimentPromotionRecord as ExperimentPromotionRecordType,
+  ExperimentRunSummary as ExperimentRunSummaryType,
+} from './entities/experiments'
+export {
   SubtitleRecord,
   SubtitleInput,
   SubtitlePatch,

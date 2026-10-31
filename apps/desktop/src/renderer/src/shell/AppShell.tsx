@@ -21,6 +21,7 @@ import {
   LayoutGrid,
   ListVideo,
   Languages,
+  Layers,
   PanelTop,
   Palette,
   Play,
@@ -43,6 +44,7 @@ import { CharactersPage } from '../modules/characters/CharactersPage'
 import { LocationsPage } from '../modules/locations/LocationsPage'
 import { EpisodesPage } from '../modules/episodes/EpisodesPage'
 import { MangaStudioPage } from '../modules/manga/MangaStudioPage'
+import { ExperimentsPage } from '../modules/experiments/ExperimentsPage'
 import { AssetIntelligencePage } from '../modules/asset/AssetIntelligencePage'
 import { PromptLibraryPage } from '../modules/prompts/PromptLibraryPage'
 import { StoryboardPage } from '../modules/storyboard/StoryboardPage'
@@ -98,6 +100,7 @@ const MANGA_NAV: ReadonlyArray<NavEntry> = [
   { view: 'timeline', label: 'Timeline', icon: AudioWaveform },
   { view: 'subtitles', label: 'Subtitles', icon: Captions },
   { view: 'assetIntelligence', label: 'Asset Intelligence', icon: HardDriveDownload },
+  { view: 'experiments', label: 'Experiments', icon: Layers },
 ]
 
 const PRODUCTION_NAV: ReadonlyArray<NavEntry> = [
@@ -353,6 +356,7 @@ export function AppShell() {
           {view === 'locations' && <LocationsPage />}
           {view === 'episodes' && <EpisodesPage />}
           {view === 'manga' && <MangaStudioPage />}
+          {view === 'experiments' && <ExperimentsPage />}
           {view === 'assetIntelligence' && <AssetIntelligencePage />}
           {view === 'storyboard' && <StoryboardPage />}
           {view === 'timeline' && <TimelinePage />}

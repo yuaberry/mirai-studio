@@ -1568,6 +1568,119 @@ export function useAssetIntelligence(assetId: string | null | undefined) {
   })
 }
 
+// ------------------------------------------------------------- Creative Experiments (§19)
+
+export function useExperiments() {
+  return useQuery({
+    queryKey: ['experiments'],
+    queryFn: () => invoke('experiments:list', {}).then((r) => r.experiments),
+  })
+}
+
+export function useExperiment(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ['experiments', id],
+    queryFn: () => invoke('experiments:get', { id: id! }).then((r) => r.experiment),
+    enabled: id !== undefined,
+  })
+}
+
+export function useExperimentMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['experiments'] })
+    void queryClient.invalidateQueries({ queryKey: ['shots'] })
+    void queryClient.invalidateQueries({ queryKey: ['manga'] })
+  }
+  return {
+    create: useMutation({
+      mutationFn: (input: {
+        name: string
+        description?: string
+        sourceEntityType: import('@mirai/shared').SourceEntityType
+        sourceEntityId: string
+      }) => invoke('experiments:create', input).then((r) => r.experiment),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => invoke('experiments:delete', { id }).then(() => true),
+      onSuccess: invalidate,
+    }),
+  }
+}
+
+export function useExperimentVariations(experimentId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['experiments', 'variations', experimentId],
+    queryFn: () =>
+      invoke('experiments:variations:list', { experimentId: experimentId! }).then(
+        (r) => r.variations,
+      ),
+    enabled: experimentId !== undefined,
+  })
+}
+
+export function useExperimentVariationMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['experiments'] })
+    void queryClient.invalidateQueries({ queryKey: ['shots'] })
+  }
+  return {
+    create: useMutation({
+      mutationFn: (input: {
+        experimentId: string
+        variationIndex: number
+        name: string
+        prompt?: string
+        model?: string
+        assetKind: import('@mirai/shared').VariationAssetKind
+        assetId?: string
+        generatedBytes?: number
+        score?: number
+        notes?: string
+      }) =>
+        invoke('experiments:variations:create', input).then((r) => r.variation),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: (input: {
+        id: string
+        score?: number
+        notes?: string
+      }) => invoke('experiments:variations:update', input).then((r) => r.variation),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => invoke('experiments:variations:delete', { id }).then(() => true),
+      onSuccess: invalidate,
+    }),
+  }
+}
+
+export function useExperimentPromote() {
+  return useMutation({
+    mutationFn: (input: {
+      experimentId: string
+      variationId: string
+      targetEntityType: import('@mirai/shared').SourceEntityType
+      targetEntityId: string
+      targetColumn: 'frame_asset_id' | 'audio_asset_id' | 'video_asset_id' | 'blend_asset_id' | 'image_asset_id'
+    }) => invoke('experiments:promote', input).then((r) => r.promotion),
+  })
+}
+
+export function useExperimentPromotions(experimentId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['experiments', 'promotions', experimentId],
+    queryFn: () =>
+      invoke('experiments:promotions:list', { experimentId: experimentId! }).then(
+        (r) => r.promotions,
+      ),
+    enabled: experimentId !== undefined,
+  })
+}
+
 export function useMoodboard() {
   return useQuery({
     queryKey: ['moodboard'],

@@ -367,6 +367,72 @@ export function registerIpcHandlers(c: Container): void {
     const summary = requireActive(c).assetIntelligence.summary(req.assetId)
     return { summary }
   })
+  // --------------------------------------------------- Creative Experiments (§19)
+  handleIpc('experiments:create', (req) => {
+    const exp = requireActive(c).experiments.createExperiment({
+      name: req.name,
+      description: req.description,
+      sourceEntityType: req.sourceEntityType,
+      sourceEntityId: req.sourceEntityId,
+    })
+    return { experiment: exp }
+  })
+  handleIpc('experiments:list', () => {
+    const experiments = requireActive(c).experiments.listExperiments()
+    return { experiments }
+  })
+  handleIpc('experiments:get', (req) => {
+    const experiment = requireActive(c).experiments.getExperiment(req.id)
+    return { experiment }
+  })
+  handleIpc('experiments:delete', (req) => {
+    requireActive(c).experiments.deleteExperiment(req.id)
+    return { ok: true }
+  })
+  handleIpc('experiments:variations:create', (req) => {
+    const variation = requireActive(c).experiments.createVariation({
+      experimentId: req.experimentId,
+      variationIndex: req.variationIndex,
+      name: req.name,
+      prompt: req.prompt,
+      model: req.model,
+      assetKind: req.assetKind,
+      assetId: req.assetId,
+      generatedBytes: req.generatedBytes,
+      score: req.score,
+      notes: req.notes,
+    })
+    return { variation }
+  })
+  handleIpc('experiments:variations:list', (req) => {
+    const variations = requireActive(c).experiments.listVariations(req.experimentId)
+    return { variations }
+  })
+  handleIpc('experiments:variations:update', (req) => {
+    const variation = requireActive(c).experiments.updateVariation(req.id, {
+      score: req.score,
+      notes: req.notes,
+    })
+    return { variation }
+  })
+  handleIpc('experiments:variations:delete', (req) => {
+    requireActive(c).experiments.deleteVariation(req.id)
+    return { ok: true }
+  })
+  handleIpc('experiments:promote', (req) => {
+    const promotion = requireActive(c).experiments.promoteVariation({
+      experimentId: req.experimentId,
+      variationId: req.variationId,
+      targetEntityType: req.targetEntityType,
+      targetEntityId: req.targetEntityId,
+      targetColumn: req.targetColumn,
+    })
+    return { promotion }
+  })
+  handleIpc('experiments:promotions:list', (req) => {
+    const promotions = requireActive(c).experiments.listPromotions(req.experimentId)
+    return { promotions }
+  })
   // -------------------------------------------- character reference sheets (v0.31)
   handleIpc('character:attachReference', async (req) => {
     const ctx = requireActive(c)

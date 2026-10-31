@@ -40,6 +40,14 @@ import {
   zAssetGraph,
 } from '../entities/assetIntelligence'
 import {
+  zSourceEntityType,
+  zVariationAssetKind,
+  ExperimentRunRecord,
+  ExperimentVariationRecord,
+  ExperimentPromotionRecord,
+  ExperimentRunSummary,
+} from '../entities/experiments'
+import {
   CreateDerivedWorkInput,
   DerivedWorkView,
   IMPACT_KINDS,
@@ -570,6 +578,73 @@ export const ipcContracts = {
   'assets:intelligence': {
     request: z.object({ assetId: zEntityId }),
     response: z.object({ summary: zAssetIntelligenceSummary }),
+  },
+  /** V1 Beta Experimental §19: Creative Experiments — generation lab with promote-to-project. */
+  'experiments:create': {
+    request: z.object({
+      name: z.string().min(1).max(120),
+      description: z.string().max(2_000).optional(),
+      sourceEntityType: zSourceEntityType,
+      sourceEntityId: zEntityId,
+    }),
+    response: z.object({ experiment: ExperimentRunRecord }),
+  },
+  'experiments:list': {
+    request: z.object({}),
+    response: z.object({ experiments: z.array(ExperimentRunSummary) }),
+  },
+  'experiments:get': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ experiment: ExperimentRunRecord }),
+  },
+  'experiments:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'experiments:variations:create': {
+    request: z.object({
+      experimentId: zEntityId,
+      variationIndex: z.number().int().min(0),
+      name: z.string().min(1).max(80),
+      prompt: z.string().max(4_000).optional(),
+      model: z.string().max(120).optional(),
+      assetKind: zVariationAssetKind,
+      assetId: zEntityId.optional(),
+      generatedBytes: z.number().int().min(0).default(0),
+      score: z.number().int().min(1).max(5).optional(),
+      notes: z.string().max(2_000).optional(),
+    }),
+    response: z.object({ variation: ExperimentVariationRecord }),
+  },
+  'experiments:variations:list': {
+    request: z.object({ experimentId: zEntityId }),
+    response: z.object({ variations: z.array(ExperimentVariationRecord) }),
+  },
+  'experiments:variations:update': {
+    request: z.object({
+      id: zEntityId,
+      score: z.number().int().min(1).max(5).optional(),
+      notes: z.string().max(2_000).optional(),
+    }),
+    response: z.object({ variation: ExperimentVariationRecord }),
+  },
+  'experiments:variations:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'experiments:promote': {
+    request: z.object({
+      experimentId: zEntityId,
+      variationId: zEntityId,
+      targetEntityType: zSourceEntityType,
+      targetEntityId: zEntityId,
+      targetColumn: z.enum(['frame_asset_id', 'audio_asset_id', 'video_asset_id', 'blend_asset_id', 'image_asset_id']),
+    }),
+    response: z.object({ promotion: ExperimentPromotionRecord }),
+  },
+  'experiments:promotions:list': {
+    request: z.object({ experimentId: zEntityId }),
+    response: z.object({ promotions: z.array(ExperimentPromotionRecord) }),
   },
   /** AI letterer: draft panel lettering from the linked shot's screenplay. */
   'ai:draftPanelLettering': {
