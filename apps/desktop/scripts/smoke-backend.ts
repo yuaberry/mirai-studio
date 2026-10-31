@@ -30,6 +30,7 @@ import {
   RenderService,
   SettingsService,
   VisualConsistencyService,
+  AudioMixService,
   EpubService,
   DocxService,
   AiUsageService,
@@ -2617,6 +2618,71 @@ async function main(): Promise<void> {
     ctx.sheets.clearSheet(yuna.id)
     ctx.creative.deleteCharacter(yuna.id)
     rmSync(sheetPng, { force: true })
+    await projects.close()
+  })
+
+  await step('V36 SOUND & VOICE: audio master + mix tracks via FFmpeg', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    const ep = ctx.creative.listEpisodes()[0]!
+    const scene = ctx.creative.listScenes(ep.id)[0]!
+
+    // ---- create audio master
+    const audio = new AudioMixService(ctx.db, systemClock, ctx.summary.path)
+    const master = audio.createMaster({
+      name: 'V35 Main Mix',
+      sceneId: scene.id,
+      kind: 'MASTER',
+    })
+    if (master.name !== 'V35 Main Mix') throw new Error('master name mismatch')
+    if (master.kind !== 'MASTER') throw new Error('master kind mismatch')
+    if (master.outputPath !== '') throw new Error('master output should be empty before mix')
+
+    // ---- list masters (should have 1)
+    const masters = audio.listMasters()
+    if (masters.length !== 1) throw new Error(`expected 1 master, got ${masters.length}`)
+
+    // ---- list masters filtered by scene (should have 1)
+    const mastersByScene = audio.listMasters(scene.id)
+    if (mastersByScene.length !== 1) throw new Error(`expected 1 master for scene, got ${mastersByScene.length}`)
+
+    // ---- get master by id
+    const masterById = audio.getMaster(master.id)
+    if (masterById.id !== master.id) throw new Error('master id mismatch')
+
+    // ---- add mix tracks (need real media assets - use placeholder)
+    // Create a fake audio asset to reference
+    const fakeAudioPath = join(ctx.summary.path, '..', 'v36-fake-audio.wav')
+    writeFileSync(fakeAudioPath, Buffer.alloc(44 + 8000, 0)) // fake WAV header + data
+    const media = ctx.media.import('MUSIC', fakeAudioPath, 'V35 Test Music')
+    if (media.kind !== 'MUSIC') throw new Error('media kind mismatch')
+
+    // add mix track
+    const track = audio.addMixTrack({
+      masterId: master.id,
+      mediaId: media.id,
+      volume: 0.8,
+      pan: 0.1,
+      startOffset: 0,
+    })
+    if (track.mediaId !== media.id) throw new Error('track mediaId mismatch')
+    if (track.volume !== 0.8) throw new Error('track volume mismatch')
+
+    // list mix tracks
+    const tracks = audio.listMixTracks(master.id)
+    if (tracks.length !== 1) throw new Error(`expected 1 track, got ${tracks.length}`)
+
+    // remove mix track
+    audio.removeMixTrack(track.id)
+    const tracksAfter = audio.listMixTracks(master.id)
+    if (tracksAfter.length !== 0) throw new Error('expected 0 tracks after removal')
+
+    // ---- delete master
+    audio.deleteMaster(master.id)
+    const mastersAfter = audio.listMasters()
+    if (mastersAfter.length !== 0) throw new Error('expected 0 masters after deletion')
+
+    // cleanup
+    rmSync(fakeAudioPath, { force: true })
     await projects.close()
   })
 

@@ -16,6 +16,7 @@ import {
   type OpenProjectContext,
   AiUsageService,
   VisualConsistencyService,
+  AudioMixService,
 } from '@mirai/core'
 import type { IpcEventChannel, IpcEventPayload, OpenedProject } from '@mirai/shared'
 import { ipcEventPayloads } from '@mirai/shared'
@@ -66,6 +67,8 @@ export interface Container {
   aiUsage: AiUsageService
   /** v0.33: Visual Consistency Engine — model sheets + palette lock. */
   visualConsistency: VisualConsistencyService
+  /** v0.36: Sound & Voice Studio — real audio mix + master via FFmpeg. */
+  audio: AudioMixService
   emitter: MainEmitter
   health: HealthChecker
   /** App-level plugin registry (Phase 9). */
@@ -110,6 +113,7 @@ export function bootstrap(): Container {
   const aiUsage = new AiUsageService(appDb)
   const visualConsistency = new VisualConsistencyService(appDb, systemClock, dirs.root)
   const ai = new AiHost({ credentials, settings, projects, logger, emitter, aiUsage, visualConsistency })
+  const audio = new AudioMixService(appDb, systemClock, dirs.root)
 
   // Log batches → renderer (Diagnostics live tail).
   logger.subscribe((entries) => emitter.send('logs:appended', { entries }))
@@ -128,6 +132,7 @@ export function bootstrap(): Container {
     ai,
     aiUsage,
     visualConsistency,
+    audio,
     emitter,
     health,
     plugins,

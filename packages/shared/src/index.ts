@@ -184,6 +184,22 @@ export {
   zVideoGenStyle,
 } from './entities/media'
 export type { MediaKind, MediaRole, VideoGenStyle } from './entities/media'
+
+export {
+  zAudioMaster,
+  zAudioMasterInput,
+  zAudioMixTrack,
+  zAudioMixTrackInput,
+  zAudioMixResult,
+} from './entities/audio'
+export type {
+  AudioMaster as AudioMasterType,
+  AudioMixTrack as AudioMixTrackType,
+  AudioMixResult as AudioMixResultType,
+  AudioMaster,
+  AudioMixTrack,
+  AudioMixResult,
+} from './entities/audio'
 export {
   SubtitleRecord,
   SubtitleInput,

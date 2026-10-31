@@ -649,4 +649,38 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0021_audio_mix',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE audio_masters (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          scene_id TEXT REFERENCES scenes(id) ON DELETE SET NULL,
+          kind TEXT NOT NULL DEFAULT 'MIX',
+          output_path TEXT NOT NULL,
+          duration_seconds REAL NOT NULL DEFAULT 0,
+          file_bytes INTEGER NOT NULL DEFAULT 0,
+          sample_rate INTEGER NOT NULL DEFAULT 48000,
+          channels INTEGER NOT NULL DEFAULT 2,
+          bitrate_kbps INTEGER NOT NULL DEFAULT 192,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_audio_masters_scene ON audio_masters (scene_id);
+
+        CREATE TABLE audio_mix_tracks (
+          id TEXT PRIMARY KEY,
+          master_id TEXT NOT NULL REFERENCES audio_masters(id) ON DELETE CASCADE,
+          media_id TEXT NOT NULL REFERENCES media_tracks(id) ON DELETE CASCADE,
+          volume REAL NOT NULL DEFAULT 1.0,
+          pan REAL NOT NULL DEFAULT 0.0,
+          start_offset REAL NOT NULL DEFAULT 0,
+          duration_override REAL,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_audio_mix_tracks_master ON audio_mix_tracks (master_id);
+      `)
+    },
+  },
 ]

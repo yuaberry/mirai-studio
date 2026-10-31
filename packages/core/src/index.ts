@@ -72,6 +72,9 @@ export { ProductionService } from './production/productionService'
 
 // subtitles (Phase 4 wrap-up)
 export { SubtitleService } from './subtitles/subtitleService'
+// audio mix & master (v0.36 Sound & Voice Studio)
+export { AudioMixService } from './audio/audioMixService'
+export type { AudioMaster, AudioMixTrack, AudioMixResult } from '@mirai/shared'
 
 // plugins (Phase 9)
 export { PluginRegistry, EXAMPLE_MANIFESTS } from './plugins/pluginRegistry'

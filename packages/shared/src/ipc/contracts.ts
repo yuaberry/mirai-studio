@@ -41,6 +41,10 @@ import {
 import { MoodboardItemInput, MoodboardItem, PosterState } from '../entities/moodboard'
 import { type ConsistencyLock } from '../entities/visualConsistency'
 import {
+  zAudioMasterInput,
+  zAudioMixTrackInput,
+} from '../entities/audio'
+import {
   SceneTranslation,
   TranslationUpsertInput,
   LanguageCoverage,
@@ -1225,6 +1229,48 @@ export const ipcContracts = {
       issues: z.array(z.string()).optional(),
       suggestions: z.array(z.string()).optional(),
     }),
+  },
+
+  // ---- Sound & Voice Studio (v0.36) ---------------------------------------
+  /** Cria um áudio master vazio (registro no projeto). */
+  'audio:master:create': {
+    request: zAudioMasterInput,
+    response: z.object({ master: z.custom((val) => val !== null && typeof val === 'object') }),
+  },
+  /** Lista todos os áudio masters (opcionalmente filtrados por cena). */
+  'audio:master:list': {
+    request: z.object({ sceneId: zEntityId.optional() }).default({}),
+    response: z.object({ masters: z.array(z.custom((val) => val !== null && typeof val === 'object')) }),
+  },
+  /** Obtém um áudio master por id. */
+  'audio:master:get': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ master: z.custom((val) => val !== null && typeof val === 'object') }),
+  },
+  /** Remove um áudio master e seu arquivo de saída. */
+  'audio:master:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Adiciona uma track de mídia ao master (qual áudio, com volume/pan/início). */
+  'audio:mix:track:add': {
+    request: zAudioMixTrackInput,
+    response: z.object({ track: z.custom((val) => val !== null && typeof val === 'object') }),
+  },
+  /** Lista todas as tracks de mixagem de um master. */
+  'audio:mix:track:list': {
+    request: z.object({ masterId: zEntityId }),
+    response: z.object({ tracks: z.array(z.custom((val) => val !== null && typeof val === 'object')) }),
+  },
+  /** Remove uma track de mixagem. */
+  'audio:mix:track:remove': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Mixa todas as tracks do master em um arquivo REAL via FFmpeg + mastering loudnorm. */
+  'audio:mix:run': {
+    request: z.object({ masterId: zEntityId }),
+    response: z.object({ result: z.custom((val) => val !== null && typeof val === 'object') }),
   },
 
   // ---- Animation Pipeline (v0.34, estúdio japonês) -----------------------

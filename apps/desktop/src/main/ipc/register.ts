@@ -1569,6 +1569,47 @@ export function registerIpcHandlers(c: Container): void {
     return check
   })
 
+  // ---- Sound & Voice Studio (v0.36) ---------------------------------------
+  handleIpc('audio:master:create', async (req) => {
+    const master = c.audio.createMaster(req)
+    return { master }
+  })
+
+  handleIpc('audio:master:list', async (req) => {
+    const masters = c.audio.listMasters(req.sceneId)
+    return { masters }
+  })
+
+  handleIpc('audio:master:get', async (req) => {
+    const master = c.audio.getMaster(req.id)
+    return { master }
+  })
+
+  handleIpc('audio:master:delete', async (req) => {
+    c.audio.deleteMaster(req.id)
+    return { ok: true }
+  })
+
+  handleIpc('audio:mix:track:add', async (req) => {
+    const track = c.audio.addMixTrack(req)
+    return { track }
+  })
+
+  handleIpc('audio:mix:track:list', async (req) => {
+    const tracks = c.audio.listMixTracks(req.masterId)
+    return { tracks }
+  })
+
+  handleIpc('audio:mix:track:remove', async (req) => {
+    c.audio.removeMixTrack(req.id)
+    return { ok: true }
+  })
+
+  handleIpc('audio:mix:run', async (req) => {
+    const result = c.audio.mixMaster(req.masterId)
+    return { result }
+  })
+
   // ---- Animation Pipeline (v0.34, estúdio japonês) -----------------------
   handleIpc('animation:pipeline', async (req) => {
     const ctx = requireActive(c)
