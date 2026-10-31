@@ -434,6 +434,48 @@ export function registerIpcHandlers(c: Container): void {
     const promotions = requireActive(c).experiments.listPromotions(req.experimentId)
     return { promotions }
   })
+  // --------------------------------------------------- Light Novel Pro (§9 slice 3)
+  handleIpc('ln:volumes:list', () => {
+    const volumes = requireActive(c).lightNovel.listVolumes()
+    return { volumes }
+  })
+  handleIpc('ln:volumes:create', (req) => {
+    const volume = requireActive(c).lightNovel.createVolume(req.input)
+    return { volume }
+  })
+  handleIpc('ln:volumes:update', (req) => {
+    const volume = requireActive(c).lightNovel.updateVolume(req.id, req.input)
+    return { volume }
+  })
+  handleIpc('ln:volumes:delete', (req) => {
+    requireActive(c).lightNovel.deleteVolume(req.id)
+    return { ok: true }
+  })
+  handleIpc('ln:chapters:list', (req) => {
+    const chapters = requireActive(c).lightNovel.listChapters(req.volumeId)
+    return { chapters }
+  })
+  handleIpc('ln:chapters:create', (req) => {
+    const chapter = requireActive(c).lightNovel.createChapter(req.input)
+    return { chapter }
+  })
+  handleIpc('ln:chapters:update', (req) => {
+    const chapter = requireActive(c).lightNovel.updateChapter(req.id, req.input)
+    return { chapter }
+  })
+  handleIpc('ln:chapters:delete', (req) => {
+    requireActive(c).lightNovel.deleteChapter(req.id)
+    return { ok: true }
+  })
+  handleIpc('ln:scenes:setPov', (req) => {
+    requireActive(c).lightNovel.setScenePov(req.id, req.input)
+    const pov = requireActive(c).lightNovel.getScenePov(req.id)
+    return { pov: pov ?? { povType: 'THIRD_PERSON_LIMITED' } }
+  })
+  handleIpc('ln:scenes:getPov', (req) => {
+    const pov = requireActive(c).lightNovel.getScenePov(req.id)
+    return { pov: pov ?? null }
+  })
   // -------------------------------------------- character reference sheets (v0.31)
   handleIpc('character:attachReference', async (req) => {
     const ctx = requireActive(c)

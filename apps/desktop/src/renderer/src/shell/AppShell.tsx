@@ -13,6 +13,7 @@ import {
   FileVideo,
   Workflow,
   BookOpen,
+  Book,
   Building2,
   Clapperboard,
   Disc3,
@@ -43,6 +44,7 @@ import { StoryBiblePage } from '../modules/bible/StoryBiblePage'
 import { CharactersPage } from '../modules/characters/CharactersPage'
 import { LocationsPage } from '../modules/locations/LocationsPage'
 import { EpisodesPage } from '../modules/episodes/EpisodesPage'
+import { LightNovelPage } from '../modules/lightNovel/LightNovelPage'
 import { MangaStudioPage } from '../modules/manga/MangaStudioPage'
 import { ExperimentsPage } from '../modules/experiments/ExperimentsPage'
 import { AssetIntelligencePage } from '../modules/asset/AssetIntelligencePage'
@@ -92,6 +94,7 @@ const PROJECT_NAV: ReadonlyArray<NavEntry> = [
   { view: 'characters', label: 'Characters', icon: Users },
   { view: 'locations', label: 'Locations', icon: Building2 },
   { view: 'episodes', label: 'Episodes & Scenes', icon: ListVideo },
+  { view: 'lightNovel', label: 'Light Novel', icon: Book },
 ]
 
 const MANGA_NAV: ReadonlyArray<NavEntry> = [
@@ -333,7 +336,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                V1 Beta Experimental 4
+                V1 Beta Experimental 6
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio/releases"
@@ -355,6 +358,7 @@ export function AppShell() {
           {view === 'characters' && <CharactersPage />}
           {view === 'locations' && <LocationsPage />}
           {view === 'episodes' && <EpisodesPage />}
+          {view === 'lightNovel' && <LightNovelPage />}
           {view === 'manga' && <MangaStudioPage />}
           {view === 'experiments' && <ExperimentsPage />}
           {view === 'assetIntelligence' && <AssetIntelligencePage />}

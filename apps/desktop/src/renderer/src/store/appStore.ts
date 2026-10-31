@@ -12,10 +12,11 @@ export type ProjectView =
   | 'bible'
   | 'style'
   | 'characters'
-  | 'locations'
-  | 'episodes'
-  | 'manga'
-  | 'storyboard'
+ | 'locations'
+ | 'episodes'
+ | 'manga'
+ | 'lightNovel'
+ | 'storyboard'
   | 'timeline'
   | 'render'
   | 'production'
@@ -41,6 +42,8 @@ export const PROJECT_VIEWS: readonly ProjectView[] = [
   'characters',
   'locations',
   'episodes',
+  'manga',
+  'lightNovel',
   'storyboard',
   'timeline',
   'render',

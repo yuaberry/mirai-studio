@@ -48,6 +48,14 @@ import {
   ExperimentRunSummary,
 } from '../entities/experiments'
 import {
+  VolumeInput,
+  VolumeRecord,
+  ChapterInput,
+  ChapterRecord,
+  ScenePovPatch,
+  PovSetting,
+} from '../entities/lightNovel'
+import {
   CreateDerivedWorkInput,
   DerivedWorkView,
   IMPACT_KINDS,
@@ -672,13 +680,54 @@ export const ipcContracts = {
       variationId: zEntityId,
       targetEntityType: zSourceEntityType,
       targetEntityId: zEntityId,
-      targetColumn: z.enum(['frame_asset_id', 'audio_asset_id', 'video_asset_id', 'blend_asset_id', 'image_asset_id']),
+      targetColumn: z.enum(['frame_asset_id', 'audio_asset_id', 'video_asset_id', 'blend_asset_id', 'image_asset_id', 'cover_asset_id']),
     }),
     response: z.object({ promotion: ExperimentPromotionRecord }),
   },
   'experiments:promotions:list': {
     request: z.object({ experimentId: zEntityId }),
     response: z.object({ promotions: z.array(ExperimentPromotionRecord) }),
+  },
+  // ----------------------------------------------------------------- Light Novel Pro (§9 slice 3)
+  'ln:volumes:list': {
+    request: emptyRequest,
+    response: z.object({ volumes: z.array(VolumeRecord) }),
+  },
+  'ln:volumes:create': {
+    request: z.object({ input: VolumeInput }),
+    response: z.object({ volume: VolumeRecord }),
+  },
+  'ln:volumes:update': {
+    request: z.object({ id: zEntityId, input: z.object({ number: z.number().int().min(1).max(1000).optional(), title: z.string().min(1).max(120).optional(), status: zTaskStatus.optional() }) }),
+    response: z.object({ volume: VolumeRecord }),
+  },
+  'ln:volumes:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'ln:chapters:list': {
+    request: z.object({ volumeId: zEntityId }),
+    response: z.object({ chapters: z.array(ChapterRecord) }),
+  },
+  'ln:chapters:create': {
+    request: z.object({ input: ChapterInput }),
+    response: z.object({ chapter: ChapterRecord }),
+  },
+  'ln:chapters:update': {
+    request: z.object({ id: zEntityId, input: ChapterInput.partial() }),
+    response: z.object({ chapter: ChapterRecord }),
+  },
+  'ln:chapters:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ ok: z.boolean() }),
+  },
+  'ln:scenes:setPov': {
+    request: z.object({ id: zEntityId, input: ScenePovPatch }),
+    response: z.object({ pov: PovSetting }),
+  },
+  'ln:scenes:getPov': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({ pov: PovSetting.nullable() }),
   },
   /** AI letterer: draft panel lettering from the linked shot's screenplay. */
   'ai:draftPanelLettering': {

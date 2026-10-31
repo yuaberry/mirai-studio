@@ -56,6 +56,7 @@ import { BlenderBridge } from '../blender/blenderBridge'
 import { AudioMixService } from '../audio/audioMixService'
 import { AssetIntelligenceService } from '../asset/assetIntelligenceService'
 import { ExperimentService } from '../experiments/experimentService'
+import { LightNovelService } from '../lightNovel/lightNovelService'
 import { newEntityId, type AppDirs, type Clock } from '../types'
 import type { LoggerService } from '../logger/logger'
 import { readManifest, writeManifest } from './manifest'
@@ -115,6 +116,8 @@ export interface OpenProjectContext {
   assetIntelligence: AssetIntelligenceService
   /** Creative Experiments (§19): generation lab + promote-to-project. */
   experiments: ExperimentService
+  /** Light Novel Pro (§9 slice 3): volumes + chapters + POV control. */
+  lightNovel: LightNovelService
   /** Headless Blender rendering (attach .blend → real shot video). */
   blender: BlenderBridge
   /** Jobs recovered as PAUSED after an interrupted session. */
@@ -789,6 +792,7 @@ export class ProjectService {
     const audio = new AudioMixService(db, this.opts.clock, path)
     const assetIntelligence = new AssetIntelligenceService(db)
     const experiments = new ExperimentService(db, storyboard, manga)
+    const lightNovel = new LightNovelService(db)
     const render = new RenderService(storyboard, media, path, creative, timeline, subtitles)
     const blender = new BlenderBridge(storyboard, path)
 
@@ -796,7 +800,7 @@ export class ProjectService {
     this.upsertRegistry(manifest, path, now)
 
     const summary = this.summaryById(manifest.id)
-    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, manga, moodboard, poster, localization, sheets, animation, ip, media, render, timeline, production, subtitles, audio, assetIntelligence, experiments, blender, recoveredCount }
+    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, manga, moodboard, poster, localization, sheets, animation, ip, media, render, timeline, production, subtitles, audio, assetIntelligence, experiments, lightNovel, blender, recoveredCount }
     this.opts.logger.info('PROJECT', `Project opened: "${manifest.name}"`, {
       id: manifest.id,
       recoveredJobs: recoveredCount,

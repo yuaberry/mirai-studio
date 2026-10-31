@@ -1665,7 +1665,7 @@ export function useExperimentPromote() {
       variationId: string
       targetEntityType: import('@mirai/shared').SourceEntityType
       targetEntityId: string
-      targetColumn: 'frame_asset_id' | 'audio_asset_id' | 'video_asset_id' | 'blend_asset_id' | 'image_asset_id'
+      targetColumn: 'frame_asset_id' | 'audio_asset_id' | 'video_asset_id' | 'blend_asset_id' | 'image_asset_id' | 'cover_asset_id'
     }) => invoke('experiments:promote', input).then((r) => r.promotion),
   })
 }
@@ -1678,6 +1678,132 @@ export function useExperimentPromotions(experimentId: string | null | undefined)
         (r) => r.promotions,
       ),
     enabled: experimentId !== undefined,
+  })
+}
+
+// --------------------------------------------------- Light Novel Pro (§9 slice 3)
+
+export function useVolumes() {
+  return useQuery({
+    queryKey: ['lightNovel', 'volumes'],
+    queryFn: () => invoke('ln:volumes:list', {}).then((r) => r.volumes),
+  })
+}
+
+export function useVolumeMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['lightNovel', 'volumes'] })
+    void queryClient.invalidateQueries({ queryKey: ['lightNovel', 'chapters'] })
+  }
+  return {
+    create: useMutation({
+      mutationFn: (input: {
+        number: number
+        title: string
+        status?: 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'APPROVED' | 'FINAL'
+      }) => invoke('ln:volumes:create', { input }).then((r) => r.volume),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: (input: {
+        id: string
+        number?: number
+        title?: string
+        status?: 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'APPROVED' | 'FINAL'
+      }) => invoke('ln:volumes:update', { id: input.id, input: input }).then((r) => r.volume),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => invoke('ln:volumes:delete', { id }).then(() => true),
+      onSuccess: invalidate,
+    }),
+  }
+}
+
+export function useChapters(volumeId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['lightNovel', 'chapters', volumeId],
+    queryFn: () =>
+      invoke('ln:chapters:list', { volumeId: volumeId! }).then((r) => r.chapters),
+    enabled: volumeId !== undefined,
+  })
+}
+
+export function useChapterMutations() {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['lightNovel', 'volumes'] })
+    void queryClient.invalidateQueries({ queryKey: ['lightNovel', 'chapters'] })
+  }
+  return {
+    create: useMutation({
+      mutationFn: (input: {
+        volumeId: string
+        number: number
+        title: string
+        synopsis?: string
+        status?: 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'APPROVED' | 'FINAL'
+        pov?: import('@mirai/shared').PovSettingInput
+      }) => invoke('ln:chapters:create', { input }).then((r) => r.chapter),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: (input: {
+        id: string
+        volumeId?: string
+        number?: number
+        title?: string
+        synopsis?: string
+        status?: 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'APPROVED' | 'FINAL'
+        pov?: import('@mirai/shared').PovSettingInput
+      }) =>
+        invoke('ln:chapters:update', {
+          id: input.id,
+          input: {
+            volumeId: input.volumeId,
+            number: input.number,
+            title: input.title,
+            synopsis: input.synopsis,
+            status: input.status,
+            pov: input.pov,
+          },
+        }).then((r) => r.chapter),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => invoke('ln:chapters:delete', { id }).then(() => true),
+      onSuccess: invalidate,
+    }),
+  }
+}
+
+export function useScenePov(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ['lightNovel', 'scenes', id, 'pov'],
+    queryFn: () => invoke('ln:scenes:getPov', { id: id! }).then((r) => r.pov),
+    enabled: id !== undefined,
+  })
+}
+
+export function useScenePovMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      id: string
+      povType?: import('@mirai/shared').PovType
+      povCharacterId?: string
+    }) =>
+      invoke('ln:scenes:setPov', {
+        id: input.id,
+        input: {
+          povType: input.povType,
+          povCharacterId: input.povCharacterId,
+        },
+      }).then((r) => r.pov),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['lightNovel', 'scenes', variables.id, 'pov'] })
+    },
   })
 }
 

@@ -10,17 +10,19 @@ import { useState } from 'react'
 import {
   ArrowRight,
   Film,
-  Image,
+  Image as ImageIcon,
   Music,
   Plus,
   Star,
   Trash2,
   Wand2,
   X,
+  ZoomIn,
 } from 'lucide-react'
 import { Badge, Button, Card, Input, Select, Textarea } from '../../system/ui'
 import { EmptyState } from '../../system/EmptyState'
 import { Skeleton } from '../../system/Skeleton'
+import { Modal } from '../../system/Modal'
 import {
   useExperiments,
   useExperimentMutations,
@@ -34,8 +36,8 @@ import { toast } from '../../store/appStore'
 
 // ------------------------------------------------------------------ constants
 
-const ASSET_KIND_ICON: Record<string, typeof Image> = {
-  IMAGE: Image,
+const ASSET_KIND_ICON: Record<string, typeof ImageIcon> = {
+  IMAGE: ImageIcon,
   AUDIO: Music,
   VIDEO: Film,
 }
@@ -47,12 +49,21 @@ const SOURCE_TYPE_LABEL: Record<SourceEntityType, string> = {
   PANEL: 'Manga Panel',
 }
 
+/** The asset column written on promotion, per source entity type. */
+const TARGET_COLUMN_BY_SOURCE: Record<SourceEntityType, 'frame_asset_id' | 'image_asset_id' | 'cover_asset_id'> = {
+  SHOT: 'frame_asset_id',
+  SCENE: 'image_asset_id',
+  PAGE: 'cover_asset_id',
+  PANEL: 'image_asset_id',
+}
+
 // ------------------------------------------------------------------ page
 
 export function ExperimentsPage() {
   const { data: experiments, isLoading } = useExperiments()
   const experimentsMutations = useExperimentMutations()
   const [createDialog, setCreateDialog] = useState(false)
+  const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null)
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
   const [newSourceType, setNewSourceType] = useState<SourceEntityType>('SHOT')
@@ -69,6 +80,20 @@ export function ExperimentsPage() {
 
   return (
     <div className="flex h-full flex-col">
+      {previewImage && (
+        <Modal open={true} onClose={() => setPreviewImage(null)} title={`Preview: ${previewImage.name}`} width="max-w-xl">
+          <div className="flex flex-col items-center justify-center p-4">
+            <img
+              src={previewImage.url}
+              alt=""
+              className="max-w-full max-h-[60vh] object-contain rounded-lg border border-mirai-border bg-murai-panel"
+            />
+            <p className="mt-3 text-[10px] text-mirai-faint">
+              {previewImage.url}
+            </p>
+          </div>
+        </Modal>
+      )}
       {/* ------------------------------------------------------------- header */}
       <header className="border-b border-mirai-border bg-mirai-panel/60 px-6 py-4 flex items-center justify-between">
         <div>
@@ -112,6 +137,7 @@ export function ExperimentsPage() {
                     onSuccess: () => toast({ kind: 'success', title: 'Experiment deleted' }),
                   })
                 }}
+                onImageClick={(url, name) => setPreviewImage({ url, name })}
               />
             ))}
           </div>
@@ -160,10 +186,11 @@ export function ExperimentsPage() {
 interface ExperimentCardProps {
   experiment: import('@mirai/shared').ExperimentRunSummary
   onDelete: () => void
+  onImageClick: (url: string, name: string) => void
 }
 
 function ExperimentCard(props: ExperimentCardProps) {
-  const { experiment, onDelete } = props
+  const { experiment, onDelete, onImageClick } = props
   const [selected, setSelected] = useState(false)
   const { data: variations, isLoading } = useExperimentVariations(experiment.id)
   const { data: promotions } = useExperimentPromotions(experiment.id)
@@ -265,7 +292,7 @@ function ExperimentCard(props: ExperimentCardProps) {
                         variationId: v.id,
                         targetEntityType: experiment.sourceEntityType,
                         targetEntityId: experiment.sourceEntityId,
-                        targetColumn: 'frame_asset_id',
+                        targetColumn: TARGET_COLUMN_BY_SOURCE[experiment.sourceEntityType],
                       },
                       {
                         onSuccess: () =>
@@ -279,6 +306,7 @@ function ExperimentCard(props: ExperimentCardProps) {
                       },
                     )
                   }}
+                  onImageClick={(url, name) => onImageClick(url, name)}
                   isPromoted={v.promoted === 1}
                 />
               ))}
@@ -319,12 +347,13 @@ interface VariationCardProps {
   variation: import('@mirai/shared').ExperimentVariationRecord
   onRate: (score: number) => void
   onPromote: () => void
+  onImageClick: (url: string, name: string) => void
   isPromoted: boolean
 }
 
 function VariationCard(props: VariationCardProps) {
-  const { variation, onRate, onPromote, isPromoted } = props
-  const Icon = ASSET_KIND_ICON[variation.assetKind] || Image
+  const { variation, onRate, onPromote, onImageClick, isPromoted } = props
+  const Icon = ASSET_KIND_ICON[variation.assetKind] || ImageIcon
 
   const assetUrl = variation.assetId
     ? `mirai-asset://${variation.assetId}/`
@@ -348,7 +377,9 @@ function VariationCard(props: VariationCardProps) {
           {variation.assetKind}
         </Badge>
       </div>
-      <div className="h-32 flex items-center justify-center rounded border border-mirai-border mb-2 bg-mirai-bg">
+      <div className="h-32 flex items-center justify-center rounded border border-mirai-border mb-2 bg-mirai-bg cursor-pointer group-hover:border-mirai-accent/50 transition-colors"
+        onClick={() => variation.assetId && assetUrl && onImageClick(assetUrl, variation.name)}
+      >
         {variation.assetId ? (
           <div className="relative w-24 h-24 overflow-hidden rounded-lg bg-mirai-panel">
             <img
@@ -362,6 +393,18 @@ function VariationCard(props: VariationCardProps) {
             <div className="absolute inset-0 flex items-center justify-center">
               <Icon className="h-8 w-8 text-mirai-faint" />
             </div>
+            <button
+              className="absolute top-1 right-1 bg-black/40 backdrop-blur text-white rounded p-1 hover:bg-black/60 transition-opacity opacity-0 group-hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (variation.assetId && assetUrl) {
+                  onImageClick(assetUrl, variation.name)
+                }
+              }}
+              title="Preview"
+            >
+              <ZoomIn className="h-3 w-3" />
+            </button>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center">

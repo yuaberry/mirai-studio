@@ -6,6 +6,7 @@
 import { z } from 'zod'
 import { zAssetStatus, zTaskStatus } from '../status'
 import { zEntityId, zIsoDate } from '../ids'
+import { zPovType } from './lightNovel'
 
 // ---------------------------------------------------------------- Story Bible
 
@@ -121,6 +122,9 @@ export const Scene = SceneInput.extend({
   episodeId: z.string(),
   orderIndex: z.number().int().min(0),
   status: zTaskStatus.default('TODO'),
+  /** Light Novel Pro §9 slice 3: who tells this scene and from which perspective. */
+  povType: zPovType.optional(),
+  povCharacterId: zEntityId.optional(),
 })
 
 export const CharacterRecord = Character.extend({

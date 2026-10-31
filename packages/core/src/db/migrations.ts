@@ -790,4 +790,47 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0025_light_novel_volumes',
+    up: (db) => {
+      db.exec(`
+        -- Light Novel Pro §9 slice 3: volumes + chapters structure
+        CREATE TABLE volumes (
+          id TEXT PRIMARY KEY,
+          number INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'TODO',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX idx_volumes_number ON volumes (number);
+
+        CREATE TABLE chapters (
+          id TEXT PRIMARY KEY,
+          volume_id TEXT NOT NULL REFERENCES volumes(id) ON DELETE CASCADE,
+          number INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          synopsis TEXT,
+          status TEXT NOT NULL DEFAULT 'TODO',
+          pov_type TEXT,                -- 'FIRST_PERSON' | 'THIRD_PERSON_LIMITED' | 'THIRD_PERSON_OMNISCIENT' | 'SECOND_PERSON'
+          pov_character_id TEXT,        -- who narrates / whose camera we follow
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX idx_chapters_volume_number ON chapters (volume_id, number);
+        CREATE INDEX idx_chapters_volume ON chapters (volume_id);
+
+        -- Scene POV control: who tells this scene and from which perspective
+        ALTER TABLE scenes ADD COLUMN pov_type TEXT;
+        ALTER TABLE scenes ADD COLUMN pov_character_id TEXT;
+        CREATE INDEX idx_scenes_pov_type ON scenes (pov_type);
+
+        -- Creative Experiments §19 slice 2: promotion target columns
+        ALTER TABLE scenes ADD COLUMN image_asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL;
+        ALTER TABLE manga_pages ADD COLUMN cover_asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL;
+        CREATE INDEX idx_scenes_image_asset ON scenes (image_asset_id);
+        CREATE INDEX idx_manga_pages_cover_asset ON manga_pages (cover_asset_id);
+      `)
+    },
+  },
 ]

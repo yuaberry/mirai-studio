@@ -111,6 +111,22 @@ export {
   CostumeInput,
 } from './entities/creative'
 export type { CharacterRole, TimeOfDay, RelationshipKind } from './entities/creative'
+
+export {
+  // Light Novel Pro (§9 slice 3): volumes + chapters + POV control
+  POV_TYPES,
+  zPovType,
+  PovSettingInput,
+  PovSetting,
+  VolumeInput,
+  Volume,
+  VolumeRecord,
+  ChapterInput,
+  Chapter,
+  ChapterRecord,
+  ScenePovPatch,
+} from './entities/lightNovel'
+export type { PovType } from './entities/lightNovel'
 export {
   READING_DIRECTIONS,
   BUBBLE_KINDS,

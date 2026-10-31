@@ -97,6 +97,14 @@ export type {
   ExperimentRunSummary as ExperimentRunSummaryType,
 } from '@mirai/shared'
 
+// light novel pro (§9 slice 3)
+export { LightNovelService } from './lightNovel/lightNovelService'
+export type {
+  VolumeRecord as VolumeRecordType,
+  ChapterRecord as ChapterRecordType,
+  PovSetting as PovSettingType,
+} from '@mirai/shared'
+
 // plugins (Phase 9)
 export { PluginRegistry, EXAMPLE_MANIFESTS } from './plugins/pluginRegistry'
 

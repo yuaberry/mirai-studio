@@ -241,7 +241,7 @@ export class ExperimentService {
     variationId: EntityId
     targetEntityType: SourceEntityType
     targetEntityId: EntityId
-    targetColumn: 'frame_asset_id' | 'audio_asset_id' | 'video_asset_id' | 'blend_asset_id' | 'image_asset_id'
+    targetColumn: 'frame_asset_id' | 'audio_asset_id' | 'video_asset_id' | 'blend_asset_id' | 'image_asset_id' | 'cover_asset_id'
   }): ExperimentPromotionRecord {
     const variation = this.requireVariation(input.variationId)
     if (!variation.assetId) {
@@ -259,9 +259,33 @@ export class ExperimentService {
       this.db
         .prepare(`UPDATE shots SET ${input.targetColumn} = ?, updated_at = ? WHERE id = ?`)
         .run(variation.assetId, new Date().toISOString(), input.targetEntityId)
+    } else if (input.targetEntityType === 'SCENE') {
+      const row = this.db
+        .prepare(`SELECT ${input.targetColumn} AS asset_id FROM scenes WHERE id = ?`)
+        .get(input.targetEntityId) as { asset_id: EntityId | null } | undefined
+      if (!row) throw new MiraiError('NOT_FOUND', `Scene ${input.targetEntityId} not found.`)
+      previousAssetId = row.asset_id ?? null
+      this.db
+        .prepare(`UPDATE scenes SET ${input.targetColumn} = ?, updated_at = ? WHERE id = ?`)
+        .run(variation.assetId, new Date().toISOString(), input.targetEntityId)
     } else if (input.targetEntityType === 'PANEL') {
-      this.manga.updatePanel(input.targetEntityId, { imageAssetId: variation.assetId })
-      previousAssetId = variation.assetId // best effort; panel previous not tracked here
+      const row = this.db
+        .prepare(`SELECT image_asset_id AS asset_id FROM manga_panels WHERE id = ?`)
+        .get(input.targetEntityId) as { asset_id: EntityId | null } | undefined
+      if (!row) throw new MiraiError('NOT_FOUND', `Panel ${input.targetEntityId} not found.`)
+      previousAssetId = row.asset_id ?? null
+      this.db
+        .prepare(`UPDATE manga_panels SET image_asset_id = ?, updated_at = ? WHERE id = ?`)
+        .run(variation.assetId, new Date().toISOString(), input.targetEntityId)
+    } else if (input.targetEntityType === 'PAGE') {
+      const row = this.db
+        .prepare(`SELECT cover_asset_id AS asset_id FROM manga_pages WHERE id = ?`)
+        .get(input.targetEntityId) as { asset_id: EntityId | null } | undefined
+      if (!row) throw new MiraiError('NOT_FOUND', `Page ${input.targetEntityId} not found.`)
+      previousAssetId = row.asset_id ?? null
+      this.db
+        .prepare(`UPDATE manga_pages SET cover_asset_id = ?, updated_at = ? WHERE id = ?`)
+        .run(variation.assetId, new Date().toISOString(), input.targetEntityId)
     } else {
       throw new MiraiError('VALIDATION_ERROR', `Promotion to ${input.targetEntityType} not yet supported.`)
     }
@@ -414,7 +438,7 @@ function rowToPromotion(row: ExperimentPromotionRow): ExperimentPromotionRecord 
     variationId: row.variation_id,
     targetEntityType: row.target_entity_type as SourceEntityType,
     targetEntityId: row.target_entity_id,
-    targetColumn: row.target_column as 'frame_asset_id' | 'audio_asset_id' | 'video_asset_id' | 'blend_asset_id' | 'image_asset_id',
+    targetColumn: row.target_column as 'frame_asset_id' | 'audio_asset_id' | 'video_asset_id' | 'blend_asset_id' | 'image_asset_id' | 'cover_asset_id',
     previousAssetId: row.previous_asset_id,
     promotedAt: row.promoted_at,
   }
