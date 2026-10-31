@@ -76,6 +76,10 @@ export { SubtitleService } from './subtitles/subtitleService'
 export { AudioMixService } from './audio/audioMixService'
 export type { AudioMaster, AudioMixTrack, AudioMixResult } from '@mirai/shared'
 
+// IP graph (§4) — real entity impact + derived works
+export { ImpactService } from './production/impactService'
+export type { ImpactResult, ImpactEntry } from '@mirai/shared'
+
 // asset intelligence (§14)
 export { AssetIntelligenceService } from './asset/assetIntelligenceService'
 export type {

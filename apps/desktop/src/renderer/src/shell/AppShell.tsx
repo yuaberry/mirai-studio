@@ -30,6 +30,7 @@ import {
   Settings,
   Sparkles,
   Users,
+  Network,
   Wand2,
 } from 'lucide-react'
 import { isProjectView, PROJECT_VIEWS, useAppStore, type MainView, type ProjectView } from '../store/appStore'
@@ -65,6 +66,7 @@ import { RenderPage } from '../modules/render/RenderPage'
 import { ProductionPage } from '../modules/production/ProductionPage'
 import { SubtitlesPage } from '../modules/subtitles/SubtitlesPage'
 import { LocalizationPage } from '../modules/localization/LocalizationPage'
+import { ImpactPage } from '../modules/ip/ImpactPage'
 import { WorkflowsPage } from '../modules/workflows/WorkflowsPage'
 import { PluginsPage } from '../modules/plugins/PluginsPage'
 import { ProducerPage } from '../modules/producer/ProducerPage'
@@ -110,6 +112,7 @@ const PRODUCTION_NAV: ReadonlyArray<NavEntry> = [
   { view: 'render', label: 'Render & Export', icon: FileVideo },
   { view: 'production', label: 'Production', icon: BarChart3 },
   { view: 'localization', label: 'Localization', icon: Languages },
+  { view: 'ip', label: 'IP Impact', icon: Network },
   { view: 'jobs', label: 'Jobs', icon: Play },
   { view: 'backups', label: 'Backups', icon: HardDriveDownload },
 ]
@@ -336,7 +339,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                V1 Beta Experimental 6
+                V1 Beta Experimental 7
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio/releases"
@@ -368,6 +371,7 @@ export function AppShell() {
           {view === 'production' && <ProductionPage />}
           {view === 'subtitles' && <SubtitlesPage />}
           {view === 'localization' && <LocalizationPage />}
+          {view === 'ip' && <ImpactPage />}
           {view === 'workflows' && <WorkflowsPage />}
           {view === 'producer' && <ProducerPage />}
           {view === 'plugins' && <PluginsPage />}
