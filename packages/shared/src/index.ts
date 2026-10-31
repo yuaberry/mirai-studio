@@ -397,6 +397,26 @@ export {
 } from './entities/shortcuts'
 export type { ShortcutAction } from './entities/shortcuts'
 
+export {
+  // Asset Intelligence (§14)
+  zAssetUsageRecord,
+  zAssetDependent,
+  zAssetDependency,
+  zAssetIntelligenceSummary,
+  zAssetGraph,
+  zAssetGraphNode,
+  zAssetGraphEdge,
+} from './entities/assetIntelligence'
+export type {
+  AssetUsageRecord,
+  AssetDependent,
+  AssetDependency,
+  AssetIntelligenceSummary,
+  AssetGraph,
+  AssetGraphNode,
+  AssetGraphEdge,
+} from './entities/assetIntelligence'
+
 export { BUILTIN_JOB_TYPES, JobRecord, jobIsActive } from './entities/job'
 export type { BuiltinJobType } from './entities/job'
 

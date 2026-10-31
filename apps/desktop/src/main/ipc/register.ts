@@ -346,6 +346,27 @@ export function registerIpcHandlers(c: Container): void {
     c.logger.info('RENDER', `Auto-boarded episode ${req.episodeId}: ${result.pages} pages, ${result.panels} panels`)
     return result
   })
+  // ---------------------------------------------------------------- Asset Intelligence (§14)
+  handleIpc('assets:usageHistory', (req) => {
+    const history = requireActive(c).assetIntelligence.usageHistory(req.assetId)
+    return { history }
+  })
+  handleIpc('assets:dependents', (req) => {
+    const dependents = requireActive(c).assetIntelligence.dependents(req.assetId)
+    return { dependents }
+  })
+  handleIpc('assets:dependencies', (req) => {
+    const dependencies = requireActive(c).assetIntelligence.dependencies(req.assetId)
+    return { dependencies }
+  })
+  handleIpc('assets:graph', () => {
+    const graph = requireActive(c).assetIntelligence.graph()
+    return { graph }
+  })
+  handleIpc('assets:intelligence', (req) => {
+    const summary = requireActive(c).assetIntelligence.summary(req.assetId)
+    return { summary }
+  })
   // -------------------------------------------- character reference sheets (v0.31)
   handleIpc('character:attachReference', async (req) => {
     const ctx = requireActive(c)

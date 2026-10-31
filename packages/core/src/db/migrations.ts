@@ -683,4 +683,33 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0022_asset_intelligence',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE asset_usage_history (
+          id TEXT PRIMARY KEY,
+          asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+          context_kind TEXT NOT NULL,           -- 'SHOT' | 'SCENE' | 'PAGE' | 'PANEL' | 'MOODBOARD' | 'CHARACTER' | 'ANIMATION' | 'MEDIA'
+          context_id TEXT NOT NULL,             -- id do shot, scene, page, etc.
+          context_role TEXT,                    -- 'frame' | 'audio' | 'video' | 'blend' | 'image_asset' | 'reference' | 'cover' | 'role' ...
+          used_at TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_asset_usage_asset ON asset_usage_history (asset_id);
+        CREATE INDEX idx_asset_usage_context ON asset_usage_history (context_kind, context_id);
+
+        CREATE TABLE asset_dependency_graph (
+          id TEXT PRIMARY KEY,
+          source_asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+          target_asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+          relation TEXT NOT NULL,               -- 'cleanup_of' | 'color_of' | 'composite_of' | 'keyframe_for' | 'version_of' | 'reference_for'
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_asset_dep_source ON asset_dependency_graph (source_asset_id);
+        CREATE INDEX idx_asset_dep_target ON asset_dependency_graph (target_asset_id);
+        CREATE UNIQUE INDEX idx_asset_dep_unique ON asset_dependency_graph (source_asset_id, target_asset_id, relation);
+      `)
+    },
+  },
 ]

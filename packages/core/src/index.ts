@@ -76,6 +76,18 @@ export { SubtitleService } from './subtitles/subtitleService'
 export { AudioMixService } from './audio/audioMixService'
 export type { AudioMaster, AudioMixTrack, AudioMixResult } from '@mirai/shared'
 
+// asset intelligence (§14)
+export { AssetIntelligenceService } from './asset/assetIntelligenceService'
+export type {
+  AssetUsageRecord,
+  AssetDependent,
+  AssetDependency,
+  AssetIntelligenceSummary,
+  AssetGraph,
+  AssetGraphNode,
+  AssetGraphEdge,
+} from '@mirai/shared'
+
 // plugins (Phase 9)
 export { PluginRegistry, EXAMPLE_MANIFESTS } from './plugins/pluginRegistry'
 

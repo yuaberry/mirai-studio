@@ -33,6 +33,13 @@ import {
   BUBBLE_TAILS,
 } from '../entities/manga'
 import {
+  zAssetUsageRecord,
+  zAssetDependent,
+  zAssetDependency,
+  zAssetIntelligenceSummary,
+  zAssetGraph,
+} from '../entities/assetIntelligence'
+import {
   CreateDerivedWorkInput,
   DerivedWorkView,
   IMPACT_KINDS,
@@ -542,6 +549,27 @@ export const ipcContracts = {
       pages: z.number().int().min(0),
       panels: z.number().int().min(0),
     }),
+  },
+  /** V1 Beta Experimental §14: Asset Intelligence — usage history + dependency graph. */
+  'assets:usageHistory': {
+    request: z.object({ assetId: zEntityId }),
+    response: z.object({ history: z.array(zAssetUsageRecord) }),
+  },
+  'assets:dependents': {
+    request: z.object({ assetId: zEntityId }),
+    response: z.object({ dependents: z.array(zAssetDependent) }),
+  },
+  'assets:dependencies': {
+    request: z.object({ assetId: zEntityId }),
+    response: z.object({ dependencies: z.array(zAssetDependency) }),
+  },
+  'assets:graph': {
+    request: z.object({}),
+    response: z.object({ graph: zAssetGraph }),
+  },
+  'assets:intelligence': {
+    request: z.object({ assetId: zEntityId }),
+    response: z.object({ summary: zAssetIntelligenceSummary }),
   },
   /** AI letterer: draft panel lettering from the linked shot's screenplay. */
   'ai:draftPanelLettering': {

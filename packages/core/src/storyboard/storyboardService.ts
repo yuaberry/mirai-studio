@@ -536,12 +536,29 @@ export class StoryboardService {
     return this.assetAbsolutePath(id)
   }
 
-  /** Delete an asset record + file when no shot references it. */
+  /** Delete an asset record + file when nothing in the project references it. */
   pruneAssetIfOrphan(id: EntityId): void {
     const used = this.db
-      .prepare('SELECT COUNT(*) AS n FROM shots WHERE frame_asset_id = ?')
-      .get(id) as { n: number }
-    if (used.n > 0) return
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM shots WHERE frame_asset_id = ?) AS in_shots,
+           (SELECT COUNT(*) FROM media_tracks WHERE asset_id = ?) AS in_media,
+           (SELECT COUNT(*) FROM manga_panels WHERE image_asset_id = ?) AS in_panels,
+           (SELECT COUNT(*) FROM moodboard_items WHERE image_asset_id = ?) AS in_moodboard,
+           (SELECT COUNT(*) FROM animation_frames WHERE asset_id = ?) AS in_animation,
+           (SELECT COUNT(*) FROM characters WHERE reference_asset_id = ?) AS in_characters,
+           (SELECT COUNT(*) FROM audio_mix_tracks WHERE media_id = ?) AS in_mix_tracks`,
+      )
+      .get(id, id, id, id, id, id, id) as {
+        in_shots: number
+        in_media: number
+        in_panels: number
+        in_moodboard: number
+        in_animation: number
+        in_characters: number
+        in_mix_tracks: number
+      }
+    if (used.in_shots > 0 || used.in_media > 0 || used.in_panels > 0 || used.in_moodboard > 0 || used.in_animation > 0 || used.in_characters > 0 || used.in_mix_tracks > 0) return
     const row = this.db
       .prepare('SELECT relative_path FROM assets WHERE id = ?')
       .get(id) as { relative_path: string } | undefined

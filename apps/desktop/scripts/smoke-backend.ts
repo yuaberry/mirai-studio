@@ -2730,6 +2730,52 @@ async function main(): Promise<void> {
     await projects.close()
   })
 
+  await step('V38 ASSET INTELLIGENCE: usage history + dependency graph', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+
+    const assetIntel = ctx.assetIntelligence
+    if (!assetIntel) throw new Error('AssetIntelligenceService not available in project context')
+
+    // Insert a real asset first (FK requires it)
+    const assetId = 'test-asset-' + Date.now()
+    ctx.db.prepare(`INSERT INTO assets (id, kind, relative_path, original_name, mime, bytes, created_at) VALUES (?, 'IMAGE', 'images/assets/test.png', 'test.png', 'image/png', 1024, ?)`).run(assetId, new Date().toISOString())
+
+    // Record some usage
+    assetIntel.recordUsage({
+      assetId,
+      contextKind: 'SHOT',
+      contextId: 'test-shot-1',
+      contextRole: 'frame',
+    })
+    assetIntel.recordUsage({
+      assetId,
+      contextKind: 'PANEL',
+      contextId: 'test-panel-1',
+      contextRole: 'image_asset',
+    })
+
+    // Usage history should have 2 entries
+    const history = assetIntel.usageHistory(assetId)
+    if (history.length !== 2) throw new Error(`expected 2 usage records, got ${history.length}`)
+
+    // Dependents should list both contexts
+    const deps = assetIntel.dependents(assetId)
+    if (deps.length < 1) throw new Error('expected at least 1 dependent')
+
+    // Summary should be consistent
+    const intelSummary = assetIntel.summary(assetId)
+    if (intelSummary.usageCount !== 2) throw new Error(`summary usageCount should be 2, got ${intelSummary.usageCount}`)
+
+    // Graph should work
+    const graph = assetIntel.graph()
+    if (!graph.nodes || !graph.edges) throw new Error('graph should return nodes and edges')
+
+    // Clean up test data
+    assetIntel.clear()
+
+    await projects.close()
+  })
+
   await step('SETTINGS persist across restart', () => {
     const settings = new SettingsService(appDb)
     settings.update({

@@ -1527,6 +1527,47 @@ export function useMangaRevealScript() {
   })
 }
 
+// ------------------------------------------------------------ Asset Intelligence (§14)
+
+export function useAssetUsageHistory(assetId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['assets', 'usage', assetId],
+    queryFn: () => invoke('assets:usageHistory', { assetId: assetId! }).then((r) => r.history),
+    enabled: assetId !== undefined,
+  })
+}
+
+export function useAssetDependents(assetId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['assets', 'dependents', assetId],
+    queryFn: () => invoke('assets:dependents', { assetId: assetId! }).then((r) => r.dependents),
+    enabled: assetId !== undefined,
+  })
+}
+
+export function useAssetDependencies(assetId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['assets', 'dependencies', assetId],
+    queryFn: () => invoke('assets:dependencies', { assetId: assetId! }).then((r) => r.dependencies),
+    enabled: assetId !== undefined,
+  })
+}
+
+export function useAssetGraph() {
+  return useQuery({
+    queryKey: ['assets', 'graph'],
+    queryFn: () => invoke('assets:graph', {}).then((r) => r.graph),
+  })
+}
+
+export function useAssetIntelligence(assetId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['assets', 'intelligence', assetId],
+    queryFn: () => invoke('assets:intelligence', { assetId: assetId! }).then((r) => r.summary),
+    enabled: assetId !== undefined,
+  })
+}
+
 export function useMoodboard() {
   return useQuery({
     queryKey: ['moodboard'],
