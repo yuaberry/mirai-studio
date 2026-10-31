@@ -66,6 +66,11 @@ import {
   GlossaryTerm,
   GlossaryTermInput,
   zLanguageTag,
+  zTranslationStatus,
+  zTranslationTransition,
+  TranslationTransitionResult,
+  zTranslationAuditEntry,
+  TranslationMatrix,
 } from '../entities/localization'
 
 import {
@@ -468,6 +473,35 @@ export const ipcContracts = {
   'loc:revealEpub': {
     request: z.object({ language: zLanguageTag }),
     response: z.object({ ok: z.boolean() }),
+  },
+  /** V1 Beta Experimental 5: governed translation status transition with audit log. */
+  'loc:transitions:validate': {
+    request: z.object({ fromStatus: zTranslationStatus, toStatus: zTranslationStatus }),
+    response: z.object({ ok: z.boolean(), reason: z.string().optional() }),
+  },
+  'loc:transitions:run': {
+    request: zTranslationTransition,
+    response: TranslationTransitionResult,
+  },
+  /** Immutable audit trail: every status change, newest first. */
+  'loc:translations:audit': {
+    request: z.object({ sceneId: zEntityId, language: zLanguageTag.optional() }),
+    response: z.object({ audit: z.array(zTranslationAuditEntry) }),
+  },
+  /** Scenes × languages coverage matrix with staleness flags. */
+  'loc:coverage:matrix': {
+    request: z.object({ episodeId: zEntityId }),
+    response: z.object({ matrix: TranslationMatrix }),
+  },
+  /** Pre-flight check: can we export EPUB for this language? Warns on DRAFT/STALE. */
+  'loc:epub:validate': {
+    request: z.object({ language: zLanguageTag }),
+    response: z.object({
+      ok: z.boolean(),
+      warnings: z.array(z.string()),
+      draftCount: z.number().int().min(0),
+      staleCount: z.number().int().min(0),
+    }),
   },
 
   // ------------------------------------------------- Visual Dev Lab poster studio (§7)

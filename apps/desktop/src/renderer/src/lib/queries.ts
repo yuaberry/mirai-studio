@@ -1830,6 +1830,55 @@ export function useTranslatedEpubReveal() {
   })
 }
 
+// --------------------------------------------------- Localization workflow (§18 v5)
+
+export function useTranslationTransition() {
+  return useMutation({
+    mutationFn: (vars: {
+      sceneId: string
+      language: string
+      fromStatus: import('@mirai/shared').TranslationStatus
+      toStatus: import('@mirai/shared').TranslationStatus
+      changedBy?: string
+      comment?: string
+    }) =>
+      invoke('loc:transitions:run', vars).then((r) => r as import('@mirai/shared').TranslationTransitionResult),
+  })
+}
+
+export function useTranslationAudit(sceneId: string | null | undefined, language: string | null | undefined) {
+  return useQuery({
+    queryKey: ['loc', 'audit', sceneId, language],
+    queryFn: () =>
+      invoke('loc:translations:audit', { sceneId: sceneId!, language: language! }).then(
+        (r) => r.audit as import('@mirai/shared').TranslationAuditEntry[],
+      ),
+    enabled: sceneId !== undefined && language !== undefined,
+  })
+}
+
+export function useTranslationMatrix(episodeId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['loc', 'matrix', episodeId],
+    queryFn: () =>
+      invoke('loc:coverage:matrix', { episodeId: episodeId! }).then(
+        (r) => r.matrix as import('@mirai/shared').TranslationMatrix,
+      ),
+    enabled: episodeId !== undefined,
+  })
+}
+
+export function useEpubValidation(language: string | null | undefined) {
+  return useQuery({
+    queryKey: ['loc', 'epub', 'validate', language],
+    queryFn: () =>
+      invoke('loc:epub:validate', { language: language! }).then(
+        (r) => r as { ok: boolean; warnings: string[]; draftCount: number; staleCount: number },
+      ),
+    enabled: language !== undefined,
+  })
+}
+
 export function useAttachReference() {
   return useMutation({
     mutationFn: (characterId: string) => invoke('character:attachReference', { characterId }).then((r) => r.asset),

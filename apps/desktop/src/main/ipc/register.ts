@@ -3,7 +3,8 @@
  * every call delegates to a core service — no business logic lives here.
  */
 import { clipboard, dialog, shell } from 'electron'
-import { MiraiError, type ProjectConfig } from '@mirai/shared'
+import { createHash } from 'node:crypto'
+import { MiraiError, type ProjectConfig, validateTransition } from '@mirai/shared'
 import { handleIpc } from './router'
 import { toOpenedProject, type Container } from '../bootstrap'
 import { readdirSync } from 'node:fs'
@@ -571,6 +572,53 @@ export function registerIpcHandlers(c: Container): void {
     shell.showItemInFolder(join(dir, candidates[candidates.length - 1]!))
     return { ok: true }
   })
+  // --------------------------------------------------- Localization workflow (§18 v5)
+  handleIpc('loc:transitions:validate', (req) => {
+    const validation = validateTransition(req.fromStatus, req.toStatus)
+    return { ok: validation.ok, reason: validation.ok ? undefined : validation.reason }
+  })
+  handleIpc('loc:transitions:run', (req) => {
+    const result = requireActive(c).localization.transitionStatus(req.sceneId, req.language, {
+      fromStatus: req.fromStatus,
+      toStatus: req.toStatus,
+      changedBy: req.changedBy,
+      comment: req.comment,
+    })
+    return result
+  })
+  handleIpc('loc:translations:audit', (req) => {
+    const audit = requireActive(c).localization.auditLog(req.sceneId, req.language)
+    return { audit }
+  })
+  handleIpc('loc:coverage:matrix', (req) => {
+    const matrix = requireActive(c).localization.matrix(req.episodeId)
+    return { matrix }
+  })
+  handleIpc('loc:epub:validate', (req) => {
+    const ctx = requireActive(c)
+    const language = req.language
+    // Build warnings: count DRAFT + stale translations for this language
+    const episodes = ctx.creative.listEpisodes()
+    let draftCount = 0
+    let staleCount = 0
+    for (const ep of episodes) {
+      const scenes = ctx.creative.listScenes(ep.id)
+      for (const sc of scenes) {
+        const t = ctx.localization.getTranslation(sc.id, language)
+        if (t) {
+          if (t.status === 'DRAFT') draftCount += 1
+          // staleness: compare source hash
+          const sourceHash = createHash('sha256').update(sc.screenplay ?? sc.synopsis ?? '', 'utf8').digest('hex')
+          if (!t.sourceHash || t.sourceHash !== sourceHash) staleCount += 1
+        }
+      }
+    }
+    const warnings: string[] = []
+    if (draftCount > 0) warnings.push(`${draftCount} translation(s) still in DRAFT — review before export`)
+    if (staleCount > 0) warnings.push(`${staleCount} translation(s) are stale — source changed since last save`)
+    return { ok: draftCount === 0 && staleCount === 0, warnings, draftCount, staleCount }
+  })
+
 
   // ----------------------------------------------- Visual Dev Lab poster studio (§7)
   const posterInput = () => {

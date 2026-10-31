@@ -761,4 +761,33 @@ export const PROJECT_DB_MIGRATIONS: Migration[] = [
       `)
     },
   },
+  {
+    name: '0024_localization_workflow',
+    up: (db) => {
+      db.exec(`
+        -- Workflow fields on scene_translations (review chain + stale detection)
+        ALTER TABLE scene_translations ADD COLUMN reviewed_by TEXT REFERENCES characters(id) ON DELETE SET NULL;
+        ALTER TABLE scene_translations ADD COLUMN reviewed_at TEXT;
+        ALTER TABLE scene_translations ADD COLUMN approved_by TEXT REFERENCES characters(id) ON DELETE SET NULL;
+        ALTER TABLE scene_translations ADD COLUMN approved_at TEXT;
+        ALTER TABLE scene_translations ADD COLUMN reviewer_comment TEXT;
+        ALTER TABLE scene_translations ADD COLUMN source_hash TEXT;       -- SHA-256 of the source screenplay at translation time
+        ALTER TABLE scene_translations ADD COLUMN source_version INTEGER NOT NULL DEFAULT 1;
+
+        -- Audit log: every status change is recorded for traceability
+        CREATE TABLE translation_audit_log (
+          id TEXT PRIMARY KEY,
+          scene_id TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+          language TEXT NOT NULL,
+          old_status TEXT,
+          new_status TEXT NOT NULL,
+          changed_by TEXT REFERENCES characters(id) ON DELETE SET NULL,
+          changed_at TEXT NOT NULL,
+          comment TEXT
+        );
+        CREATE INDEX idx_translation_audit_scene ON translation_audit_log (scene_id, language);
+        CREATE INDEX idx_translation_audit_changed ON translation_audit_log (changed_at DESC);
+      `)
+    },
+  },
 ]

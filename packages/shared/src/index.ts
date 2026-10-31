@@ -142,16 +142,30 @@ export { MoodboardItemInput, MoodboardItem, MOODBOARD_COLOR_RE } from './entitie
 export { PosterState, TaglineDraft } from './entities/moodboard'
 export {
   TRANSLATION_STATUSES,
+  TRANSITION_MAP,
   TranslationUpsertInput,
   SceneTranslation,
   LanguageCoverage,
   GlossaryTermInput,
   GlossaryTerm,
   SceneTranslationDraft,
+  validateTransition,
+  zTranslationTransition,
+  TranslationTransitionResult,
+  TranslationAuditEntry,
+  zTranslationAuditEntry,
+  TranslationMatrixEntry,
+  TranslationMatrix,
   zLanguageTag,
   zTranslationStatus,
 } from './entities/localization'
-export type { TranslationStatus } from './entities/localization'
+export type {
+  TranslationStatus,
+  TranslationTransition,
+  TranslationAuditEntry as TranslationAuditEntryType,
+  TranslationMatrixEntry as TranslationMatrixEntryType,
+  TranslationMatrix as TranslationMatrixType,
+} from './entities/localization'
 export type { DerivedWorkKind, ImpactKind, ImpactEntry as ImpactEntryType } from './entities/ip'
 export type { ReadingDirection, BubbleKind, BubbleTail } from './entities/manga'
 
