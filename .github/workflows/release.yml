@@ -21,7 +21,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run rebuild:native
       - run: node apps/desktop/scripts/fetch-ffmpeg.mjs --platform linux
-      - run: cd apps/desktop && bunx electron-vite build && bunx electron-builder --linux deb AppImage rpm
+      - run: cd apps/desktop && bunx electron-vite build && bunx electron-builder --linux deb AppImage
       - uses: actions/upload-artifact@v4
         with:
           name: linux
