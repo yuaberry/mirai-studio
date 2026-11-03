@@ -247,6 +247,37 @@ export class ProjectService {
         // scene cast links reference scenes that do not exist in the child — skip.
       }
       if (flags.locations) copied += copyTable('locations')
+
+      // ── episodes / scenes / shots ──────────────────────────────────
+      if (flags.episodes) copied += copyTable('episodes')
+      if (flags.scenes) {
+        copied += copyTable('scenes')
+        copied += copyTable('scene_characters')
+      }
+      if (flags.shots) copied += copyTable('shots')
+
+      // ── manga pages / panels ───────────────────────────────────────
+      if (flags.manga) {
+        copied += copyTable('manga_pages')
+        copied += copyTable('manga_panels')
+      }
+
+      // ── timeline ───────────────────────────────────────────────────
+      if (flags.timeline) {
+        copied += copyTable('timeline_tracks')
+        copied += copyTable('timeline_clips')
+        copied += copyTable('timeline_markers')
+      }
+
+      // ── media ──────────────────────────────────────────────────────
+      if (flags.media) {
+        copied += copyTable('media_tracks')
+        copied += copyTable('scene_media')
+      }
+
+      // ── assets ─────────────────────────────────────────────────────
+      if (flags.assets) copied += copyTable('assets')
+
       if (copied > 0) {
         this.opts.logger.info('PROJECT', `Canon inherited: ${copied} rows`)
       }

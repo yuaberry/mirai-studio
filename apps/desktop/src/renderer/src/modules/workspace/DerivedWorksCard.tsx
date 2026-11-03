@@ -34,6 +34,13 @@ export function DerivedWorksCard({ project }: { project: ProjectSummary }) {
     styleBible: true,
     characters: true,
     locations: false,
+    episodes: false,
+    scenes: false,
+    shots: false,
+    manga: false,
+    timeline: false,
+    media: false,
+    assets: false,
   })
 
   const create = () => {
@@ -156,12 +163,19 @@ export function DerivedWorksCard({ project }: { project: ProjectSummary }) {
                   ['styleBible', 'Style Bible'],
                   ['characters', 'Characters'],
                   ['locations', 'Locations'],
+                  ['episodes', 'Episodes'],
+                  ['scenes', 'Scenes'],
+                  ['shots', 'Shots'],
+                  ['manga', 'Manga'],
+                  ['timeline', 'Timeline'],
+                  ['media', 'Media'],
+                  ['assets', 'Assets'],
                 ] as const
               ).map(([flag, label]) => (
                 <button
                   key={flag}
                   onClick={() => setInherit((f) => ({ ...f, [flag]: !f[flag] }))}
-                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
                     inherit[flag]
                       ? 'border-mirai-accent/40 bg-mirai-accent/15 text-mirai-accent'
                       : 'border-mirai-border-strong bg-mirai-panel text-mirai-faint hover:text-mirai-dim'

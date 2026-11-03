@@ -25,6 +25,13 @@ export const InheritFlags = z.object({
   styleBible: z.boolean().default(true),
   characters: z.boolean().default(true),
   locations: z.boolean().default(false),
+  episodes: z.boolean().default(false),
+  scenes: z.boolean().default(false),
+  shots: z.boolean().default(false),
+  manga: z.boolean().default(false),
+  timeline: z.boolean().default(false),
+  media: z.boolean().default(false),
+  assets: z.boolean().default(false),
 })
 export type InheritFlags = z.input<typeof InheritFlags>
 
