@@ -961,6 +961,7 @@ export function registerIpcHandlers(c: Container): void {
   // ---- Scene & episode renders (Phase 6) -------------------------------------
   handleIpc('render:scene', async (req) => {
     const ctx = requireActive(c)
+    const contentRating = ctx.manifest.config.contentRating
     ctx.jobs.register('render.scene', async (job, jobCtx) => {
       const payload = (job.payload ?? {}) as {
         sceneId?: string
@@ -979,6 +980,7 @@ export function registerIpcHandlers(c: Container): void {
           quality: payload.quality ?? 'MASTER',
           reportProgress: jobCtx.reportProgress,
           signal: controller.signal,
+          contentRating,
         })
         c.logger.info('RENDER', `Scene rendered: ${result.outputPath}`, { bytes: result.fileBytes })
         return result
@@ -996,6 +998,7 @@ export function registerIpcHandlers(c: Container): void {
 
   handleIpc('render:episode', async (req) => {
     const ctx = requireActive(c)
+    const contentRating = ctx.manifest.config.contentRating
     ctx.jobs.register('render.episode', async (job, jobCtx) => {
       const payload = (job.payload ?? {}) as {
         episodeId?: string
@@ -1014,6 +1017,7 @@ export function registerIpcHandlers(c: Container): void {
           quality: payload.quality ?? 'MASTER',
           reportProgress: jobCtx.reportProgress,
           signal: controller.signal,
+          contentRating,
         })
         c.logger.info('RENDER', `Episode rendered: ${result.outputPath}`, { bytes: result.fileBytes })
         return result

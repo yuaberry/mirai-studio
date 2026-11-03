@@ -39,6 +39,8 @@ export interface SceneRenderOptions {
   quality: RenderQuality
   reportProgress: (pct: number) => void
   signal: { readonly aborted: boolean }
+  /** Content rating — when '18+', an age disclaimer is burned into the video. */
+  contentRating?: string
 }
 
 export interface EpisodeRenderOptions extends Omit<SceneRenderOptions, 'sceneId'> {
@@ -293,7 +295,7 @@ export class RenderService {
       }
     }
 
-    const spec = buildSceneRenderSpec(bundle, camera, automation, { preset, quality, subtitlePath })
+    const spec = buildSceneRenderSpec(bundle, camera, automation, { preset, quality, subtitlePath, ageDisclaimer: options.contentRating === '18+' ? '18+' : undefined })
     const args = spec.args.map((a) => this.resolveAssetArg(a, bundle))
 
     const exportsDir = this.ensureExportsDir()
@@ -372,6 +374,7 @@ export class RenderService {
           join(partsDir, `part${String(i).padStart(4, '0')}.mp4`),
           (pct) => reportProgress(Math.round(base + (pct / 100) * perScene)),
           signal,
+          options.contentRating,
         )
         partPaths.push(part)
       }
@@ -431,6 +434,7 @@ export class RenderService {
     partPath: string,
     reportProgress: (pct: number) => void,
     signal: { readonly aborted: boolean },
+    contentRating?: string,
   ): Promise<string> {
     const bundle = this.timeline.getTimeline(sceneId)
     const preset = exportPresetById(presetId)
@@ -453,7 +457,7 @@ export class RenderService {
         automation.set(key, arr)
       }
     }
-    const spec = buildSceneRenderSpec(bundle, camera, automation, { preset, quality })
+    const spec = buildSceneRenderSpec(bundle, camera, automation, { preset, quality, ageDisclaimer: contentRating === '18+' ? '18+' : undefined })
     const args = spec.args.map((a) => this.resolveAssetArg(a, bundle))
     await this.runFFmpeg([...args, partPath], spec.totalSec, 0, 100, reportProgress, signal, 'Scene part')
     return partPath

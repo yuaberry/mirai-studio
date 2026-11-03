@@ -42,6 +42,8 @@ export interface BuilderOptions {
   quality: RenderQuality
   /** Absolute path of a burned-in .srt file (optional). */
   subtitlePath?: string
+  /** Age disclaimer text burned over the video (e.g. "18+"). Optional. */
+  ageDisclaimer?: string
 }
 
 /** Camera curves per shot, pre-fetched by the caller. */
@@ -448,6 +450,14 @@ export function buildSceneRenderSpec(
       .join('\\:')
     filterParts.push(`[${videoLabel}]subtitles='${escaped}'[vsubbed]`)
     videoLabel = 'vsubbed'
+  }
+
+  // Age disclaimer burn-in: draws an 18+ warning over the composited video
+  // for mature productions. Placed last so it is always on top.
+  if (opts.ageDisclaimer) {
+    const text = opts.ageDisclaimer.replace(/'/g, "\\'")
+    filterParts.push(`[${videoLabel}]drawtext=text='${text}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=h-text_h-80:box=1:boxcolor=black@0.7:boxborderw=10[vaged]`)
+    videoLabel = 'vaged'
   }
   if (!audioLabel) {
     args.push('-f', 'lavfi', '-t', String(round3(total)), '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000')
