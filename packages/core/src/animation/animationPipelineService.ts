@@ -198,6 +198,43 @@ export class AnimationPipelineService {
     } as FrameRow)
   }
 
+  /** Registra múltiplos keyframes em lote (single transaction). */
+  batchRegisterKeyframes(
+    sceneId: EntityId,
+    keyframes: Array<{ atSec: number; assetId: EntityId }>,
+  ): AnimationFrameType[] {
+    const now = this.clock.isoNow()
+    const results: AnimationFrameType[] = []
+    const tx = this.db.transaction(() => {
+      for (const { atSec, assetId } of keyframes) {
+        const id = newEntityId()
+        this.db
+          .prepare(
+            `INSERT INTO animation_frames
+              (id, scene_id, at_sec, stage, asset_id, source_keyframe_id,
+               inbetween_spec, created_at)
+             VALUES (?, ?, ?, 'KEYFRAME', ?, NULL, NULL, ?)`,
+          )
+          .run(id, sceneId, atSec, assetId, now)
+        results.push(
+          this.rowToFrame({
+            id,
+            scene_id: sceneId,
+            at_sec: atSec,
+            stage: 'KEYFRAME',
+            asset_id: assetId,
+            source_keyframe_id: null,
+            inbetween_spec: null,
+            created_at: now,
+          } as FrameRow),
+        )
+      }
+      this.incrementStageCount(sceneId, 'KEYFRAME', keyframes.length)
+    })
+    tx()
+    return results
+  }
+
   /** Gera quadros intermediários (DOUGA) entre dois keyframes por interpolação. */
   generateInbetweens(
     sceneId: EntityId,
@@ -265,6 +302,78 @@ export class AnimationPipelineService {
       )
     }
     this.incrementStageCount(sceneId, 'INBETWEEN', count)
+    return results
+  }
+
+  /** Gera quadros intermediários para múltiplos pares de keyframes em lote
+   * (single transaction). Cada par especifica origem, destino e quantidade. */
+  batchGenerateInbetweens(
+    sceneId: EntityId,
+    pairs: Array<{ fromKeyframeId: EntityId; toKeyframeId: EntityId; count: number }>,
+  ): AnimationFrameType[] {
+    const pipeline = this.getOrCreatePipeline(sceneId)
+    const easing = pipeline.inbetweenEasing
+    const results: AnimationFrameType[] = []
+    const now = this.clock.isoNow()
+    const tx = this.db.transaction(() => {
+      for (const { fromKeyframeId, toKeyframeId, count } of pairs) {
+        const from = this.getFrame(fromKeyframeId)
+        const to = this.getFrame(toKeyframeId)
+        if (from.stage !== 'KEYFRAME' || to.stage !== 'KEYFRAME') {
+          throw new MiraiError(
+            'VALIDATION_ERROR',
+            `In-between requer dois keyframes (GENGA) como origem e destino.`,
+          )
+        }
+        if (from.at_sec >= to.at_sec) {
+          throw new MiraiError(
+            'VALIDATION_ERROR',
+            `O keyframe de destino deve ocorrer depois da origem (${fromKeyframeId} → ${toKeyframeId}).`,
+          )
+        }
+        for (let i = 1; i <= count; i++) {
+          const t = i / (count + 1)
+          const interpolatedCamera = this.interpolateCamera(from, to, t, easing)
+          const atSec = from.at_sec + (to.at_sec - from.at_sec) * t
+          const id = newEntityId()
+          const placeholderAssetId = this.createPlaceholderAsset(sceneId, id)
+          this.db
+            .prepare(
+              `INSERT INTO animation_frames
+                (id, scene_id, at_sec, stage, asset_id, source_keyframe_id,
+                 inbetween_spec, created_at)
+               VALUES (?, ?, ?, 'INBETWEEN', ?, ?, ?, ?)`,
+            )
+            .run(
+              id,
+              sceneId,
+              atSec,
+              placeholderAssetId,
+              fromKeyframeId,
+              JSON.stringify({ fromKeyframeId, toKeyframeId, t, interpolatedCamera }),
+              now,
+            )
+          results.push(
+            this.rowToFrame({
+              id,
+              scene_id: sceneId,
+              at_sec: atSec,
+              stage: 'INBETWEEN',
+              asset_id: placeholderAssetId,
+              source_keyframe_id: fromKeyframeId,
+              inbetween_spec: JSON.stringify({
+                fromKeyframeId,
+                toKeyframeId,
+                t,
+                interpolatedCamera,
+              }),
+            } as unknown as FrameRow),
+          )
+        }
+        this.incrementStageCount(sceneId, 'INBETWEEN', count)
+      }
+    })
+    tx()
     return results
   }
 
