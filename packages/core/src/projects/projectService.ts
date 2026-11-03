@@ -59,6 +59,7 @@ import { ExperimentService } from '../experiments/experimentService'
 import { LightNovelService } from '../lightNovel/lightNovelService'
 import { newEntityId, type AppDirs, type Clock } from '../types'
 import type { LoggerService } from '../logger/logger'
+import type { SettingsService } from '../settings/settingsService'
 import { readManifest, writeManifest } from './manifest'
 
 const PROJECT_DB_FILE = join('database', 'project.sqlite')
@@ -72,6 +73,8 @@ export interface ProjectServiceOptions {
   logger: LoggerService
   /** Pushed on every job mutation of the active project. */
   onJobUpdated: (job: JobRecord) => void
+  /** App-level settings (for blender binary path / render preset). */
+  settings?: SettingsService
 }
 
 /** An open project: summary + manifest + live project DB + services. */
@@ -825,7 +828,7 @@ export class ProjectService {
     const experiments = new ExperimentService(db, storyboard, manga)
     const lightNovel = new LightNovelService(db)
     const render = new RenderService(storyboard, media, path, creative, timeline, subtitles)
-    const blender = new BlenderBridge(storyboard, path)
+    const blender = new BlenderBridge(storyboard, path, this.opts.settings?.get().blender.binaryPath ?? undefined, this.opts.settings?.get().blender.preset)
 
     const now = this.opts.clock.isoNow()
     this.upsertRegistry(manifest, path, now)

@@ -26,6 +26,8 @@ export class BlenderBridge {
     private readonly projectRoot: string,
     /** Optional override for tests/machines where `blender` isn't on PATH. */
     private readonly binaryPath?: string,
+    /** Render preset: fast / balanced / quality. */
+    private readonly preset: 'fast' | 'balanced' | 'quality' = 'balanced',
   ) {}
 
   /** Detects a Blender ≥ 3.x binary (sync, one-shot). */
@@ -87,6 +89,7 @@ export class BlenderBridge {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
     const outPath = join(outDir, `shot-${shot.id.slice(-8)}-${stamp}.mp4`)
     const frames = Math.max(1, Math.round(seconds * 24))
+    const fps = this.preset === 'fast' ? 15 : this.preset === 'quality' ? 30 : 24
     const args = [
       '-b', blendPath,
       '-o', outPath.replace(/\.mp4$/, ''),
@@ -94,7 +97,7 @@ export class BlenderBridge {
       '-e', String(frames),
       '-a',
       '-F', 'FFMPEG',
-      '-f', '24',
+      '-f', String(fps),
     ]
     reportProgress(10)
     await new Promise<void>((resolve, reject) => {

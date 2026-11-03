@@ -106,6 +106,15 @@ export const AppSettings = z.object({
     .default({}),
   /** User shortcut overrides: actionId → combo (missing = default). */
   shortcuts: z.record(z.string(), z.string()).default({}),
+  /** Blender bridge: custom binary path and render preset. */
+  blender: z
+    .object({
+      /** Custom path to the Blender binary when it is not on PATH. */
+      binaryPath: z.string().nullable().default(null),
+      /** Render preset: fast (lower quality, quicker), balanced (default), quality (higher quality, slower). */
+      preset: z.enum(['fast', 'balanced', 'quality']).default('balanced'),
+    })
+    .default({}),
   /** Content & licensing (Pro): mature mode gating lives here. */
   content: z
     .object({

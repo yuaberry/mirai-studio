@@ -112,6 +112,7 @@ export function bootstrap(): Container {
     appVersion: app.getVersion(),
     logger,
     onJobUpdated: (job) => emitter.send('jobs:updated', { job }),
+    settings,
   })
   const aiUsage = new AiUsageService(appDb)
   const visualConsistency = new VisualConsistencyService(appDb, systemClock, dirs.root)
