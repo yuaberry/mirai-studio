@@ -132,6 +132,8 @@ export const AppSettings = z.object({
       lastViewByProject: z.record(z.string(), z.string()).default({}),
       /** Last opened project path — quietly reopened on launch. */
       lastProjectPath: z.string().nullable().default(null),
+      /** Onboarding tour completed — hides the welcome tour after first run. */
+      onboardingCompleted: z.boolean().default(false),
     })
     .default({}),
 })

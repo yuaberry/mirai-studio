@@ -1,6 +1,6 @@
 {
   "name": "@mirai/ai",
-  "version": "1.0.0-beta.8",
+  "version": "1.0.0-beta.9",
   "private": true,
   "description": "Mirai Studio \u2014 AI core: provider layer (OpenRouter), model registry, context builder.",
   "exports": {

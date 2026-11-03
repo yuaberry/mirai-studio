@@ -2,7 +2,7 @@
  * AppShell — sidebar navigation + main viewport + status bar.
  * Global shortcuts are registered here (spec §12).
  */
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -39,6 +39,7 @@ import { invoke } from '../lib/ipc'
 import { cn } from '../lib/utils'
 import { Wordmark } from '../system/Logo'
 import { Kbd } from '../system/ui'
+import { OnboardingTour } from '../system/OnboardingTour'
 import { ProjectHub } from '../modules/hub/ProjectHub'
 import { OverviewPage } from '../modules/workspace/OverviewPage'
 import { StoryBiblePage } from '../modules/bible/StoryBiblePage'
@@ -179,6 +180,7 @@ export function AppShell() {
   const setPaletteOpen = useAppStore((s) => s.setPaletteOpen)
   const { data: current } = useCurrentProject()
   const { data: settings } = useSettings()
+  const [onboardingOpen, setOnboardingOpen] = useState(false)
   const queryClient = useQueryClient()
 
   // THEME (v0.17): data-theme swaps every CSS var (see tokens.css); the
@@ -307,6 +309,28 @@ export function AppShell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings?.session.lastProjectPath])
 
+  // ONBOARDING TOUR: show once when no project is open and the user hasn't
+  // completed the tour yet. Opens on the Hub so the user can see each module
+  // in context.
+  useEffect(() => {
+    if (!settings) return
+    const alreadyDone = settings.session.onboardingCompleted
+    if (alreadyDone || current) return
+    // Only open when we're on the hub (no project active) — avoid stealing
+    // focus from a project the user is actively working in.
+    if (view === 'hub') {
+      setOnboardingOpen(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings?.session.onboardingCompleted, current, view])
+
+  // Completing the onboarding tour persists the flag so it never shows again.
+  const completeOnboarding = () => {
+    void invoke('settings:update', {
+      settings: { session: { ...settings!.session, onboardingCompleted: true } },
+    }).then(() => setOnboardingOpen(false))
+  }
+
   return (
     <div className="flex h-screen flex-col bg-mirai-base">
       <div className="flex min-h-0 flex-1">
@@ -339,7 +363,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                V1 Beta Experimental 8
+                V1 Beta Experimental 9
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio/releases"
@@ -387,6 +411,13 @@ export function AppShell() {
       </div>
       <StatusBar />
       <CommandPalette />
+      {(!current && !settings?.session.onboardingCompleted) && (
+        <OnboardingTour
+          open={onboardingOpen}
+          onClose={() => setOnboardingOpen(false)}
+          onComplete={completeOnboarding}
+        />
+      )}
     </div>
   )
 }
