@@ -39,7 +39,7 @@ import {
   statSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 
@@ -254,12 +254,14 @@ function assertNativeRuntime(imgDir, imgEntries) {
   }
   // The sharp addon (sharp-<platform>.node) — the N-API binding.
   let addon = null
+  let addonDir = null
   for (const entry of imgEntries) {
     const libDir = join(imgDir, entry, 'lib')
     if (!existsSync(libDir)) continue
     const binding = readdirSync(libDir).find((file) => file.endsWith('.node'))
     if (binding) {
       addon = join(libDir, binding)
+      addonDir = join(imgDir, entry)
       break
     }
   }
@@ -269,32 +271,53 @@ function assertNativeRuntime(imgDir, imgEntries) {
 
   // The bundled libvips — it MUST be there. A system libvips has a
   // different ABI and aborts the process (VImage8.h assertion).
+  //
+  // macOS and Linux ship it in a SEPARATE @img/sharp-libvips-* package;
+  // on Windows there is no such package — the DLLs (libvips-cpp.dll,
+  // libvips-42.dll) live inside the addon package itself.
   let libvips = null
   let libvipsVersion = null
-  for (const entry of imgEntries) {
-    if (!entry.startsWith('sharp-libvips-')) continue
-    const pkgDir = join(imgDir, entry)
-    const libDir = join(pkgDir, 'lib')
-    if (!existsSync(libDir)) continue
-    const binary = readdirSync(libDir).find(
-      (file) => file.startsWith('libvips-cpp.so') || (file.startsWith('libvips') && file.endsWith('.dylib')),
+  if (process.platform === 'win32') {
+    const libDir = join(addonDir, 'lib')
+    const dll = readdirSync(libDir).find(
+      (file) => file.startsWith('libvips-cpp') && file.endsWith('.dll'),
     )
-    if (!binary) continue
-    libvips = join(libDir, binary)
-    libvipsVersion = readVipsVersion(pkgDir)
-    break
+    if (dll) {
+      libvips = join(libDir, dll)
+      libvipsVersion = readVipsVersion(addonDir)
+    }
+  } else {
+    for (const entry of imgEntries) {
+      if (!entry.startsWith('sharp-libvips-')) continue
+      const pkgDir = join(imgDir, entry)
+      const libDir = join(pkgDir, 'lib')
+      if (!existsSync(libDir)) continue
+      const binary = readdirSync(libDir).find(
+        (file) => file.startsWith('libvips-cpp.so') || (file.startsWith('libvips') && file.endsWith('.dylib')),
+      )
+      if (!binary) continue
+      libvips = join(libDir, binary)
+      libvipsVersion = readVipsVersion(pkgDir)
+      break
+    }
   }
   if (!libvips) {
     fail(
-      'the bundled libvips (@img/sharp-libvips-*) is missing from the app archive — sharp would ' +
-        'fall back to the system libvips and abort the process.',
+      'the bundled libvips is missing from the app archive — sharp would fall back to the ' +
+        'system libvips and abort the process.',
       JSON.stringify(imgEntries),
     )
   }
   if (!libvipsVersion) {
     fail('the bundled libvips package has no versions.json — the runtime cannot be verified.', libvips)
   }
-  return { kind: 'native', packageName: 'sharp-libvips', runtimePath: addon, libvips, libvipsVersion }
+  return {
+    kind: 'native',
+    packageName: basename(addonDir),
+    runtimePath: addon,
+    libvips,
+    libvipsVersion,
+  }
 }
 
 /** The libvips version a runtime package was built with. */
