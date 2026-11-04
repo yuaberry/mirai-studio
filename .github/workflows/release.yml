@@ -19,6 +19,12 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run rebuild:native
+      # Linux ships sharp's WebAssembly build: Electron's Linux binary links
+      # the system glib and leaks its symbols into the process, which
+      # collides with the glib embedded in sharp's native libvips and aborts
+      # the app (electron/electron#46323). See apps/desktop/scripts/
+      # prepare-sharp-runtime.mjs.
+      - run: node apps/desktop/scripts/prepare-sharp-runtime.mjs --platform linux
       - run: node apps/desktop/scripts/fetch-ffmpeg.mjs --platform linux
       - run: cd apps/desktop && bunx electron-vite build && bunx electron-builder --linux deb AppImage
       # Release gate: boot the PACKAGED app. Unit tests and the dev build
@@ -43,6 +49,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run rebuild:native
+      # Windows keeps sharp's native runtime (no glib conflict there).
+      - run: node apps/desktop/scripts/prepare-sharp-runtime.mjs --platform win32
       - run: node apps/desktop/scripts/fetch-ffmpeg.mjs --platform win32
       - run: cd apps/desktop && bunx electron-vite build
       - run: cd apps/desktop && bunx electron-builder --win nsis
@@ -65,6 +73,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run rebuild:native
+      # macOS keeps sharp's native runtime (no glib conflict there).
+      - run: node apps/desktop/scripts/prepare-sharp-runtime.mjs --platform darwin
       - run: node apps/desktop/scripts/fetch-ffmpeg.mjs --platform darwin
       - run: cd apps/desktop && bunx electron-vite build
       - run: cd apps/desktop && bunx electron-builder --mac dmg

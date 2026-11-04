@@ -9,9 +9,9 @@
  * character-attributed dialogue, SFX, reading direction).
  */
 import type { Database } from 'better-sqlite3'
-import { basename, extname, join } from 'node:path'
+import { basename, dirname, extname, join, sep } from 'node:path'
 import { createRequire } from 'node:module'
-import { copyFileSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import type Sharp from 'sharp'
 import { z } from 'zod'
 import {
@@ -57,12 +57,137 @@ type SharpFactory = typeof Sharp
 let sharpFactory: SharpFactory | null = null
 let sharpFailure: string | null = null
 
+interface BundledRuntime {
+  /** Package that ships the runtime (e.g. "sharp-wasm32", "sharp-libvips-linux-x64"). */
+  packageName: string
+  /** Absolute path of the runtime artifact (native library or the WASM module). */
+  runtimePath: string
+  /** libvips version the bundled runtime was built with (e.g. "8.15.3"). */
+  libvipsVersion: string | null
+}
+
+/**
+ * Locates the libvips that SHIPS WITH sharp.
+ *
+ * sharp's native addon does not look for libvips in JS: it is linked against
+ * `libvips-cpp.so.42` and the dynamic linker resolves that dependency through
+ * the addon's RPATH (and, as a last resort, the system library search path).
+ * When the bundled copy cannot be found, the linker silently picks the
+ * libvips installed on the machine — a different ABI than the prebuilt addon
+ * expects, which aborts the process inside libvips
+ * (`VImage8.h: assertion failed: (!a.vobject || VIPS_IS_OBJECT(a.vobject))`).
+ *
+ * On Linux the shipped runtime is sharp's WEBASSEMBLY build
+ * (`@img/sharp-wasm32`): Electron's Linux binaries link the system glib and
+ * leak its symbols into the process, which collides with the glib embedded in
+ * the native libvips (electron/electron#46323). The WASM build carries its
+ * own glib inside the module and is immune to that.
+ *
+ * The @img/* packages live next to the `sharp` package inside `node_modules`;
+ * in a packaged build the JavaScript sits inside `app.asar` while the native
+ * binaries are unpacked to `app.asar.unpacked`, so both roots are checked.
+ *
+ * `isWasm` selects the runtime that matches the binding sharp actually
+ * loaded — the WASM package never ships a libvips shared object, and the
+ * native packages never ship the WASM module.
+ */
+function findBundledRuntime(requireModule: NodeRequire, isWasm: boolean): BundledRuntime | null {
+  try {
+    const sharpEntry = requireModule.resolve('sharp')
+    // <modules>/sharp/lib/index.js -> <modules>/sharp -> <modules>
+    const modulesDir = dirname(dirname(dirname(sharpEntry)))
+    const roots = [modulesDir]
+    const asarMarker = `${sep}app.asar${sep}`
+    if (modulesDir.includes(asarMarker)) {
+      roots.push(modulesDir.replace(asarMarker, `${sep}app.asar.unpacked${sep}`))
+    }
+    for (const root of roots) {
+      const imgDir = join(root, '@img')
+      if (!existsSync(imgDir)) continue
+      for (const entry of readdirSync(imgDir)) {
+        const isWasmPackage = entry === 'sharp-wasm32'
+        const isNativePackage = entry.startsWith('sharp-libvips-')
+        if (!isWasmPackage && !isNativePackage) continue
+        if (isWasmPackage !== isWasm) continue
+        const pkgDir = join(imgDir, entry)
+        const libDir = join(pkgDir, 'lib')
+        if (!existsSync(libDir)) continue
+        let runtimePath: string | null = null
+        if (isWasmPackage) {
+          const wasm = join(libDir, 'sharp-wasm32.node.wasm')
+          if (existsSync(wasm)) runtimePath = wasm
+        } else {
+          for (const file of readdirSync(libDir)) {
+            // Linux: libvips-cpp.so.42 | macOS: libvips.42.dylib
+            if (file.startsWith('libvips-cpp.so') || (file.startsWith('libvips') && file.endsWith('.dylib'))) {
+              runtimePath = join(libDir, file)
+              break
+            }
+          }
+        }
+        if (!runtimePath) continue
+        // The bundled runtime publishes the exact library versions it was
+        // built with — the reference the loaded runtime must match.
+        let libvipsVersion: string | null = null
+        try {
+          const versions = JSON.parse(readFileSync(join(pkgDir, 'versions.json'), 'utf8')) as {
+            vips?: string
+          }
+          libvipsVersion = versions.vips ?? null
+        } catch {
+          libvipsVersion = null
+        }
+        return { packageName: entry, runtimePath, libvipsVersion }
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Marker present in the shipped bundle. The packaged-boot smoke test greps
+ * the packaged main bundle for it to prove the shipped app really carries
+ * the guard (and not just the source tree).
+ */
+const BUNDLED_RUNTIME_MARKER = 'MIRAI_BUNDLED_LIBVIPS_RUNTIME'
+
+/**
+ * Verifies that the libvips actually loaded into the process is the one that
+ * shipped with the app.
+ *
+ * A libvips installed on the user's machine has the same SONAME as the
+ * bundled one, so the dynamic linker can silently substitute it. The
+ * prebuilt sharp addon is compiled against a specific libvips ABI and
+ * aborts the whole process when a different one is loaded — which would take
+ * the desktop app down instead of degrading a single feature.
+ */
+function assertBundledRuntime(sharp: SharpFactory, bundled: BundledRuntime | null): void {
+  if (!bundled?.libvipsVersion) return
+  const loaded = (sharp as unknown as { versions?: { vips?: string } }).versions?.vips
+  if (!loaded) return
+  if (loaded === bundled.libvipsVersion) return
+  throw new MiraiError(
+    'INTERNAL',
+    `${BUNDLED_RUNTIME_MARKER}: the loaded libvips (${loaded}) does not match the bundled ` +
+      `${bundled.packageName} runtime (${bundled.libvipsVersion}); the system libvips must not be used.`,
+  )
+}
+
 async function loadSharp(): Promise<SharpFactory> {
   if (sharpFactory) return sharpFactory
   if (sharpFailure) {
     throw new MiraiError('INTERNAL', `Manga proof rasterizer unavailable: ${sharpFailure}`)
   }
   try {
+    // Always use the libvips that SHIPS WITH sharp. sharp's loader probes
+    // the system (pkg-config) for a global libvips and prefers it when the
+    // version is high enough — but that libvips has a different ABI than
+    // the prebuilt native addon and aborts the process with a libvips
+    // assertion (VImage8.h). A desktop app must be self-contained: a
+    // libvips installed on the user's machine must never break it.
+    process.env.SHARP_IGNORE_GLOBAL_LIBVIPS = '1'
     // `__filename` exists in the CJS bundles (packaged app, smoke bundle);
     // `import.meta.url` covers the ESM context (vitest). createRequire
     // keeps the resolution rooted at the RUNNING bundle, so the packaged
@@ -70,7 +195,15 @@ async function loadSharp(): Promise<SharpFactory> {
     const base = typeof __filename !== 'undefined' ? __filename : import.meta.url
     const requireModule = createRequire(base)
     const mod = requireModule('sharp') as SharpFactory & { default?: SharpFactory }
-    sharpFactory = mod.default ?? mod
+    const sharp = mod.default ?? mod
+    // The binding is already loaded at this point: check that it is the
+    // bundled runtime and not a system libvips with a different ABI.
+    // The WebAssembly build reports `emscripten` in its versions — that is
+    // how the runtime that was actually loaded is identified.
+    const versions = (sharp as unknown as { versions?: { emscripten?: string } }).versions
+    const isWasm = Boolean(versions?.emscripten)
+    assertBundledRuntime(sharp, findBundledRuntime(requireModule, isWasm))
+    sharpFactory = sharp
     return sharpFactory
   } catch (err) {
     sharpFailure = err instanceof Error ? err.message : String(err)
