@@ -17,18 +17,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - run: sudo apt-get update && sudo apt-get install -y rpm   # rpm target needs rpmbuild
       - run: bun install --frozen-lockfile
       - run: bun run rebuild:native
       - run: node apps/desktop/scripts/fetch-ffmpeg.mjs --platform linux
       - run: cd apps/desktop && bunx electron-vite build && bunx electron-builder --linux deb AppImage
+      # Release gate: boot the PACKAGED app. Unit tests and the dev build
+      # cannot see packaging regressions (a native module missing from the
+      # app archive kills the main process → the window never appears).
+      - name: Packaged boot smoke
+        run: |
+          sudo apt-get update && sudo apt-get install -y xvfb xauth
+          xvfb-run -a --server-args="-screen 0 1280x800x24" node apps/desktop/scripts/smoke-packaged.mjs apps/desktop/release/linux-unpacked/mirai-studio
       - uses: actions/upload-artifact@v4
         with:
           name: linux
           path: |
             apps/desktop/release/*.deb
             apps/desktop/release/*.AppImage
-            apps/desktop/release/*.rpm
           if-no-files-found: error
 
   windows:
@@ -43,6 +48,10 @@ jobs:
       - run: cd apps/desktop && bunx electron-builder --win nsis
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'   # unsigned installer
+      # No display on the Windows runner — validate the native runtime
+      # closure (sharp + @img binary) inside the built package.
+      - name: Packaged static smoke
+        run: node apps/desktop/scripts/smoke-packaged.mjs apps/desktop/release/win-unpacked/mirai-studio.exe --static-only
       - uses: actions/upload-artifact@v4
         with:
           name: windows
@@ -61,6 +70,13 @@ jobs:
       - run: cd apps/desktop && bunx electron-builder --mac dmg
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'   # unsigned dmg — users right-click → Open
+      # No display guarantee on the macOS runner — validate the native
+      # runtime closure (sharp + @img binary) inside the built package.
+      - name: Packaged static smoke
+        run: |
+          BIN=$(find apps/desktop/release -maxdepth 5 -type f -name "mirai-studio" -path "*MacOS*" | head -1)
+          test -n "$BIN" || { echo "macOS binary not found"; exit 1; }
+          node apps/desktop/scripts/smoke-packaged.mjs "$BIN" --static-only
       - uses: actions/upload-artifact@v4
         with:
           name: macos

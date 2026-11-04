@@ -10,6 +10,14 @@ directories:
 
 # The app ships only the built bundles + the native runtime dependency.
 # @mirai/* workspace packages are bundled into out/ (devDependencies).
+#
+# IMPORTANT: with Bun's isolated node_modules layout, electron-builder only
+# collects the app's DIRECT dependencies — the transitive runtime closure
+# (sharp → color → color-convert → color-name, detect-libc, semver, …) must
+# therefore be declared in apps/desktop/package.json, together with the
+# platform binaries in optionalDependencies (@img/sharp-*). The packaged
+# smoke gate (scripts/smoke-packaged.mjs) fails the build if any of them is
+# missing from the archive.
 files:
   - out/**
   - package.json
@@ -17,9 +25,16 @@ files:
 
 # Native modules must be unpacked from the asar archive to load.
 # The bundled LGPL FFmpeg binaries must also be unpacked to be spawnable.
+#
+# sharp (N-API) ships its platform binary in a SEPARATE @img/* package
+# (e.g. @img/sharp-linux-x64) — the JS entry alone is useless. Both trees
+# MUST be unpacked, otherwise the native binding cannot be dlopen'ed and
+# the main process dies at startup (no window ever appears).
 asar: true
 asarUnpack:
   - node_modules/better-sqlite3/**
+  - node_modules/sharp/**
+  - node_modules/@img/**
   - resources/ffmpeg/**
 
 # better-sqlite3 is already compiled against Electron's ABI by

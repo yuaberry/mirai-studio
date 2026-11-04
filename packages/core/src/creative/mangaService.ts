@@ -10,8 +10,9 @@
  */
 import type { Database } from 'better-sqlite3'
 import { basename, extname, join } from 'node:path'
+import { createRequire } from 'node:module'
 import { copyFileSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
-import sharp from 'sharp'
+import type Sharp from 'sharp'
 import { z } from 'zod'
 import {
   IMAGE_EXTENSIONS,
@@ -39,6 +40,43 @@ const IMAGE_MIME: Record<string, string> = {
   '.gif': 'image/gif',
 }
 const MAX_IMAGE_BYTES = 40 * 1024 * 1024
+
+/**
+ * sharp is a NATIVE (N-API) module that ships as an unpacked runtime
+ * dependency. It loads its native binding EAGERLY at import time, so a
+ * static top-level `import sharp from 'sharp'` crashes the entire desktop
+ * main process when the binary is missing or mis-packaged — the app then
+ * never shows a window.
+ *
+ * Loading it lazily — and turning a failure into an actionable error —
+ * guarantees the app always starts; only the manga proof raster export
+ * degrades, and it says exactly what went wrong.
+ */
+type SharpFactory = typeof Sharp
+
+let sharpFactory: SharpFactory | null = null
+let sharpFailure: string | null = null
+
+async function loadSharp(): Promise<SharpFactory> {
+  if (sharpFactory) return sharpFactory
+  if (sharpFailure) {
+    throw new MiraiError('INTERNAL', `Manga proof rasterizer unavailable: ${sharpFailure}`)
+  }
+  try {
+    // `__filename` exists in the CJS bundles (packaged app, smoke bundle);
+    // `import.meta.url` covers the ESM context (vitest). createRequire
+    // keeps the resolution rooted at the RUNNING bundle, so the packaged
+    // app finds `node_modules/sharp` inside the app archive.
+    const base = typeof __filename !== 'undefined' ? __filename : import.meta.url
+    const requireModule = createRequire(base)
+    const mod = requireModule('sharp') as SharpFactory & { default?: SharpFactory }
+    sharpFactory = mod.default ?? mod
+    return sharpFactory
+  } catch (err) {
+    sharpFailure = err instanceof Error ? err.message : String(err)
+    throw new MiraiError('INTERNAL', `Manga proof rasterizer unavailable: ${sharpFailure}`)
+  }
+}
 
 interface PageRow {
   id: string
@@ -787,6 +825,7 @@ export class MangaService {
     let totalBytes = 0
 
     if (format === 'png' || format === 'both') {
+      const sharp = await loadSharp()
       for (const page of pages) {
         const proof = this.pageProofSvg(page.id)
         const pngPath = join(dir, `${baseName}-page-${String(page.number).padStart(2, '0')}.png`)
@@ -832,6 +871,7 @@ export class MangaService {
 
     for (const page of pages) {
       const proof = this.pageProofSvg(page.id)
+      const sharp = await loadSharp()
       const png = await sharp(Buffer.from(proof.svg, 'utf8')).png().toBuffer()
       const xobjId = xref++
       xobjIds.push(xobjId)
