@@ -1,0 +1,22 @@
+node_modules/
+.bun/
+apps/desktop/out/
+apps/desktop/release/
+packages/*/dist/
+*.tsbuildinfo
+release/
+*.log
+.cache/
+*.pid
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+coverage/
+
+# Bundled LGPL FFmpeg (downloaded at package time — never committed)
+apps/desktop/resources/ffmpeg/
+apps/desktop/resources/ffmpeg-download.tar.xz

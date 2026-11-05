@@ -1,0 +1,54 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Mirai Studio — sakura mark v2: five gradient petals around an aperture
+       core. Distinctive at 32px, cinematic at 512. Brand: sakura→violet→cyan. -->
+  <defs>
+    <linearGradient id="petal" x1="220" y1="120" x2="820" y2="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f472b6"/>
+      <stop offset="0.55" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f472b6" stop-opacity="0.35"/>
+      <stop offset="0.5" stop-color="#a78bfa" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#22d3ee" stop-opacity="0.35"/>
+    </linearGradient>
+    <radialGradient id="core" cx="0.5" cy="0.42" r="0.75">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </radialGradient>
+  </defs>
+
+  <!-- tile -->
+  <rect width="1024" height="1024" rx="232" fill="#0a0c10"/>
+  <rect width="1024" height="1024" rx="232" fill="url(#rim)"/>
+  <rect x="16" y="16" width="992" height="992" rx="216" fill="#0d1017"/>
+  <!-- subtle vignette glow behind the flower -->
+  <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+    <stop offset="0" stop-color="#a78bfa" stop-opacity="0.14"/>
+    <stop offset="1" stop-color="#a78bfa" stop-opacity="0"/>
+  </radialGradient>
+  <circle cx="512" cy="512" r="430" fill="url(#glow)"/>
+
+  <!-- five petals, classic sakura cleft at each tip -->
+  <g fill="url(#petal)">
+    <g id="p"><path d="M512 512 C 462 470 434 372 452 260 C 460 210 486 168 512 150 C 538 168 564 210 572 260 C 590 372 562 470 512 512 Z"/></g>
+    <use href="#p" transform="rotate(72 512 512)"/>
+    <use href="#p" transform="rotate(144 512 512)"/>
+    <use href="#p" transform="rotate(216 512 512)"/>
+    <use href="#p" transform="rotate(288 512 512)"/>
+  </g>
+  <!-- cleft notches (tile color) so each petal reads as sakura -->
+  <g fill="#0d1017">
+    <path id="n" d="M512 152 L498 196 L526 196 Z"/>
+    <use href="#n" transform="rotate(72 512 512)"/>
+    <use href="#n" transform="rotate(144 512 512)"/>
+    <use href="#n" transform="rotate(216 512 512)"/>
+    <use href="#n" transform="rotate(288 512 512)"/>
+  </g>
+
+  <!-- aperture core -->
+  <circle cx="512" cy="512" r="96" fill="#0d1017"/>
+  <circle cx="512" cy="512" r="84" fill="url(#core)"/>
+  <!-- inner ring: the 'iris' of production -->
+  <circle cx="512" cy="512" r="52" fill="none" stroke="#0a0c10" stroke-opacity="0.55" stroke-width="14"/>
+</svg>
