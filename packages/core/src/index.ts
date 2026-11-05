@@ -112,6 +112,10 @@ export type {
 // plugins (Phase 9)
 export { PluginRegistry, EXAMPLE_MANIFESTS } from './plugins/pluginRegistry'
 
+// AI marketplace (provider cards + live model catalogs)
+export { MarketplaceService } from './marketplace/marketplaceService'
+export type { MarketplaceServiceOptions, MarketplaceFetch } from './marketplace/marketplaceService'
+
 // licensing + mature policy + blender (v0.10)
 export { LicenseService, MIRAI_LICENSE_PUBLIC_KEY_B64 } from './license/licenseService'
 export { assertExplicitCastAllowed, assessAge, maturePipelineActive } from './license/maturePolicy'

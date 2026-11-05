@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 
 /** App-level views. */
-export type AppView = 'hub' | 'settings' | 'diagnostics'
+export type AppView = 'hub' | 'marketplace' | 'settings' | 'diagnostics'
 /** Project workspace views (require an open project). */
 export type ProjectView =
   | 'overview'

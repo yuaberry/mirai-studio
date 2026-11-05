@@ -25,31 +25,46 @@ export const AppSettings = z.object({
       nvidia: z
         .object({
           baseUrl: z.string().url().default('https://integrate.api.nvidia.com/v1'),
-          model: z.string().default('nvidia/z-ai/glm-5.3'),
+          /**
+           * Default model of the NVIDIA NIM catalog. The id must exist in
+           * the vendor's own `/v1/models` list — `nvidia/z-ai/glm-5.3` never
+           * existed there (the real one is `z-ai/glm-5.3-flash`).
+           */
+          model: z.string().default('z-ai/glm-5.3-flash'),
         })
         .default({}),
-      /** Image generation provider (OpenAI Images-compatible endpoint). */
+      /** Image generation provider. */
       image: z
         .object({
+          /** Wire protocol of the endpoint — decides which adapter talks to it. */
+          protocol: z.enum(['openai', 'pollinations']).default('openai'),
           baseUrl: z.string().optional(),
           model: z.string().optional(),
           /** e.g. '1024x1024' | '1344x768' | '768x1344'. */
           size: z.string().default('1344x768'),
+          /** Ask the provider for an output WITHOUT any logo/watermark.
+           *  The prompt always says "no watermark"; this also sends the
+           *  provider-specific switch (e.g. Pollinations' nologo=true). */
+          noWatermark: z.boolean().default(true),
         })
         .default({}),
-      /** AI voice acting (OpenAI-audio-compatible endpoint) — the
-       *  ElevenLabs-recipe piece: dialogue + voice id → real audio. */
+      /** AI voice acting — OpenAI-audio-compatible endpoint, or the
+       *  keyless Google Translate speech endpoint. */
       tts: z
         .object({
+          /** Wire protocol of the endpoint — decides which adapter talks to it. */
+          protocol: z.enum(['openai', 'google-translate']).default('openai'),
           baseUrl: z.string().optional(),
           model: z.string().optional(),
           /** Default voice id when a character has none. */
           voice: z.string().optional(),
         })
         .default({}),
-      /** Video generation provider (OpenAI-videos-compatible endpoint). */
+      /** Video generation provider. */
       video: z
         .object({
+          /** Wire protocol of the endpoint — decides which adapter talks to it. */
+          protocol: z.enum(['openai', 'pollinations']).default('openai'),
           baseUrl: z.string().optional(),
           model: z.string().optional(),
           /** e.g. '1344x768' | '1920x1080' (HD) | '3840x2160' (4K). */
@@ -61,12 +76,21 @@ export const AppSettings = z.object({
           /** Animate the shot's storyboard frame (image-to-video) — the
            *  single biggest consistency win for anime pipelines. */
           useReferenceFrame: z.boolean().default(true),
+          /** Ask the provider for an output WITHOUT any logo/watermark.
+           *  The prompt always says "no watermark"; this also sends the
+           *  provider-specific switch (e.g. Pollinations' nologo=true). */
+          noWatermark: z.boolean().default(true),
         })
         .default({}),
       temperature: z.number().min(0).max(2).default(0.7),
       maxTokens: z.number().int().min(1).max(1_000_000).default(2_048),
       streaming: z.boolean().default(true),
-      requestTimeoutMs: z.number().int().min(1_000).max(600_000).default(120_000),
+      /**
+       * Timeout of a single AI request. The default is generous: a
+       * reasoning model writing a full scene plan can think for minutes
+       * before answering, and 2 minutes was cutting valid answers short.
+       */
+      requestTimeoutMs: z.number().int().min(1_000).max(600_000).default(300_000),
       maxRetries: z.number().int().min(0).max(10).default(2),
       /** v0.21: fallback model — chat tries it when the primary fails twice. */
       fallbackModel: z.string().max(160).optional(),

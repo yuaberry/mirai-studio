@@ -60,9 +60,23 @@ export interface FetchInit {
   signal?: AbortSignal
 }
 
+/**
+ * Minimal response-header reader.
+ *
+ * The real `Headers` object satisfies it (`get(name)` → value | null), and
+ * a test double can implement it in one line. A plain Record would NOT
+ * work: the browser's `Response.headers` is a `Headers` instance, not an
+ * object with indexable keys.
+ */
+export interface FetchHeaders {
+  get(name: string): string | null
+}
+
 export interface FetchResponse {
   ok: boolean
   status: number
+  /** Response headers — used to detect the media type. */
+  headers?: FetchHeaders
   /** Response body as text (non-streaming calls). */
   text(): Promise<string>
   /** Binary body (video downloads). Present on real fetch Responses. */

@@ -42,6 +42,7 @@ export const queryKeys = {
   logs: (q: { level?: string; category?: string; search?: string }) => ['logs', q] as const,
   credentials: ['credentials', 'status'] as const,
   backups: (projectId: string) => ['backups', projectId] as const,
+  marketplace: ['marketplace', 'catalog'] as const,
 }
 
 export const creativeKeys = {
@@ -135,6 +136,23 @@ export function useProjectAction() {
   })
 }
 
+/**
+ * DELETES THE PROJECT FOREVER — folder, database, assets, exports (the
+ * dossier included) and backups. The answer carries the erase report
+ * (files + bytes), which the UI shows right after.
+ */
+export function useDeleteProject() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => invoke('projects:delete', { id }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.currentProject })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.backups('none') })
+    },
+  })
+}
+
 export function useUpdateProjectConfig() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -211,7 +229,37 @@ export function useSetCredential() {
   return useMutation({
     mutationFn: (input: { key: import('@mirai/shared').CredentialKey; value: string }) =>
       invoke('credentials:set', input).then((r) => r.secure),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.credentials }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.credentials })
+      // A new key can turn a provider from "needs a key" into "ready".
+      void queryClient.invalidateQueries({ queryKey: queryKeys.marketplace })
+    },
+  })
+}
+
+// ---------------------------------------------------------------- marketplace
+
+/** The AI Marketplace catalog: curated provider cards + live model lists. */
+export function useMarketplaceCatalog() {
+  return useQuery({
+    queryKey: queryKeys.marketplace,
+    queryFn: () => invoke('marketplace:catalog'),
+    // The vendors' catalogs change slowly — no need to hammer them.
+    staleTime: 5 * 60_000,
+  })
+}
+
+/** Applies a provider card (or a live model) to the real settings. */
+export function useApplyMarketplaceProvider() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { providerId: string; model?: string }) =>
+      invoke('marketplace:apply', input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.credentials })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.marketplace })
+    },
   })
 }
 

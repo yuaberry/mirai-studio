@@ -454,7 +454,11 @@ describe('RenderService scene/episode renders (REAL FFmpeg)', () => {
     // must still produce a real playable file (a broken graph = 0 bytes).
     const stats = statSync(result.outputPath)
     expect(stats.size).toBeGreaterThan(8_000)
-  }, 120_000)
+    // The 120s budget was measured on an idle machine: rendering 4096x2160
+    // with x264 `slower` + aq-mode=3 took 36s alone and 126s while the rest
+    // of the suite was rendering in parallel. A gate that flips on machine
+    // load is not a gate — the budget must survive the CI load.
+  }, 300_000)
 
   it.skipIf(!ffmpeg.available)('refuses to render scenes/episodes without timelines', async () => {
     const env = makeEnv('guards')

@@ -20,7 +20,8 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
+import { homedir } from 'node:os'
 import {
   MiraiError,
   PROJECT_FOLDERS,
@@ -55,6 +56,7 @@ import { SubtitleService } from '../subtitles/subtitleService'
 import { BlenderBridge } from '../blender/blenderBridge'
 import { AudioMixService } from '../audio/audioMixService'
 import { AssetIntelligenceService } from '../asset/assetIntelligenceService'
+import { VisualConsistencyService } from '../visual/visualConsistencyService'
 import { ExperimentService } from '../experiments/experimentService'
 import { LightNovelService } from '../lightNovel/lightNovelService'
 import { newEntityId, type AppDirs, type Clock } from '../types'
@@ -117,6 +119,14 @@ export interface OpenProjectContext {
   audio: AudioMixService
   /** Asset Intelligence (§14): usage history + dependency graph. */
   assetIntelligence: AssetIntelligenceService
+  /**
+   * Visual Consistency Engine bound to THIS project's DB.
+   *
+   * The lock lives in the project database (`kv_store`), so it must be
+   * per-project: a global instance bound to the App DB has no such table
+   * and every save would fail.
+   */
+  visualConsistency: VisualConsistencyService
   /** Creative Experiments (§19): generation lab + promote-to-project. */
   experiments: ExperimentService
   /** Light Novel Pro (§9 slice 3): volumes + chapters + POV control. */
@@ -532,6 +542,93 @@ export class ProjectService {
     this.opts.logger.info('PROJECT', `Project removed from list (files kept): ${id}`)
   }
 
+  /**
+   * DELETES THE PROJECT FOREVER — folder, database, assets, exports (the
+   * dossier included), backups and the registry entry.
+   *
+   * `removeFromList` only forgets the project; this one removes every byte
+   * it owns. It is the honest counterpart of "create": nothing of an
+   * experimental production may be left behind.
+   */
+  async deleteProject(id: EntityId): Promise<{ path: string; files: number; bytes: number }> {
+    const summary = this.summaryById(id)
+    const path = summary.path
+    this.assertDeletableFolder(path)
+
+    // Close first: it stops the job queue, flushes the WAL and releases the
+    // SQLite handle — deleting an open project would leave the DB behind.
+    if (this.active?.summary.id === id) {
+      await this.close()
+    }
+
+    const files = countFiles(path)
+    const bytes = dirSize(path)
+
+    // Backups belong to the project too — they are copies of its data.
+    const backupRoot = join(this.opts.dirs.backups, id)
+    if (existsSync(backupRoot)) {
+      rmSync(backupRoot, { recursive: true, force: true })
+    }
+
+    if (existsSync(path)) {
+      rmSync(path, { recursive: true, force: true })
+    }
+
+    // Derived-work links (parent or child) would dangle otherwise.
+    this.opts.appDb
+      .prepare(
+        `DELETE FROM derived_works WHERE parent_project_id = ? OR child_project_id = ?`,
+      )
+      .run(id, id)
+
+    this.opts.appDb.prepare('DELETE FROM project_registry WHERE id = ?').run(id)
+
+    this.opts.logger.warn('PROJECT', `Project deleted permanently: "${summary.name}"`, {
+      projectId: id,
+      path,
+      files,
+      bytes,
+    })
+    return { path, files, bytes }
+  }
+
+  /**
+   * Guards the destructive delete: the target must be a project folder and
+   * must never be a root, the home directory, the app data folder or any
+   * ancestor of them (a stray path in the registry could otherwise wipe
+   * the user's home).
+   */
+  private assertDeletableFolder(path: string): void {
+    const resolved = resolve(path)
+    const forbidden = [
+      resolve('/'),
+      resolve(homedir()),
+      resolve(this.opts.dirs.root),
+      resolve(this.opts.dirs.projectsDefaultDir),
+    ]
+    for (const target of forbidden) {
+      if (resolved === target) {
+        throw new MiraiError(
+          'PROJECT_INVALID',
+          'Refusing to delete that folder — it is not a project folder.',
+        )
+      }
+    }
+    // An ancestor of the app data / projects folder would take other
+    // projects with it.
+    for (const target of [resolve(this.opts.dirs.root), resolve(this.opts.dirs.projectsDefaultDir)]) {
+      if (target.startsWith(resolved + sep)) {
+        throw new MiraiError(
+          'PROJECT_INVALID',
+          'Refusing to delete that folder — it contains other projects.',
+        )
+      }
+    }
+    if (!existsSync(resolved)) {
+      throw new MiraiError('PROJECT_INVALID', `The project folder is already gone: ${resolved}`)
+    }
+  }
+
   // ------------------------------------------------------------ update config
 
   updateActiveConfig(config: ProjectConfig): ProjectManifest {
@@ -825,6 +922,7 @@ export class ProjectService {
     const subtitles = new SubtitleService(db, this.opts.clock, path)
     const audio = new AudioMixService(db, this.opts.clock, path)
     const assetIntelligence = new AssetIntelligenceService(db)
+    const visualConsistency = new VisualConsistencyService(db, this.opts.clock, path)
     const experiments = new ExperimentService(db, storyboard, manga)
     const lightNovel = new LightNovelService(db)
     const render = new RenderService(storyboard, media, path, creative, timeline, subtitles)
@@ -834,7 +932,7 @@ export class ProjectService {
     this.upsertRegistry(manifest, path, now)
 
     const summary = this.summaryById(manifest.id)
-    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, manga, moodboard, poster, localization, sheets, animation, ip, media, render, timeline, production, subtitles, audio, assetIntelligence, experiments, lightNovel, blender, recoveredCount }
+    this.active = { summary, manifest, db, jobs, creative, prompts, storyboard, manga, moodboard, poster, localization, sheets, animation, ip, media, render, timeline, production, subtitles, audio, assetIntelligence, visualConsistency, experiments, lightNovel, blender, recoveredCount }
     this.opts.logger.info('PROJECT', `Project opened: "${manifest.name}"`, {
       id: manifest.id,
       recoveredJobs: recoveredCount,
@@ -954,6 +1052,20 @@ function compactTimestamp(date: Date): string {
   const timePart = `${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
   const msPart = pad(date.getMilliseconds(), 3)
   return `${datePart}-${timePart}-${msPart}`
+}
+
+/** How many files a folder holds (best-effort, for the delete report). */
+function countFiles(dir: string): number {
+  let total = 0
+  try {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name)
+      total += entry.isDirectory() ? countFiles(full) : 1
+    }
+  } catch {
+    /* best-effort */
+  }
+  return total
 }
 
 function dirSize(dir: string): number {

@@ -4,6 +4,7 @@
  */
 import { useState } from 'react'
 import {
+  AlertTriangle,
   Archive,
   ArchiveRestore,
   Clock,
@@ -19,9 +20,9 @@ import { Button, Card, Spinner } from '../../system/ui'
 import { SkeletonList } from '../../system/Skeleton'
 import { EmptyState, ErrorState } from '../../system/EmptyState'
 import { ConfirmModal } from '../../system/Modal'
-import { formatWhen } from '../../lib/utils'
+import { formatBytes, formatWhen } from '../../lib/utils'
 import { invoke } from '../../lib/ipc'
-import { useProjectAction, useProjects, useOpenProject, useSettings } from '../../lib/queries'
+import { useDeleteProject, useProjectAction, useProjects, useOpenProject, useSettings } from '../../lib/queries'
 import { t } from '../../lib/i18n'
 import { useAppStore, toast } from '../../store/appStore'
 import { NewProjectModal } from './NewProjectModal'
@@ -197,7 +198,9 @@ async function openFolderFlow(): Promise<void> {
 function ProjectCard({ project, tr, dimmed = false }: { project: ProjectSummary; tr: (k: string) => string; dimmed?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const action = useProjectAction()
+  const removeProject = useDeleteProject()
   const openProject = useOpenProject()
   const setView = useAppStore((s) => s.setView)
 
@@ -324,6 +327,16 @@ function ProjectCard({ project, tr, dimmed = false }: { project: ProjectSummary;
                 >
                   {tr('Remove from List…')}
                 </MenuItem>
+                <MenuItem
+                  icon={<AlertTriangle className="h-3.5 w-3.5" />}
+                  danger
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setConfirmDelete(true)
+                  }}
+                >
+                  {tr('Delete Permanently…')}
+                </MenuItem>
               </div>
             </>
           )}
@@ -349,6 +362,30 @@ function ProjectCard({ project, tr, dimmed = false }: { project: ProjectSummary;
           ) : null}
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title={`Delete “${project.name}” forever?`}
+        description="Every file of this project is erased: the folder, the database, the generated frames, videos, voice tracks, exports (the dossier included) and the backups. This cannot be undone."
+        confirmLabel="Delete everything"
+        danger
+        busy={removeProject.isPending}
+        onConfirm={() => {
+          removeProject.mutate(project.id, {
+            onSuccess: (result) => {
+              setConfirmDelete(false)
+              toast({
+                kind: 'success',
+                title: 'Project deleted',
+                description: `${result.files} files (${formatBytes(result.bytes)}) erased from disk.`,
+              })
+            },
+            onError: (err) =>
+              toast({ kind: 'error', title: 'Delete failed', description: err.message }),
+          })
+        }}
+      />
 
       <ConfirmModal
         open={confirmRemove}

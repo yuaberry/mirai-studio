@@ -30,13 +30,17 @@ import {
   TaglineDraft,
   SceneTranslationDraft,
 } from '@mirai/shared'
-import { assertExplicitCastAllowed, maturePipelineActive, VisualConsistencyService } from '@mirai/core'
+import { assertExplicitCastAllowed, maturePipelineActive } from '@mirai/core'
 import type { DossierAiSections, DossierData } from '@mirai/core'
 import {
   ModelRegistry,
   OpenRouterProvider,
   OpenAIImagesProvider,
   OpenAIVideoProvider,
+  PollinationsImagesProvider,
+  PollinationsVideoProvider,
+  GoogleTranslateTtsProvider,
+  parseGoogleVoice,
   buildSystemPrompt,
   buildImagePrompt,
   draftScreenplayInstruction,
@@ -55,6 +59,22 @@ import type { CredentialStore, LoggerService, ProjectService, SettingsService } 
 import type { MainEmitter } from '../bootstrap'
 
 const CHUNK_FLUSH_MS = 40
+
+/**
+ * Backoff between retries of a transient provider failure (429 / 5xx).
+ *
+ * Measured against the free developer endpoints (NVIDIA NIM): a heavy
+ * generation (~1.5k output tokens, ~45s) empties the token bucket and the
+ * next call is refused with 429 for ~10s. The first wait is therefore long
+ * enough to actually clear the limit.
+ */
+const PROVIDER_RETRY_DELAYS_MS = [10_000, 30_000, 60_000] as const
+
+/** Ceiling for the automatic token budget growth (structured calls). */
+const MAX_STRUCTURED_TOKEN_FLOOR = 32_768
+
+/** Minimum timeout of a structured generation (script, cast, storyboard). */
+const STRUCTURED_CALL_TIMEOUT_MS = 300_000
 
 interface ChatProviderConfig {
   id: 'openrouter' | 'nvidia'
@@ -152,10 +172,6 @@ export class AiHost {
       /** v0.21: real usage persistence (cost dashboard). Optional so
        * tests/smoke can construct without it. */
       aiUsage?: { record(e: import('@mirai/core').AiUsageEntry): void }
-      /** v0.33: visual consistency engine — model sheets + palette lock +
-       * style bible enforcement in every image/video generation. Optional
-       * so tests/smoke can construct without it. */
-      visualConsistency?: VisualConsistencyService
     },
   ) {
     this.registry = new ModelRegistry({
@@ -186,7 +202,7 @@ export class AiHost {
       )
     }
     if (credKey === 'nvidia') {
-      const model = settings.ai.nvidia.model || 'nvidia/z-ai/glm-5.3'
+      const model = settings.ai.nvidia.model || 'z-ai/glm-5.3-flash'
       return { id: 'nvidia', apiKey, baseUrl: settings.ai.nvidia.baseUrl, model }
     }
     const model = settings.ai.defaultModel
@@ -199,14 +215,62 @@ export class AiHost {
     return { id: 'openrouter', apiKey, baseUrl: 'https://openrouter.ai/api/v1', model }
   }
 
-  /** Image provider (OpenAI Images-compatible) — null when not configured. */
-  resolveImageProvider(): { apiKey: string; baseUrl: string; model: string; size: string } | null {
+  /**
+   * The chat provider bound to the ACTIVE vendor.
+   *
+   * `include_usage` is an OpenRouter extension: other OpenAI-compatible
+   * endpoints (NVIDIA NIM, self-hosted servers) reject unknown fields with
+   * HTTP 400 "Unsupported parameter(s): include_usage" — so it is sent to
+   * OpenRouter only.
+   */
+  private chatProvider(
+    providerConfig: ChatProviderConfig,
+    timeoutMs?: number,
+  ): OpenRouterProvider {
     const settings = this.deps.settings.get()
+    return new OpenRouterProvider({
+      apiKey: providerConfig.apiKey,
+      baseUrl: providerConfig.baseUrl,
+      fetchFn: globalFetch(),
+      appName: 'Mirai Studio',
+      appUrl: 'https://mirai-studio.app',
+      timeoutMs: timeoutMs ?? settings.ai.requestTimeoutMs,
+      includeUsage: providerConfig.id === 'openrouter',
+    })
+  }
+
+  /**
+   * Image provider — protocol aware.
+   *
+   * `openai`      → POST {baseUrl}/images/generations (needs a key).
+   * `pollinations`→ GET {baseUrl}/prompt/{prompt} (the classic endpoint works
+   *                 with NO key at all — that is the free tier).
+   *
+   * Returns null when the provider is not configured yet.
+   */
+  resolveImageProvider(): {
+    protocol: 'openai' | 'pollinations'
+    apiKey: string | null
+    baseUrl: string
+    model: string
+    size: string
+    noWatermark: boolean
+  } | null {
+    const settings = this.deps.settings.get()
+    const image = settings.ai.image
+    const protocol = image.protocol ?? 'openai'
+    const baseUrl = image.baseUrl
+    const model = image.model
+    if (!baseUrl || !model) return null
+    const size = image.size || '1344x768'
+    const noWatermark = image.noWatermark ?? true
+    if (protocol === 'pollinations') {
+      // The classic image endpoint is keyless — a key is optional here.
+      return { protocol, apiKey: this.deps.credentials.get('image'), baseUrl, model, size, noWatermark }
+    }
     const apiKey = this.deps.credentials.get('image')
-    const baseUrl = settings.ai.image.baseUrl
-    const model = settings.ai.image.model
-    if (!apiKey || !baseUrl || !model) return null
-    return { apiKey, baseUrl, model, size: settings.ai.image.size || '1344x768' }
+    if (!apiKey) return null
+    return { protocol, apiKey, baseUrl, model, size, noWatermark }
   }
 
   // ------------------------------------------------------------------- status
@@ -233,21 +297,34 @@ export class AiHost {
     }
   }
 
-  /** Video provider (OpenAI-videos-compatible) — null when not configured. */
+  /**
+   * Video provider — protocol aware.
+   *
+   * `openai`      → POST {baseUrl}/videos/generations + job polling.
+   * `pollinations`→ GET {baseUrl}/video/{prompt} (Wan 2.2, Seedance, Veo…).
+   *
+   * The key requirement differs per protocol; the provider itself reports a
+   * precise error when the vendor asks for credentials.
+   */
   resolveVideoProvider(): {
-    apiKey: string
+    protocol: 'openai' | 'pollinations'
+    apiKey: string | null
     baseUrl: string
     model: string
     size: string
     fps: number
     quality: 'standard' | 'hd' | 'ultra'
     useReferenceFrame: boolean
+    noWatermark: boolean
   } | null {
     const settings = this.deps.settings.get()
-    const apiKey = this.deps.credentials.get('videogen')
     const video = settings.ai.video
-    if (!apiKey || !video?.baseUrl || !video.model) return null
+    const protocol = video.protocol ?? 'openai'
+    if (!video?.baseUrl || !video.model) return null
+    const apiKey = this.deps.credentials.get('videogen')
+    if (protocol === 'openai' && !apiKey) return null
     return {
+      protocol,
       apiKey,
       baseUrl: video.baseUrl,
       model: video.model,
@@ -255,6 +332,7 @@ export class AiHost {
       fps: video.fps ?? 24,
       quality: video.quality ?? 'hd',
       useReferenceFrame: video.useReferenceFrame ?? true,
+      noWatermark: video.noWatermark ?? true,
     }
   }
 
@@ -301,11 +379,13 @@ export class AiHost {
     // the provider animates YOUR art (character design + composition stay
     // consistent from board to clip). Falls back to text-only when absent.
     let imageB64: string | undefined
+    let imageMimeType: string | undefined
     if (videoProvider.useReferenceFrame && shot.frameAssetId) {
       try {
         const framePath = ctx.storyboard.assetAbsolutePath(shot.frameAssetId)
         const frameBytes = await import('node:fs').then((fs) => fs.readFileSync(framePath))
         imageB64 = frameBytes.toString('base64')
+        imageMimeType = framePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg'
       } catch (err) {
         this.deps.logger.warn('AI', `Reference frame unavailable: ${(err as Error).message}`)
       }
@@ -315,8 +395,8 @@ export class AiHost {
     // Build the Visual Consistency Lock for video generation too.
     // Build the Visual Consistency Lock for video generation too.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const consistencyLock: any = this.deps.visualConsistency
-      ? this.deps.visualConsistency.buildLock(
+    const consistencyLock: any = ctx.visualConsistency
+      ? ctx.visualConsistency.buildLock(
           ctx.summary.id,
           ctx.storyboard.getStyleBible(),
           sceneCharacters,
@@ -348,32 +428,65 @@ export class AiHost {
         consistencyLock,
         imageB64,
       }),
-      'MOTION: animate with the camera movement above, subtle natural motion, stable character design across all frames, 24fps, no text overlays, no scene cuts.',
+      'MOTION: animate with the camera movement above, subtle natural motion, stable character design across all frames, 24fps, no text overlays, no scene cuts, no watermark, no logo.',
     ].join('\n\n')
     progress(10)
-    const provider = new OpenAIVideoProvider({
-      apiKey: videoProvider.apiKey,
-      baseUrl: videoProvider.baseUrl,
-      fetchFn: globalFetch(),
-      timeoutMs: 300_000,
-    })
-    const result = await provider.generate({
-      model: videoProvider.model,
-      prompt,
-      seconds,
-      size: videoProvider.size,
-      fps: videoProvider.fps,
-      quality: videoProvider.quality,
-      ...(imageB64 !== undefined ? { imageB64 } : {}),
-      signal,
-    })
+    let result: { bytes: Buffer; mimeType: string; seconds: number; referenceUsed?: boolean }
+    if (videoProvider.protocol === 'pollinations') {
+      const provider = new PollinationsVideoProvider({
+        baseUrl: videoProvider.baseUrl,
+        apiKey: videoProvider.apiKey ?? undefined,
+        fetchFn: globalFetch(),
+        timeoutMs: 900_000,
+      })
+      const generated = await provider.generate({
+        model: videoProvider.model,
+        prompt,
+        seconds,
+        resolution: sizeToResolution(videoProvider.size),
+        ...(imageB64 !== undefined
+          ? { imageB64, imageMimeType: imageMimeType ?? 'image/jpeg', imageName: 'frame.jpg' }
+          : {}),
+        noWatermark: videoProvider.noWatermark,
+        signal,
+      })
+      result = { ...generated, seconds }
+    } else {
+      const provider = new OpenAIVideoProvider({
+        apiKey: videoProvider.apiKey!,
+        baseUrl: videoProvider.baseUrl,
+        fetchFn: globalFetch(),
+        timeoutMs: 300_000,
+      })
+      result = await provider.generate({
+        model: videoProvider.model,
+        prompt,
+        seconds,
+        size: videoProvider.size,
+        fps: videoProvider.fps,
+        quality: videoProvider.quality,
+        ...(imageB64 !== undefined ? { imageB64 } : {}),
+        signal,
+      })
+    }
     progress(80)
+    // The Pollinations video endpoint reads the start frame from a URL —
+    // a local frame must be uploaded first (it needs a key). Without a
+    // key the clip is text-to-video: the log must say it.
+    if (videoProvider.protocol === 'pollinations' && imageB64 !== undefined && !result.referenceUsed) {
+      this.deps.logger.warn(
+        'AI',
+        'Reference frame skipped: the Pollinations video endpoint needs the frame uploaded (a key is required) — the clip was generated from text only.',
+        { shotId },
+      )
+    }
     const asset = ctx.storyboard.registerGeneratedVideo(shotId, result.bytes, result.mimeType)
     this.deps.logger.log('info', 'AI', 'Video generated and attached', {
       shotId,
       assetId: asset.id,
       bytes: result.bytes.length,
       referenceFrame: imageB64 !== undefined,
+      referenceUsed: result.referenceUsed ?? false,
       fps: videoProvider.fps,
       quality: videoProvider.quality,
     })
@@ -446,6 +559,7 @@ export class AiHost {
       `You are the character designer of an anime studio. From the brief below, design the main cast (${options.scenesCount > 4 ? '3-4' : '2-3'} characters).\n\n${instruction}\n\nReturn JSON: { characters: [{ name, role (one of PROTAGONIST/DEUTERAGONIST/SUPPORTING/ANTAGONIST/CAMEO/OTHER), age (stated explicitly — e.g. "21"; ${mature ? 'ALL characters must be clearly adults (18+)' : 'age-appropriate to the story'}), appearance (visual, concrete — hair, eyes, build, signature outfit), personality, goals, voice (how they speak) }] }.`,
       CharacterPlanList,
       0.7,
+      6_144,
     )
     const existingNames = new Set(ctx.creative.listCharacters().map((c) => c.name.toLowerCase()))
     const createdCharacters: Array<{ id: string; name: string }> = []
@@ -560,6 +674,12 @@ export class AiHost {
               await this.generateFrame(shot.id, undefined, frameSignal, () => undefined)
               framesGenerated++
             } catch (err) {
+              // The provider's own diagnostics (status, vendor code, body)
+              // must reach the log — a bare message hides the cause.
+              this.deps.logger.warn('AI', `Frame generation failed: ${(err as Error).message}`, {
+                shotId: shot.id,
+                details: err instanceof MiraiError ? err.details : null,
+              })
               push('Keyframes', `Shot "${shot.title}" frame failed: ${(err as Error).message}`, false)
               break // provider issue — stop hammering, the story is still complete
             }
@@ -620,14 +740,12 @@ export class AiHost {
     const providerConfig = this.resolveChatProvider()
     const settings = this.deps.settings.get()
     const model = modelOverride ?? providerConfig.model
-    const provider = new OpenRouterProvider({
-      apiKey: providerConfig.apiKey,
-      baseUrl: providerConfig.baseUrl,
-      fetchFn: globalFetch(),
-      appName: 'Mirai Studio',
-      appUrl: 'https://mirai-studio.app',
-      timeoutMs: settings.ai.requestTimeoutMs,
-    })
+    // A structured generation (bible, cast, scenes, shots) makes a reasoning
+    // model think for minutes — it must not be cut by the chat timeout.
+    const provider = this.chatProvider(
+      providerConfig,
+      Math.max(settings.ai.requestTimeoutMs, STRUCTURED_CALL_TIMEOUT_MS),
+    )
     const startedAt = Date.now()
     const kind = 'chat'
     const usageDeps = this.deps.aiUsage
@@ -677,11 +795,14 @@ export class AiHost {
       throw new MiraiError(
         'AI_PROVIDER_ERROR',
         truncated
-          ? 'A resposta do modelo veio cortada (provável limite de tokens) — aumente o limite em Settings → IA ou use um modelo com contexto maior.'
+          ? 'A resposta do modelo veio cortada (provável limite de tokens) — aumentando o orçamento de tokens e tentando de novo.'
           : 'The model returned invalid JSON — try again.',
         {
           retryable: true,
-          details: { excerpt: raw.slice(0, 160) },
+          // `truncated` tells the retry loop to ask for a BIGGER budget:
+          // reasoning models spend part of max_tokens on thinking and get
+          // cut before the JSON closes.
+          details: { truncated, excerpt: raw.slice(0, 160) },
         },
       )
     }
@@ -696,9 +817,12 @@ export class AiHost {
   }
 
   /**
-   * Structured call with ONE automatic retry for transient provider errors
-   * (rate limits, overloads, truncated responses). The user should not have
-   * to click "analyze" twice because of a single 429.
+   * Structured call with an EXPONENTIAL BACKOFF for transient provider
+   * errors (rate limits, overloads, truncated responses).
+   *
+   * One retry after 1.5s was not enough: the free developer endpoints
+   * (NVIDIA NIM) answer a burst with 429 and need a few seconds to refill.
+   * The user should never have to click "analyze" twice because of a 429.
    */
   private async chatJsonCore<T>(
     instruction: string,
@@ -706,27 +830,43 @@ export class AiHost {
     temperature: number,
     maxTokensFloor = 2_048,
   ): Promise<T> {
-    try {
-      return await this.chatJsonAttempt(instruction, schema, temperature, maxTokensFloor)
-    } catch (err) {
-      if (err instanceof MiraiError && err.retryable) {
-        this.deps.logger.warn('AI', `Provider error (will retry once): ${err.message}`)
-        await new Promise((r) => setTimeout(r, 1_500))
-        try {
-          return await this.chatJsonAttempt(instruction, schema, temperature, maxTokensFloor)
-        } catch (retryErr) {
-          // FALLBACK CHAIN (v0.21, Phase 2): when a fallback model is
-          // configured, one last attempt rides it before giving up.
-          const fallback = this.deps.settings.get().ai.fallbackModel?.trim()
-          if (fallback && fallback.length > 0) {
-            this.deps.logger.warn('AI', `Primary model failed twice — falling back to ${fallback}`)
-            return this.chatJsonAttempt(instruction, schema, temperature, maxTokensFloor, fallback)
+    let lastError: unknown
+    // The budget grows when the answer was cut off: a reasoning model may
+    // spend half of max_tokens thinking and never close the JSON.
+    let tokenFloor = maxTokensFloor
+    for (let attempt = 0; attempt <= PROVIDER_RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        return await this.chatJsonAttempt(instruction, schema, temperature, tokenFloor)
+      } catch (err) {
+        lastError = err
+        const retryable = err instanceof MiraiError && err.retryable
+        if (!retryable || attempt === PROVIDER_RETRY_DELAYS_MS.length) break
+        const delay = PROVIDER_RETRY_DELAYS_MS[attempt]!
+        if (err instanceof MiraiError && errorFlag(err, 'truncated')) {
+          const grown = Math.min(tokenFloor * 2, MAX_STRUCTURED_TOKEN_FLOOR)
+          if (grown !== tokenFloor) {
+            tokenFloor = grown
+            this.deps.logger.warn(
+              'AI',
+              `The model ran out of room — retrying with a ${tokenFloor}-token budget.`,
+            )
           }
-          throw retryErr
         }
+        this.deps.logger.warn(
+          'AI',
+          `Provider error (retry ${attempt + 1}/${PROVIDER_RETRY_DELAYS_MS.length} in ${delay}ms): ${err.message}`,
+        )
+        await new Promise((r) => setTimeout(r, delay))
       }
-      throw err
     }
+    // FALLBACK CHAIN (v0.21, Phase 2): when a fallback model is configured,
+    // one last attempt rides it before giving up.
+    const fallback = this.deps.settings.get().ai.fallbackModel?.trim()
+    if (fallback && fallback.length > 0) {
+      this.deps.logger.warn('AI', `Primary model failed — falling back to ${fallback}`)
+      return this.chatJsonAttempt(instruction, schema, temperature, maxTokensFloor, fallback)
+    }
+    throw lastError
   }
 
   private async chatJson<T>(
@@ -923,14 +1063,7 @@ export class AiHost {
       // ---- stream ------------------------------------------------------------
       const controller = new AbortController()
       this.active.set(requestId, controller)
-      const provider = new OpenRouterProvider({
-        apiKey: providerConfig.apiKey,
-        baseUrl: providerConfig.baseUrl,
-        fetchFn: globalFetch(),
-        appName: 'Mirai Studio',
-        appUrl: 'https://mirai-studio.app',
-        timeoutMs: settings.ai.requestTimeoutMs,
-      })
+      const provider = this.chatProvider(providerConfig)
 
       let content = ''
       let usage: { promptTokens: number; completionTokens: number } | null = null
@@ -1042,14 +1175,7 @@ export class AiHost {
 
     const providerConfig = this.resolveChatProvider()
     const settings = this.deps.settings.get()
-    const provider = new OpenRouterProvider({
-      apiKey: providerConfig.apiKey,
-      baseUrl: providerConfig.baseUrl,
-      fetchFn: globalFetch(),
-      appName: 'Mirai Studio',
-      appUrl: 'https://mirai-studio.app',
-      timeoutMs: settings.ai.requestTimeoutMs,
-    })
+    const provider = this.chatProvider(providerConfig)
     const result = await provider.chat({
       model: providerConfig.model,
       temperature: 0.8,
@@ -1219,12 +1345,35 @@ export class AiHost {
 
   // --------------------------------------------- AI voice acting (v0.30 §40)
 
-  resolveTtsProvider(): { apiKey: string; baseUrl: string; model: string; defaultVoice?: string } | null {
+  /**
+   * Voice provider — protocol aware.
+   *
+   * `openai`           → POST {baseUrl}/audio/speech (needs a key).
+   * `google-translate` → the keyless speech endpoint (one voice per locale).
+   */
+  resolveTtsProvider(): {
+    protocol: 'openai' | 'google-translate'
+    apiKey: string | null
+    baseUrl: string
+    model: string
+    defaultVoice?: string
+  } | null {
     const settings = this.deps.settings.get()
-    const apiKey = this.deps.credentials.get('tts')
     const tts = settings.ai.tts
+    const protocol = tts.protocol ?? 'openai'
+    if (protocol === 'google-translate') {
+      return {
+        protocol,
+        apiKey: null,
+        baseUrl: tts.baseUrl || 'https://translate.google.com',
+        model: tts.model || 'google-translate',
+        defaultVoice: tts.voice || 'pt-BR',
+      }
+    }
+    const apiKey = this.deps.credentials.get('tts')
     if (!apiKey || !tts?.baseUrl || !tts.model) return null
     return {
+      protocol,
       apiKey,
       baseUrl: tts.baseUrl,
       model: tts.model,
@@ -1282,12 +1431,23 @@ export class AiHost {
       voices.set(segment.key, voice)
     }
 
-    const tts = new OpenAITtsProvider({
-      apiKey: provider.apiKey,
-      baseUrl: provider.baseUrl,
-      fetchFn: globalFetch(),
-      timeoutMs: this.deps.settings.get().ai.requestTimeoutMs,
-    })
+    const tts =
+      provider.protocol === 'google-translate'
+        ? null
+        : new OpenAITtsProvider({
+            apiKey: provider.apiKey!,
+            baseUrl: provider.baseUrl,
+            fetchFn: globalFetch(),
+            timeoutMs: this.deps.settings.get().ai.requestTimeoutMs,
+          })
+    const googleTts =
+      provider.protocol === 'google-translate'
+        ? new GoogleTranslateTtsProvider({
+            baseUrl: provider.baseUrl,
+            fetchFn: globalFetch(),
+            timeoutMs: this.deps.settings.get().ai.requestTimeoutMs,
+          })
+        : null
 
     // one call per DISTINCT voice (segments of the same voice merge)
     const mergedByVoice = new Map<string, string>()
@@ -1304,8 +1464,16 @@ export class AiHost {
 
     const results: Array<{ voice: string; bytes: Buffer; mime: string }> = []
     for (const [voice, input] of mergedByVoice) {
-      const result = await tts.speak({ model: provider.model, input, voice, responseFormat: 'wav', signal })
-      results.push({ voice, bytes: result.bytes, mime: result.mimeType })
+      if (googleTts) {
+        // The keyless engine speaks one voice per locale; the voice id
+        // carries the locale (and an optional speed marker).
+        const { lang, speed } = parseGoogleVoice(voice)
+        const result = await googleTts.speak({ lang, text: input, speed, signal })
+        results.push({ voice, bytes: result.bytes, mime: result.mimeType })
+      } else {
+        const result = await tts!.speak({ model: provider.model, input, voice, responseFormat: 'wav', signal })
+        results.push({ voice, bytes: result.bytes, mime: result.mimeType })
+      }
     }
 
     let finalBytes = results[0]!.bytes
@@ -1314,6 +1482,10 @@ export class AiHost {
     if (results.length > 1) {
       // MULTIPLE VOICES: concatenate the clips with the bundled FFmpeg —
       // the same binary the renderer uses, no new dependency.
+      //
+      // The files keep their REAL container: a provider that returns MP3
+      // (the keyless engine does) must not be written as ".wav", or the
+      // concat demuxer would fail to detect the stream.
       const { ffmpegBin } = await import('@mirai/core')
       const { spawnSync } = await import('node:child_process')
       const os = await import('node:os')
@@ -1321,13 +1493,23 @@ export class AiHost {
       const path = await import('node:path')
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mirai-voice-'))
       try {
+        const extension = audioExtension(results[0]!.mime)
+        if (results.some((r) => audioExtension(r.mime) !== extension)) {
+          throw new MiraiError(
+            'AI_PROVIDER_ERROR',
+            'The voice provider returned clips in different formats — they cannot be joined.',
+            { retryable: false },
+          )
+        }
         const listPath = path.join(tmpDir, 'list.txt')
         fs.writeFileSync(
           listPath,
-          results.map((_, i) => `file 'clip${i}.wav'`).join('\n'),
+          results.map((_, i) => `file 'clip${i}.${extension}'`).join('\n'),
         )
-        results.forEach((r, i) => fs.writeFileSync(path.join(tmpDir, `clip${i}.wav`), r.bytes))
-        const outPath = path.join(tmpDir, 'joined.wav')
+        results.forEach((r, i) =>
+          fs.writeFileSync(path.join(tmpDir, `clip${i}.${extension}`), r.bytes),
+        )
+        const outPath = path.join(tmpDir, `joined.${extension}`)
         const proc = spawnSync(
           ffmpegBin(),
           ['-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', outPath],
@@ -1369,7 +1551,7 @@ export class AiHost {
     if (!imageProvider) {
       throw new MiraiError(
         'CREDENTIALS_UNAVAILABLE',
-        'No image provider configured — set baseUrl, model and key in Settings → Providers.',
+        'No image provider configured — pick one in the AI Marketplace (or set baseUrl and model in Settings → Providers).',
       )
     }
     const character = ctx.creative.getCharacter(characterId)
@@ -1395,18 +1577,34 @@ export class AiHost {
       .filter(Boolean)
       .join('\n')
 
-    const { OpenAIImagesProvider } = await import('@mirai/ai')
-    const provider = new OpenAIImagesProvider({
-      apiKey: imageProvider.apiKey,
-      baseUrl: imageProvider.baseUrl,
-      fetchFn: globalFetch(),
-      timeoutMs: this.deps.settings.get().ai.requestTimeoutMs,
-    })
-    const result = await provider.generate({
-      model: imageProvider.model,
-      prompt,
-      size: '768x1344',
-    })
+    let result: { bytes: Buffer; mimeType: string }
+    if (imageProvider.protocol === 'pollinations') {
+      const provider = new PollinationsImagesProvider({
+        baseUrl: imageProvider.baseUrl,
+        fetchFn: globalFetch(),
+        timeoutMs: this.deps.settings.get().ai.requestTimeoutMs,
+      })
+      result = await provider.generate({
+        model: imageProvider.model,
+        prompt,
+        width: 768,
+        height: 1344,
+        noWatermark: imageProvider.noWatermark,
+      })
+    } else {
+      const { OpenAIImagesProvider } = await import('@mirai/ai')
+      const provider = new OpenAIImagesProvider({
+        apiKey: imageProvider.apiKey!,
+        baseUrl: imageProvider.baseUrl,
+        fetchFn: globalFetch(),
+        timeoutMs: this.deps.settings.get().ai.requestTimeoutMs,
+      })
+      result = await provider.generate({
+        model: imageProvider.model,
+        prompt,
+        size: '768x1344',
+      })
+    }
     const asset = ctx.sheets.registerSheet(characterId, result.bytes, result.mimeType, `sheet-${character.name.replace(/\s+/g, '-')}`)
     this.deps.logger.log('info', 'AI', 'Character reference sheet generated', {
       characterId,
@@ -1574,7 +1772,7 @@ export class AiHost {
     if (!imageProvider) {
       throw new MiraiError(
         'CREDENTIALS_UNAVAILABLE',
-        'No image provider configured — set baseUrl, model and key in Settings → Providers.',
+        'No image provider configured — pick one in the AI Marketplace (or set baseUrl and model in Settings → Providers).',
       )
     }
 
@@ -1598,8 +1796,8 @@ export class AiHost {
     // Build the Visual Consistency Lock from Style Bible + model sheets
     // + moodboard palette. Every generation must honor it.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const consistencyLock: any = this.deps.visualConsistency
-      ? this.deps.visualConsistency.buildLock(
+    const consistencyLock: any = ctx.visualConsistency
+      ? ctx.visualConsistency.buildLock(
           ctx.summary.id,
           styleBible,
           sceneCharacters,
@@ -1607,7 +1805,7 @@ export class AiHost {
         )
       : null
     // Persist the lock so it survives across sessions.
-    this.deps.visualConsistency?.saveLock(consistencyLock)
+    ctx.visualConsistency?.saveLock(consistencyLock)
 
     // IMAGE-TO-IMAGE: if the shot already has a frame, use it as the reference
     // so new generations keep the same character design locked from board to clip.
@@ -1651,27 +1849,45 @@ export class AiHost {
     }
 
     progress(20)
-    const provider = new OpenAIImagesProvider({
-      apiKey: imageProvider.apiKey,
-      baseUrl: imageProvider.baseUrl,
-      fetchFn: globalFetch(),
-      timeoutMs: 240_000,
-    })
-    const result = await provider.generate({
-      model: imageProvider.model,
-      prompt,
-      size: imageProvider.size,
-      signal,
-      imageB64,
-    })
+    let result: { bytes: Buffer; mimeType: string; watermarked?: boolean }
+    if (imageProvider.protocol === 'pollinations') {
+      const provider = new PollinationsImagesProvider({
+        baseUrl: imageProvider.baseUrl,
+        fetchFn: globalFetch(),
+        timeoutMs: 240_000,
+      })
+      const { width, height } = parseSize(imageProvider.size)
+      result = await provider.generate({
+        model: imageProvider.model,
+        prompt,
+        width,
+        height,
+        noWatermark: imageProvider.noWatermark,
+        signal,
+      })
+    } else {
+      const provider = new OpenAIImagesProvider({
+        apiKey: imageProvider.apiKey!,
+        baseUrl: imageProvider.baseUrl,
+        fetchFn: globalFetch(),
+        timeoutMs: 240_000,
+      })
+      result = await provider.generate({
+        model: imageProvider.model,
+        prompt,
+        size: imageProvider.size,
+        signal,
+        imageB64,
+      })
+    }
     progress(80)
 
     const asset = ctx.storyboard.registerGeneratedFrame(shotId, result.bytes, result.mimeType)
     progress(100)
 
     // Consistency check: does the generated prompt honor the lock?
-    if (consistencyLock && this.deps.visualConsistency) {
-      const check = this.deps.visualConsistency.checkConsistency(
+    if (consistencyLock && ctx.visualConsistency) {
+      const check = ctx.visualConsistency.checkConsistency(
         consistencyLock,
         asset.id,
         prompt,
@@ -1692,8 +1908,10 @@ export class AiHost {
       assetId: asset.id,
       bytes: asset.bytes,
       model: imageProvider.model,
+      // The vendor told us it stamped its logo — the log must say it too.
+      watermarked: result.watermarked ?? false,
       consistencyScore: consistencyLock
-        ? this.deps.visualConsistency!.checkConsistency(
+        ? ctx.visualConsistency.checkConsistency(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             consistencyLock as any,
             asset.id,
@@ -2110,6 +2328,40 @@ const zDossierLists = {
       : { success: false as const, error: { issues: [{ message: 'Expected riskRegister/roadmap/improvements string arrays.', path: [] }] } }
   },
 } satisfies { safeParse: (v: unknown) => { success: true; data: { riskRegister: string[]; roadmap: string[]; improvements: string[] } } | { success: false; error: { issues: Array<{ message: string; path: (string | number)[] }> } } }
+
+/** Reads a boolean flag from an error's free-form details. */
+function errorFlag(err: MiraiError, key: string): boolean {
+  const details = err.details
+  if (!details || typeof details !== 'object') return false
+  return (details as Record<string, unknown>)[key] === true
+}
+
+/** The file extension of an audio mime type (for the FFmpeg concat). */
+function audioExtension(mime: string): string {
+  if (mime.includes('mpeg') || mime.includes('mp3')) return 'mp3'
+  if (mime.includes('wav') || mime.includes('x-wav')) return 'wav'
+  if (mime.includes('ogg')) return 'ogg'
+  if (mime.includes('mp4') || mime.includes('aac')) return 'm4a'
+  if (mime.includes('flac')) return 'flac'
+  return 'bin'
+}
+
+/** '1344x768' → { width: 1344, height: 768 } (fallback: 16:9). */
+function parseSize(size: string): { width: number; height: number } {
+  const match = /^(\d{2,5})x(\d{2,5})$/.exec(size.trim())
+  if (!match) return { width: 1344, height: 768 }
+  return { width: Number(match[1]), height: Number(match[2]) }
+}
+
+/** '1920x1080' → '1080p' (the resolution tier the media vendors publish). */
+function sizeToResolution(size: string): string {
+  const { height } = parseSize(size)
+  if (height >= 2160) return '4k'
+  if (height >= 1440) return '2k'
+  if (height >= 1080) return '1080p'
+  if (height >= 720) return '720p'
+  return '480p'
+}
 
 /** The real network transport, bound once (Electron main has global fetch). */
 function globalFetch() {

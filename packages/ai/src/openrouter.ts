@@ -29,6 +29,16 @@ export interface OpenRouterOptions {
   appUrl?: string
   /** Overall request timeout in ms; 0 disables. */
   timeoutMs?: number
+  /**
+   * Ask the endpoint to include the token usage in the answer
+   * (`include_usage: true`).
+   *
+   * This is an OPENROUTER extension: other OpenAI-compatible endpoints
+   * (NVIDIA NIM, self-hosted servers) reject unknown fields with
+   * HTTP 400 "Unsupported parameter(s): include_usage". Default: true
+   * (OpenRouter), but the host turns it off for other vendors.
+   */
+  includeUsage?: boolean
 }
 
 const CAPABILITIES: ProviderCapabilities = {
@@ -39,13 +49,22 @@ const CAPABILITIES: ProviderCapabilities = {
 }
 
 interface ChatCompletionResponse {
-  choices?: Array<{ message?: { content?: string } }>
+  choices?: Array<{
+    message?: {
+      content?: string | null
+      /**
+       * Reasoning models (NVIDIA NIM hosts minimax, GLM and DeepSeek) can
+       * answer with the text in `reasoning_content` and a null `content`.
+       */
+      reasoning_content?: string | null
+    }
+  }>
   usage?: { prompt_tokens?: number; completion_tokens?: number }
   error?: { message?: string; code?: number }
 }
 
 interface StreamCompletionChunk {
-  choices?: Array<{ delta?: { content?: string } }>
+  choices?: Array<{ delta?: { content?: string | null; reasoning_content?: string | null } }>
   usage?: { prompt_tokens?: number; completion_tokens?: number }
 }
 
@@ -76,7 +95,7 @@ export class OpenRouterProvider implements AIProvider {
         stream: false,
         temperature: options.temperature,
         max_tokens: options.maxTokens,
-        include_usage: true,
+        ...(this.opts.includeUsage === false ? {} : { include_usage: true }),
       },
       options.signal,
     )
@@ -96,7 +115,12 @@ export class OpenRouterProvider implements AIProvider {
         status === 429 || status >= 500 || (msg?.length ?? 0) === 0,
       )
     }
-    const content = payload.choices?.[0]?.message?.content ?? ''
+    // The text lives in `content` — EXCEPT on reasoning models, which can
+    // answer with `content: null` and the real text in `reasoning_content`.
+    // Reading only `content` made those answers look empty (and the JSON
+    // validation failed with a misleading "invalid JSON" error).
+    const message = payload.choices?.[0]?.message
+    const content = firstText(message?.content, message?.reasoning_content)
     return {
       content,
       usage: normalizeUsage(payload.usage),
@@ -115,7 +139,7 @@ export class OpenRouterProvider implements AIProvider {
         stream: true,
         temperature: options.temperature,
         max_tokens: options.maxTokens,
-        include_usage: true,
+        ...(this.opts.includeUsage === false ? {} : { include_usage: true }),
       },
       options.signal,
     )
@@ -132,7 +156,8 @@ export class OpenRouterProvider implements AIProvider {
       } catch {
         continue // ignore keep-alives / malformed lines
       }
-      const delta = chunk.choices?.[0]?.delta?.content ?? ''
+      const rawDelta = chunk.choices?.[0]?.delta
+      const delta = firstText(rawDelta?.content, rawDelta?.reasoning_content)
       const usage = normalizeUsage(chunk.usage)
       if (delta.length > 0 || usage) {
         yield { delta, usage }
@@ -263,6 +288,20 @@ function friendlyStatusMessage(status: number, providerMessage: string | null): 
 
 function providerErrorFromMessage(message: string, retryable: boolean): MiraiError {
   return new MiraiError('AI_PROVIDER_ERROR', message, { retryable })
+}
+
+/**
+ * The first non-empty text among the candidates.
+ *
+ * Reasoning models answer with `content: null` and the real text in
+ * `reasoning_content`; a plain `??` chain would keep the null and lose the
+ * answer, so emptiness is checked explicitly.
+ */
+function firstText(...candidates: Array<string | null | undefined>): string {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) return candidate
+  }
+  return ''
 }
 
 function parsePrice(value: string | undefined): number | null {

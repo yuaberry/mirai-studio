@@ -29,6 +29,7 @@ import {
   Puzzle,
   Settings,
   Sparkles,
+  Store,
   Users,
   Network,
   Wand2,
@@ -70,6 +71,7 @@ import { LocalizationPage } from '../modules/localization/LocalizationPage'
 import { ImpactPage } from '../modules/ip/ImpactPage'
 import { WorkflowsPage } from '../modules/workflows/WorkflowsPage'
 import { PluginsPage } from '../modules/plugins/PluginsPage'
+import { MarketplacePage } from '../modules/marketplace/MarketplacePage'
 import { ProducerPage } from '../modules/producer/ProducerPage'
 import { StatusBar } from './StatusBar'
 import { CommandPalette } from './CommandPalette'
@@ -84,6 +86,7 @@ interface NavEntry {
 
 const APP_NAV: ReadonlyArray<NavEntry> = [
   { view: 'hub', label: 'Project Hub', icon: Home },
+  { view: 'marketplace', label: 'AI Marketplace', icon: Store },
   { view: 'settings', label: 'Settings', icon: Settings },
   { view: 'diagnostics', label: 'Diagnostics', icon: Activity },
 ]
@@ -405,6 +408,7 @@ export function AppShell() {
           {view === 'assist' && <AIAssistPage />}
           {view === 'jobs' && <JobsPage />}
           {view === 'backups' && <BackupsPage />}
+          {view === 'marketplace' && <MarketplacePage />}
           {view === 'settings' && <SettingsPage />}
           {view === 'diagnostics' && <DiagnosticsPage />}
         </main>

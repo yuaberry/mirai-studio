@@ -4,7 +4,7 @@
  */
 import { clipboard, dialog, shell } from 'electron'
 import { createHash } from 'node:crypto'
-import { MiraiError, type ProjectConfig, validateTransition } from '@mirai/shared'
+import { MiraiError, MARKETPLACE_PROVIDERS, type ProjectConfig, validateTransition } from '@mirai/shared'
 import { handleIpc } from './router'
 import { toOpenedProject, type Container } from '../bootstrap'
 import { readdirSync } from 'node:fs'
@@ -72,6 +72,16 @@ export function registerIpcHandlers(c: Container): void {
   handleIpc('projects:removeFromList', (req) => {
     c.projects.removeFromList(req.id)
     return { ok: true }
+  })
+
+  /**
+   * DELETES THE PROJECT FOREVER — folder, database, assets, exports (the
+   * dossier included), backups and the registry entry.
+   */
+  handleIpc('projects:delete', async (req) => {
+    const result = await c.projects.deleteProject(req.id)
+    c.logger.warn('PROJECT', `Project deleted permanently: ${req.id}`, result)
+    return result
   })
 
   handleIpc('projects:revealInFolder', (req) => {
@@ -1511,6 +1521,134 @@ export function registerIpcHandlers(c: Container): void {
 
   handleIpc('settings:update', (req) => ({ settings: c.settings.patch(req.settings) }))
 
+  // -------------------------------------------------------------- marketplace
+  handleIpc('marketplace:catalog', async () => {
+    try {
+      return await c.marketplace.catalog()
+    } catch (err) {
+      c.logger.warn('AI', 'Marketplace catalog failed', {
+        message: err instanceof Error ? err.message : String(err),
+      })
+      throw err
+    }
+  })
+
+  handleIpc('marketplace:apply', (req) => {
+    // 'active-chat' is the pseudo-provider of the LIVE chat catalog: those
+    // models belong to whichever chat provider is configured right now.
+    if (req.providerId === 'active-chat') {
+      const ai = c.settings.get().ai
+      const model = req.model
+      if (!model) {
+        throw new MiraiError('VALIDATION_ERROR', 'Pick a model to apply.')
+      }
+      if (ai.chatProvider === 'nvidia') {
+        c.settings.patch({
+          ai: { ...ai, nvidia: { ...ai.nvidia, model } },
+        })
+      } else {
+        c.settings.patch({ ai: { ...ai, defaultModel: model } })
+      }
+      const chatKey = ai.chatProvider === 'nvidia' ? 'nvidia' : 'openrouter'
+      const hasChatKey = c.credentials.get(chatKey) !== null
+      c.logger.info('AI', `Marketplace model applied: ${model}`, { provider: chatKey })
+      return {
+        applied: true,
+        needsManualSetup: false,
+        requiresKey: !hasChatKey,
+        credentialKey: hasChatKey ? null : chatKey,
+        message: hasChatKey
+          ? `Model applied: ${model}.`
+          : `Model applied: ${model} — add the ${chatKey === 'nvidia' ? 'NVIDIA' : 'OpenRouter'} key to start generating.`,
+      }
+    }
+
+    const provider = MARKETPLACE_PROVIDERS.find((p) => p.id === req.providerId)
+    if (!provider) {
+      throw new MiraiError('NOT_FOUND', `Unknown provider: ${req.providerId}`)
+    }
+    // "Bring your own" cards have no base URL: we still switch the protocol
+    // and tell the user exactly what is left to type.
+    const manual = provider.baseUrl.trim().length === 0
+    // A model picked in the LIVE catalog wins over the card's suggestion.
+    const model = req.model ?? provider.model
+
+    if (provider.capability === 'chat') {
+      if (provider.id === 'nvidia-chat') {
+        c.settings.patch({
+          ai: {
+            ...c.settings.get().ai,
+            chatProvider: 'nvidia',
+            nvidia: { baseUrl: provider.baseUrl, model: model ?? '' },
+          },
+        })
+      } else {
+        c.settings.patch({
+          ai: {
+            ...c.settings.get().ai,
+            chatProvider: 'openrouter',
+            ...(model ? { defaultModel: model } : {}),
+          },
+        })
+      }
+    } else if (provider.capability === 'image') {
+      const current = c.settings.get().ai.image
+      c.settings.patch({
+        ai: {
+          ...c.settings.get().ai,
+          image: {
+            ...current,
+            protocol: provider.protocol === 'pollinations' ? 'pollinations' : 'openai',
+            ...(manual ? {} : { baseUrl: provider.baseUrl, model: model ?? current.model }),
+          },
+        },
+      })
+    } else if (provider.capability === 'video') {
+      const current = c.settings.get().ai.video
+      c.settings.patch({
+        ai: {
+          ...c.settings.get().ai,
+          video: {
+            ...current,
+            protocol: provider.protocol === 'pollinations' ? 'pollinations' : 'openai',
+            ...(manual ? {} : { baseUrl: provider.baseUrl, model: model ?? current.model }),
+          },
+        },
+      })
+    } else {
+      const current = c.settings.get().ai.tts
+      c.settings.patch({
+        ai: {
+          ...c.settings.get().ai,
+          tts: {
+            ...current,
+            protocol: provider.protocol === 'google-translate' ? 'google-translate' : 'openai',
+            ...(manual ? {} : { baseUrl: provider.baseUrl, model: model ?? current.model }),
+          },
+        },
+      })
+    }
+
+    const hasKey = provider.credentialKey ? c.credentials.get(provider.credentialKey) !== null : true
+    c.logger.info('AI', `Marketplace provider applied: ${provider.id}`, {
+      capability: provider.capability,
+      model: model ?? null,
+      manual,
+      hasKey,
+    })
+    return {
+      applied: !manual,
+      needsManualSetup: manual,
+      requiresKey: provider.requiresKey && !hasKey,
+      credentialKey: provider.credentialKey ?? null,
+      message: manual
+        ? 'Protocol selected — paste the base URL and the model in Settings → Providers.'
+        : provider.requiresKey && !hasKey
+          ? `Provider selected — add the API key in Settings → Providers (or right here) to start generating.`
+          : `Provider selected: ${provider.name}${model ? ` (${model})` : ''}.`,
+    }
+  })
+
   // -------------------------------------------------------------- credentials
   handleIpc('credentials:set', (req) => {
     // The value NEVER gets logged or pushed back to the renderer.
@@ -1731,13 +1869,13 @@ export function registerIpcHandlers(c: Container): void {
     const styleBible = ctx.storyboard.getStyleBible()
     const characters = ctx.creative.listCharacters()
     const moodboardPalette = ctx.moodboard.palette()
-    const lock = c.visualConsistency.buildLock(
+    const lock = ctx.visualConsistency.buildLock(
       ctx.summary.id,
       styleBible,
       characters,
       moodboardPalette,
     )
-    c.visualConsistency.saveLock(lock)
+    ctx.visualConsistency.saveLock(lock)
     return { lock }
   })
 
@@ -1746,13 +1884,13 @@ export function registerIpcHandlers(c: Container): void {
     const styleBible = ctx.storyboard.getStyleBible()
     const characters = ctx.creative.listCharacters()
     const moodboardPalette = ctx.moodboard.palette()
-    const lock = c.visualConsistency.buildLock(
+    const lock = ctx.visualConsistency.buildLock(
       ctx.summary.id,
       styleBible,
       characters,
       moodboardPalette,
     )
-    const check = c.visualConsistency.checkConsistency(
+    const check = ctx.visualConsistency.checkConsistency(
       lock,
       req.frameAssetId,
       req.generationPrompt,

@@ -187,6 +187,120 @@ describe('OpenRouterProvider.stream', () => {
   })
 })
 
+describe('OpenRouterProvider — vendor quirks found in production', () => {
+  it('omits include_usage when the vendor does not support it (NVIDIA NIM: HTTP 400)', async () => {
+    const { provider, calls } = providerWith(
+      () =>
+        new FakeResponse({
+          json: { choices: [{ message: { content: 'ok' } }] },
+        }),
+      { includeUsage: false },
+    )
+
+    await provider.chat({
+      model: 'minimaxai/minimax-m3.1-flash',
+      temperature: 0.5,
+      maxTokens: 256,
+      messages: [{ role: 'user', content: 'hi' }],
+    })
+
+    const body = JSON.parse(calls[0]!.init.body ?? '{}') as Record<string, unknown>
+    // `include_usage` is an OPENROUTER extension — other OpenAI-compatible
+    // endpoints reject unknown fields with "Unsupported parameter(s)".
+    expect(body).not.toHaveProperty('include_usage')
+    expect(body['model']).toBe('minimaxai/minimax-m3.1-flash')
+  })
+
+  it('keeps include_usage for OpenRouter itself', async () => {
+    const { provider, calls } = providerWith(
+      () => new FakeResponse({ json: { choices: [{ message: { content: 'ok' } }] } }),
+      { includeUsage: true },
+    )
+
+    await provider.chat({
+      model: 'm',
+      temperature: 0.5,
+      maxTokens: 256,
+      messages: [{ role: 'user', content: 'hi' }],
+    })
+
+    const body = JSON.parse(calls[0]!.init.body ?? '{}') as Record<string, unknown>
+    expect(body['include_usage']).toBe(true)
+  })
+
+  it('reads the answer from reasoning_content when content is null', async () => {
+    const { provider } = providerWith(
+      () =>
+        new FakeResponse({
+          json: {
+            choices: [
+              {
+                message: {
+                  content: null,
+                  // Reasoning models answer here — the app must not see an
+                  // empty answer and report "invalid JSON".
+                  reasoning_content: '{"premise":"A duel at the festival."}',
+                },
+              },
+            ],
+          },
+        }),
+    )
+
+    const result = await provider.chat({
+      model: 'reasoning/model',
+      temperature: 0.5,
+      maxTokens: 256,
+      messages: [{ role: 'user', content: 'json please' }],
+    })
+
+    expect(result.content).toBe('{"premise":"A duel at the festival."}')
+  })
+
+  it('falls back to reasoning_content in the stream too', async () => {
+    const { provider } = providerWith(
+      () =>
+        new FakeResponse({
+          sse: [
+            'data: {"choices":[{"delta":{"content":null,"reasoning_content":"Hello "}}]}',
+            'data: {"choices":[{"delta":{"reasoning_content":"world"}}]}',
+            'data: [DONE]',
+          ],
+        }),
+    )
+
+    let text = ''
+    for await (const chunk of provider.stream({
+      model: 'reasoning/model',
+      messages: [{ role: 'user', content: 'greet' }],
+    })) {
+      text += chunk.delta
+    }
+
+    expect(text).toBe('Hello world')
+  })
+
+  it('ignores an empty content and keeps the non-empty one', async () => {
+    const { provider } = providerWith(
+      () =>
+        new FakeResponse({
+          json: {
+            choices: [{ message: { content: '', reasoning_content: 'the real answer' } }],
+          },
+        }),
+    )
+
+    const result = await provider.chat({
+      model: 'm',
+      temperature: 0.5,
+      maxTokens: 64,
+      messages: [{ role: 'user', content: 'x' }],
+    })
+
+    expect(result.content).toBe('the real answer')
+  })
+})
+
 describe('OpenRouterProvider.listModels', () => {
   it('maps the public catalog, flagging free models and per-token prices', async () => {
     const { provider, calls } = providerWith(

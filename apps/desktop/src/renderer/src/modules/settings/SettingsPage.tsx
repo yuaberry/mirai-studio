@@ -252,7 +252,7 @@ function ProvidersCard() {
   const [openrouterKey, setOpenrouterKey] = useState('')
   const [nvidiaKey, setNvidiaKey] = useState('')
   const [imageKey, setImageKey] = useState('')
-  const [nvidiaModel, setNvidiaModel] = useState(settings?.ai.nvidia.model ?? 'nvidia/z-ai/glm-5.3')
+  const [nvidiaModel, setNvidiaModel] = useState(settings?.ai.nvidia.model ?? 'z-ai/glm-5.3-flash')
   const [imageBaseUrl, setImageBaseUrl] = useState(settings?.ai.image.baseUrl ?? '')
   const [imageModel, setImageModel] = useState(settings?.ai.image.model ?? '')
   const [imageSize, setImageSize] = useState(settings?.ai.image.size ?? '1344x768')
@@ -495,7 +495,7 @@ function ProvidersCard() {
                   className="h-8 text-xs"
                   value={nvidiaModel}
                   onChange={(e) => setNvidiaModel(e.target.value)}
-                  placeholder="nvidia/z-ai/glm-5.3"
+                  placeholder="z-ai/glm-5.3-flash"
                 />
                 <Button
                   size="sm"

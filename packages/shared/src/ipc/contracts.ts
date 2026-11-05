@@ -11,6 +11,7 @@ import { zEntityId, zIsoDate } from '../ids'
 import { zTaskStatus } from '../status'
 import { type ErrorPayload } from '../errors'
 import { AppSettings, AppSettingsPatch, zCredentialKey } from '../entities/settings'
+import { MarketplaceCatalog } from '../entities/marketplace'
 import { JobRecord } from '../entities/job'
 import { LogEntry } from '../entities/log'
 import type {
@@ -225,6 +226,19 @@ export const ipcContracts = {
   'projects:removeFromList': {
     request: z.object({ id: zEntityId }),
     response: z.object({ ok: z.boolean() }),
+  },
+  /**
+   * DELETES THE PROJECT FOREVER: folder, database, assets, exports (the
+   * dossier included), backups and the registry entry. `removeFromList`
+   * only forgets the project; this one removes every byte.
+   */
+  'projects:delete': {
+    request: z.object({ id: zEntityId }),
+    response: z.object({
+      path: z.string(),
+      files: z.number().int().nonnegative(),
+      bytes: z.number().int().nonnegative(),
+    }),
   },
   'projects:revealInFolder': {
     request: z.object({ id: zEntityId }),
@@ -851,6 +865,34 @@ export const ipcContracts = {
     response: z.object({
       models: z.array(AiModelInfo),
       cached: z.boolean(),
+    }),
+  },
+  /**
+   * The AI Marketplace catalog: curated provider cards + the LIVE model
+   * list read from the vendors' own public catalogs.
+   */
+  'marketplace:catalog': {
+    request: emptyRequest,
+    response: MarketplaceCatalog,
+  },
+  /**
+   * Applies a provider card to the settings (real write). When the card
+   * needs a base URL the user must type, the answer says so instead of
+   * pretending the provider was configured.
+   */
+  'marketplace:apply': {
+    request: z.object({
+      providerId: z.string().min(1),
+      /** Optional model id from the live catalog — applied to the same slot. */
+      model: z.string().min(1).optional(),
+    }),
+    response: z.object({
+      applied: z.boolean(),
+      needsManualSetup: z.boolean(),
+      requiresKey: z.boolean(),
+      /** Which credential slot the key belongs to. */
+      credentialKey: z.enum(['openrouter', 'nvidia', 'image', 'videogen', 'tts']).nullable(),
+      message: z.string(),
     }),
   },
   /**

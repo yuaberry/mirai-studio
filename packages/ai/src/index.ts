@@ -24,6 +24,7 @@ export type {
   FetchLike,
   FetchInit,
   FetchResponse,
+  FetchHeaders,
 } from './types'
 
 /** Estimate the USD cost of a completed request from catalog prices. */
@@ -51,3 +52,21 @@ export type { ConsistencyData, ConsistencyScene, ConsistencyShot } from './consi
 // ------------------------------------------------------- video generation
 export { OpenAIVideoProvider } from './video'
 export type { VideoOptions, VideoResult } from './video'
+
+// ------------------------------------------------- pollinations (REST)
+export {
+  PollinationsImagesProvider,
+  PollinationsVideoProvider,
+  normalizePrompt,
+  POLLINATIONS_IMAGE_BASE_URL,
+  POLLINATIONS_MEDIA_BASE_URL,
+} from './pollinations'
+export type {
+  PollinationsImageOptions,
+  PollinationsVideoOptions,
+  PollinationsMediaResult,
+} from './pollinations'
+
+// --------------------------------------------- google translate (keyless)
+export { GoogleTranslateTtsProvider, parseGoogleVoice, splitText } from './googleTts'
+export type { GoogleTtsOptions, GoogleTtsResult } from './googleTts'

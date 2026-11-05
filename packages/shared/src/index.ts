@@ -196,6 +196,14 @@ export type { PromptCategory } from './entities/prompt'
 
 export { AppSettings, AppSettingsPatch, DEFAULT_APP_SETTINGS, CREDENTIAL_KEYS, zCredentialKey } from './entities/settings'
 export {
+  AiCapability,
+  ProviderProtocol,
+  MarketplaceProvider,
+  MarketplaceModel,
+  MarketplaceCatalog,
+  MARKETPLACE_PROVIDERS,
+} from './entities/marketplace'
+export {
   VideoGenResult,
   ScreenplayAnalysis,
   DirectorNotes,
