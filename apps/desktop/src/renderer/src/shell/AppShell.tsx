@@ -60,7 +60,7 @@ import { JobsPage } from '../modules/workspace/JobsPage'
 import { BackupsPage } from '../modules/workspace/BackupsPage'
 import { SettingsPage } from '../modules/settings/SettingsPage'
 import { DiagnosticsPage } from '../modules/diagnostics/DiagnosticsPage'
-import { useSettings } from '../lib/queries'
+import { useCurrentProject, useHealth, useSettings } from '../lib/queries'
 import { t } from '../lib/i18n'
 import { registerShortcutHandler, useShortcutDispatcher } from '../lib/shortcuts'
 import { TimelinePage } from '../modules/timeline/TimelinePage'
@@ -76,7 +76,20 @@ import { ProducerPage } from '../modules/producer/ProducerPage'
 import { StatusBar } from './StatusBar'
 import { CommandPalette } from './CommandPalette'
 import { ProjectHeader } from './ProjectHeader'
-import { useCurrentProject } from '../lib/queries'
+
+/**
+ * The sidebar release label is DERIVED from the REAL app version
+ * (system:health → app.getVersion()).
+ *
+ * It used to be a hardcoded string, which silently drifted release after
+ * release — the same class of bug as the website download links (lesson 31).
+ * Deriving it makes the rot structurally impossible.
+ */
+function releaseLabel(appVersion: string | undefined): string {
+  const beta = /-beta\.(\d+)$/.exec(appVersion ?? '')
+  if (beta) return `V1 Beta Experimental ${beta[1]}`
+  return appVersion ? `Mirai Studio v${appVersion}` : 'Mirai Studio'
+}
 
 interface NavEntry {
   view: MainView
@@ -183,6 +196,7 @@ export function AppShell() {
   const setPaletteOpen = useAppStore((s) => s.setPaletteOpen)
   const { data: current } = useCurrentProject()
   const { data: settings } = useSettings()
+  const { data: health } = useHealth()
   const [onboardingOpen, setOnboardingOpen] = useState(false)
   const queryClient = useQueryClient()
 
@@ -366,7 +380,7 @@ export function AppShell() {
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
               <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                V1 Beta Experimental 13
+                {releaseLabel(health?.appVersion)}
               </span>
               <a
                 href="https://github.com/yuaberry/mirai-studio/releases"

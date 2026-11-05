@@ -44,7 +44,7 @@
 
     <!-- ---------------------------------------------------------- HERO -->
     <div class="hero-inner reveal">
-      <div class="hero-badge">V1 Beta Experimental 13 · Linux x64 · Local-first · Your keys, your machine</div>
+      <div class="hero-badge">V1 Beta Experimental 14 · Linux x64 · Local-first · Your keys, your machine</div>
       <h1>
         Send the idea.<br />
         The studio <span class="grad-text">makes the episode.</span>
@@ -275,16 +275,16 @@
 
   <!-- -------------------------------------------------------- DOWNLOAD -->
   <section id="download" class="section section-download">
-    <h2 class="section-title reveal">Download <span class="grad-text">V1 Beta Experimental 13</span></h2>
+    <h2 class="section-title reveal">Download <span class="grad-text">V1 Beta Experimental 14</span></h2>
     <p class="section-sub reveal">Linux x64 · every release is test-gated and boot-tested before shipping.</p>
     <div class="dl-grid">
-      <a class="dl-card reveal" href="https://github.com/yuaberry/mirai-studio/releases/download/V1-Beta-Experimental-13/mirai-studio_1.0.0-beta.13_amd64.deb" download>
+      <a class="dl-card reveal" href="https://github.com/yuaberry/mirai-studio/releases/download/V1-Beta-Experimental-14/mirai-studio_1.0.0-beta.14_amd64.deb" download>
         <div class="dl-ico">🐧</div>
         <h3>.deb <span class="dl-tag">recommended</span></h3>
         <p>Debian · Ubuntu · Mint & friends</p>
-        <code>sudo apt install ./mirai-studio_1.0.0-beta.13_amd64.deb</code>
+        <code>sudo apt install ./mirai-studio_1.0.0-beta.14_amd64.deb</code>
       </a>
-      <a class="dl-card reveal" href="https://github.com/yuaberry/mirai-studio/releases/download/V1-Beta-Experimental-13/mirai-studio_1.0.0-beta.13_x86_64.AppImage" download>
+      <a class="dl-card reveal" href="https://github.com/yuaberry/mirai-studio/releases/download/V1-Beta-Experimental-14/mirai-studio_1.0.0-beta.14_x86_64.AppImage" download>
         <div class="dl-ico">📦</div>
         <h3>AppImage <span class="dl-tag">portable</span></h3>
         <p>No install — runs anywhere with FUSE</p>
@@ -304,6 +304,7 @@
   <section id="changelog" class="section section-changelog">
     <h2 class="section-title reveal">Every release, <span class="grad-text">one studio</span></h2>
     <div class="changelog-list reveal">
+      <div class="cl-item"><span class="cl-ver">V1 Beta Experimental 14</span><p><strong>AI Marketplace com providers reais</strong>: um catálogo que só lista o que o app <strong>realmente aciona</strong> — 9 providers curados (todos implementados), com o catálogo de modelos buscado <strong>ao vivo</strong> nos endpoints dos vendors (9 providers · 579 modelos medidos) e degrade sem pânico quando um vendor cai. Badge de <strong>marca d'água honesto</strong>: o fato é medido, não prometido — o Pollinations classic estampa logo e o card diz isso; badge de <strong>nuvem</strong>: toda geração roda no servidor do vendor, nunca na sua máquina. <strong>Providers sem chave</strong>: imagem (Pollinations <code>flux</code>) e <strong>dubbing</strong> (Google Translate speech, MP3 real). <strong>E2E de anime experimental 16/16</strong> contra providers reais — Producer Agent (2 personagens · 3 cenas · 6 frames · consistência 100), dossiê de 21 páginas, MP4 real via FFmpeg e delete em cascata com <strong>zero resíduo</strong>. <strong>Bugs reais corrigidos</strong>: <code>include_usage</code> rejeitado pelo NVIDIA (400), <code>content:null</code> + <code>reasoning_content</code>, 402 = FREE_LIMIT (retry), 404 de imagem transitório (retry), 414 de frame inline (upload), truncamento estruturado (o orçamento cresce sozinho) e modelo default que nunca existiu. <strong>Roadmap: processamento na nuvem</strong> — o tier gratuito não entrega vídeo de estúdio (24/24 modelos de vídeo são <code>paid_only</code>), então a nuvem é o caminho até a régua de qualidade. 300 testes · 68/68 smoke</p></div>
       <div class="cl-item"><span class="cl-ver">V1 Beta Experimental 13</span><p><strong>Correção crítica do app empacotado</strong>: a release anterior abortava no boot em Linux por um <strong>conflito de glib entre o Electron e o runtime nativo do sharp</strong> (electron/electron#46323) — o binário do Electron carrega o glib do sistema no escopo global e os GTypes do libvips divergem em distros novos, matando o processo com <code>VImage8.h:134 assertion failed</code>. Agora o Linux embarca o build <strong>WebAssembly</strong> do sharp (glib isolado dentro do módulo) · o gate de release valida o runtime por plataforma, exige o binding correto e falha em qualquer <code>GLib-GObject-CRITICAL</code> · o boot do artefato empacotado é verificado antes de publicar · <strong>Manga Pro</strong> (auto-board + provas PNG/PDF) · <strong>Asset Intelligence</strong> (histórico de uso + grafo de dependências) · <strong>Experimentos</strong> (geração lab, variação lado a lado, promoção) · <strong>Localization Lab</strong> (workflow DRAFT→REVIEW→APPROVED→FINAL com trilha de auditoria) · <strong>Sound & Voice Studio</strong> (mix real + master com FFmpeg) · <strong>Animation Pipeline</strong> (keyframe → in-between → cleanup → color → compositing) · <strong>Visual Consistency</strong> (model sheet lock + paleta + Style Bible em toda geração) · <strong>Light Novel Pro</strong> (volumes, POV, DOCX real) · <strong>IP Graph</strong> (obras derivadas com herança de cânon + tela de impacto) · <strong>dossiê PDF</strong>, <strong>EPUB 3</strong>, <strong>legendas</strong>, <strong>export center</strong> (6 presets) · Windows, macOS e companion Android</p></div>
       <div class="cl-item"><span class="cl-ver">v0.31.0</span><p><strong>AI Quality Loop</strong>: <strong>folha de referência</strong> por personagem (a peça de consistência da receita AI-anime) — gere o <strong>turnaround de IA</strong> (frente/lado/costas + expressões, canon do personagem + Style Bible no prompt) ou importe a sua · preview no editor · **voz multi-falante por shot**: cada personagem fala com a própria voz de TTS e os clipes são concatenados com o FFmpeg embutido · âncoras honestas de prompt</p></div>
       <div class="cl-item"><span class="cl-ver">v0.30.0</span><p><strong>AI Anime Episode</strong>: a receita dos animes de IA em um clique — <strong>AI Voice Acting</strong> (TTS OpenAI-compatível, voz por personagem, áudio real que entra no mixer e no render) + <strong>image-to-video</strong> (o frame do storyboard vira clipe) + timeline + <strong>render do episódio em MP4 real</strong> · botão "AI voice" por shot · provedores de vídeo e voz com UI completa em Settings</p></div>

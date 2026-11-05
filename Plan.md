@@ -551,6 +551,7 @@ PRIORITY (dependency + user value — the next three deliverables):
 99. **A structured-output truncation must GROW the budget, not fail the call**: the Producer's JSON was cut at the token ceiling. RULE: on a truncation signal, re-request with a bigger budget (`MAX_STRUCTURED_TOKEN_FLOOR = 32768`) and a longer deadline (`STRUCTURED_CALL_TIMEOUT_MS = 300000`; the global default request timeout also moved 120s → 300s). A studio that silently drops half a screenplay is worse than one that takes 40s longer.
 100. **A GATE THAT FLIPS ON MACHINE LOAD IS NOT A GATE**: the 4096×2160 CINEMA render (CRF 14, `slower`, `aq-mode=3`) took 36s alone and 126s while the rest of the suite rendered in parallel. RULE: size integration-test budgets for the PARALLEL case (300s), and re-run the failing test ALONE before touching the code — "flaky under load" and "regression" look identical until you measure.
 101. **`pkill -f <pattern>` kills the shell that runs it** when the pattern matches the command line itself (lesson 57 again, paid twice). RULE: `pgrep -x electron` → kill by PID.
+102. **A HARDCODED VERSION LABEL IN THE UI ROTS SILENTLY**: the sidebar footer said "V1 Beta Experimental 13" while the package was already `1.0.0-beta.14` — the exact same class of bug as the website download links (lesson 31), in a place nobody thinks to check because it "looks right". RULE: derive the label from the REAL source of truth (`system:health` → `app.getVersion()`), never type it. A label that must be bumped by hand WILL be forgotten.
 
 ---
 
@@ -665,13 +666,14 @@ timeout 30 apps/desktop/release/linux-unpacked/mirai-studio
 
 ### Machine & access
 - **Repo**: https://github.com/yuaberry/mirai-studio (public, main; tags = releases)
-- **Website**: https://yuaberry.github.io/mirai-studio (V1 Beta Experimental 13 → bump para 14)
+- **Website**: https://yuaberry.github.io/mirai-studio (V1 Beta Experimental 14 — links verificados com HTTP 200)
 - **Dev machine IS the user's machine** (Linux Mint): their real profile at `~/.config/@mirai/desktop/` — logs at `logs/mirai-*.log` (READ THE LOGS when the user reports a bug — lesson 63)
 - **License private key**: `/home/llinux/mirai-license-private.pem` (OUTSIDE the repo); receipt `/home/llinux/MIRAI-STUDIO-PRO-KEY.txt` (rotated 2026-10 — the original leaked in git history v0.13.0-v0.14.0 and was purged via filter-branch)
-- **Backup**: `/home/llinux/mirai-studio-backup-V1-Beta-Experimental-14.tar.gz` (to be created below)
+- **Backup**: `/home/llinux/mirai-studio-backup-V1-Beta-Experimental-14.tar.gz` — **9.164.958.148 bytes (9,2 GB)**, integridade verificada (`tar -tzf` EXIT=0, 3343 entradas, inclui `apps/desktop/release/` com 392 artefatos e TODOS os arquivos novos da V14).
 
 ### Release & quality gates
-- **Latest release**: V1 Beta Experimental 13 (1.0.0-beta.13) — **CI VERDE (run 41936383125: linux + windows + macos + android + publish, 5/5)**; GitHub release publicada com os **5 assets** (`mirai-studio_1.0.0-beta.13_amd64.deb`, `mirai-studio_1.0.0-beta.13_x86_64.AppImage`, `mirai-studio_1.0.0-beta.13_x64-setup.exe`, `mirai-studio_1.0.0-beta.13_arm64.dmg`, `mirai-companion-V1-Beta-Experimental-13.apk`). O `.deb` PUBLISHED foi baixado e testado: contém SÓ o runtime WASM, e o binário empacotado (com o glib do SISTEMA mapeado) rasteriza SVG→PNG com zero criticals.
+- **Latest release**: V1 Beta Experimental 14 (1.0.0-beta.14) — **CI VERDE (run 42013690943: linux + windows + macos + android + publish, 5/5)**; GitHub release publicada com os **5 assets** (`mirai-studio_1.0.0-beta.14_amd64.deb` 122429504 B, `mirai-studio_1.0.0-beta.14_x86_64.AppImage` 175939359 B, `mirai-studio_1.0.0-beta.14_x64-setup.exe` 147736936 B, `mirai-studio_1.0.0-beta.14_arm64.dmg` 156187283 B, `mirai-companion-V1-Beta-Experimental-14.apk` 3814980 B). VERIFICADO: (a) as 5 URLs respondem **HTTP 200** (lição 67); (b) o `.deb` PUBLISHED foi baixado e o teste de ABI rodou → **ABI_OK** (`dpkg-deb -x` + `ELECTRON_RUN_AS_NODE require(better_sqlite3.node)`); (c) o gate de boot empacotado rodou no CI → `✓ sharp pinned to the bundled libvips` · `✓ sharp rasterizes from the package (RASTER_OK 268, libvips 8.15.3, wasm runtime)` · `✓ packaged app booted and showed its main window`.
+- **Release anterior**: V1 Beta Experimental 13 (1.0.0-beta.13) — CI run 41936383125 (5/5), release com 5 assets, `.deb` baixado e testado (SÓ o runtime WASM; rasteriza SVG→PNG com zero criticals).
 - **V1 Beta Experimental 14**: tag `V1-Beta-Experimental-14` (1.0.0-beta.14) — Marketplace + E2E de anime experimental. Release criada ANTES do dispatch do CI (lesson 62), assets upados em passo separado (lesson 68).
 - **Releases are CI-built**: `git tag V1-Beta-Experimental-14` → `gh workflow run release.yml --ref <tag>` (tags `V*` and `v*` both trigger CI).
 - **ABI acceptance test**: `dpkg-deb -x` + `ELECTRON_RUN_AS_NODE <binary> -e require('.../better_sqlite3.node')` → must print ABI_OK.
