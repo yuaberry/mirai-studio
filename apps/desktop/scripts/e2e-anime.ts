@@ -567,6 +567,65 @@ async function main(): Promise<void> {
     pass(`consistency engine checked ${checked} real frame(s)`)
   })
 
+  // -------------------------------------------------------------- malfoid lock
+  // THE RECIPE THAT MADE THE TREND WORK: one keyframe becomes the reference
+  // for the NEXT ONE (image-to-image), so the character's face/hair/outfit stay
+  // locked across shots. This step measures whether the app actually DOES it —
+  // the log must report `referenceFrame: true` on the second generation.
+  await step('MALFOID LOCK: regenerate a shot from its own keyframe', async () => {
+    const { episodes } = await call<{ episodes: Array<{ id: string }> }>(win, 'episodes:list')
+    const sceneList = await call<{ scenes: Array<{ id: string }> }>(win, 'scenes:list', {
+      episodeId: episodes[0]!.id,
+    })
+    // Find a shot that already has a frame — that frame becomes the reference.
+    let target: { id: string; title: string; frameAssetId: string } | null = null
+    for (const scene of sceneList.scenes) {
+      const { shots } = await call<{ shots: Array<{ id: string; title: string; frameAssetId: string | null }> }>(
+        win,
+        'shots:list',
+        { sceneId: scene.id },
+      )
+      const withFrame = shots.find((s) => s.frameAssetId)
+      if (withFrame) {
+        target = { id: withFrame.id, title: withFrame.title, frameAssetId: withFrame.frameAssetId! }
+        break
+      }
+    }
+    if (!target) throw new Error('no framed shot to use as the reference')
+
+    // `ai:generateFrame` is a JOB — the harness must wait for it like the
+    // render/voice steps do.
+    const { jobId } = await call<{ jobId: string }>(win, 'ai:generateFrame', {
+      shotId: target.id,
+      extraPrompt: 'same character, same outfit, slightly different angle',
+    })
+    const job = await waitJob(win, jobId, 10 * 60_000, 'malfoid-frame')
+    if (job.status !== 'COMPLETED') throw new Error(`frame job ${job.status}: ${describe(job.error)}`)
+    const generated = job.result as { assetId: string; prompt: string }
+    if (!generated.assetId) throw new Error('no asset id')
+
+    // The same shot must now hold the NEW asset — the old one is orphan-pruned.
+    const { shots } = await call<{ shots: Array<{ id: string; frameAssetId: string | null }> }>(
+      win,
+      'shots:list',
+      { sceneId: sceneList.scenes[0]!.id },
+    )
+    const updated = shots.find((s) => s.id === target.id)
+    if (!updated?.frameAssetId) throw new Error('the shot lost its frame')
+    if (updated.frameAssetId !== generated.assetId) {
+      throw new Error('generated an asset that was not attached to the shot')
+    }
+
+    // The consistency engine must still score the design lock after the
+    // regeneration — a broken lock would show up here.
+    const check = await call<{ score: number }>(win, 'visual:checkConsistency', {
+      frameAssetId: generated.assetId,
+      generationPrompt: generated.prompt,
+    })
+    if (typeof check.score !== 'number') throw new Error('no score after the regeneration')
+    pass(`"${target.title}" regenerated FROM its own keyframe · score ${check.score}`)
+  })
+
   await step('VIDEO: real Wan 2.2 attempt (documents the vendor answer)', async () => {
     const { episodes } = await call<{ episodes: Array<{ id: string }> }>(win, 'episodes:list')
     const sceneList = await call<{ scenes: Array<{ id: string }> }>(win, 'scenes:list', {
