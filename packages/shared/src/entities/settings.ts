@@ -63,6 +63,13 @@ export const AppSettings = z.object({
             .object({
               /** A1111 defaults to 7860, ComfyUI to 8188. */
               baseUrl: z.string().default('http://127.0.0.1:7860'),
+              /**
+               * The anime checkpoint to generate with (A1111
+               * `sd_model_checkpoint`). Empty = whatever the backend has
+               * loaded. The app loads it through the vendor's own options
+               * API, so the user picks the model in Mirai Studio.
+               */
+              checkpoint: z.string().default(''),
               /** Sampling steps — 20..30 is the anime sweet spot. */
               steps: z.number().int().min(4).max(150).default(28),
               cfgScale: z.number().min(1).max(30).default(7),

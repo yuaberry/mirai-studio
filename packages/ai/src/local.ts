@@ -57,6 +57,12 @@ export interface LocalImageOptions {
   imageB64?: string
   /** Denoising strength for img2img (0..1). 0.55 keeps the design lock. */
   denoise?: number
+  /**
+   * The anime checkpoint to generate with (A1111 `sd_model_checkpoint`).
+   * When set, the adapter loads it before generating — so the user picks the
+   * model in Mirai Studio and the app does the switching.
+   */
+  checkpoint?: string
   signal?: AbortSignal
 }
 
@@ -194,6 +200,15 @@ export class LocalImageProvider {
 
   private async generateA1111(options: LocalImageOptions): Promise<LocalMediaResult> {
     const base = this.opts.baseUrl.replace(/\/$/, '')
+    // The user picks the anime checkpoint in Settings; make sure the backend
+    // is actually running it. The check is a GET first, so a warm backend is
+    // not forced to reload the model on every single frame.
+    if (options.checkpoint) {
+      const current = await this.currentCheckpoint(options.signal)
+      if (current !== options.checkpoint) {
+        await this.setCheckpoint(options.checkpoint, options.signal)
+      }
+    }
     const endpoint = options.imageB64 ? '/sdapi/v1/img2img' : '/sdapi/v1/txt2img'
     const payload: Record<string, unknown> = {
       prompt: options.prompt,
@@ -408,6 +423,73 @@ export class LocalImageProvider {
         ? 'video/mp4'
         : 'image/png'
     return { bytes: buffer, mimeType }
+  }
+
+  /** The checkpoint the local backend has loaded RIGHT NOW (A1111). */
+  private async currentCheckpoint(signal?: AbortSignal): Promise<string | null> {
+    const base = this.opts.baseUrl.replace(/\/$/, '')
+    const response = await this.opts.fetchFn(`${base}/sdapi/v1/options`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal,
+    })
+    if (!response.ok) return null
+    const parsed = JSON.parse(await response.text()) as { sd_model_checkpoint?: string }
+    return parsed.sd_model_checkpoint ?? null
+  }
+
+  // ---------------------------------------------------------------- checkpoints
+  /**
+   * Lists the checkpoints the local backend has INSTALLED.
+   *
+   * A1111 exposes `GET /sdapi/v1/sd-models`. This is how the app answers
+   * "which anime checkpoints do I have?" with the truth instead of a guess —
+   * the user's model folder is the source of truth, never a hardcoded list.
+   */
+  async listCheckpoints(signal?: AbortSignal): Promise<string[]> {
+    await assertReachable(this.opts.baseUrl, this.opts.fetchFn, signal)
+    const base = this.opts.baseUrl.replace(/\/$/, '')
+    const response = await this.opts.fetchFn(`${base}/sdapi/v1/sd-models`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal,
+    })
+    if (!response.ok) {
+      throw new MiraiError(
+        'AI_PROVIDER_ERROR',
+        `Could not list the local checkpoints (${response.status}).`,
+        { retryable: response.status >= 500, details: { status: response.status } },
+      )
+    }
+    const parsed = JSON.parse(await response.text()) as Array<{ title?: string; model_name?: string }>
+    // `title` is the value the options endpoint expects back.
+    return parsed.map((m) => m.title ?? m.model_name ?? '').filter((t) => t.length > 0)
+  }
+
+  /**
+   * Switches the checkpoint the local backend uses.
+   *
+   * A1111 persists it through `POST /sdapi/v1/options` with
+   * `sd_model_checkpoint`. This is what makes "every anime checkpoint work"
+   * concrete: the user picks the model inside Mirai Studio and the app loads
+   * it, instead of requiring them to change it in the WebUI every time.
+   */
+  async setCheckpoint(title: string, signal?: AbortSignal): Promise<void> {
+    await assertReachable(this.opts.baseUrl, this.opts.fetchFn, signal)
+    const base = this.opts.baseUrl.replace(/\/$/, '')
+    const response = await this.opts.fetchFn(`${base}/sdapi/v1/options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sd_model_checkpoint: title }),
+      signal,
+    })
+    if (!response.ok) {
+      throw new MiraiError(
+        'AI_PROVIDER_ERROR',
+        `Could not load the checkpoint "${title}" (${response.status}).`,
+        { retryable: response.status >= 500, details: { status: response.status, checkpoint: title } },
+      )
+    }
   }
 
   // ---------------------------------------------------------------- unified

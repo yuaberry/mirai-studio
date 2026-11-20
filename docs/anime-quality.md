@@ -194,6 +194,52 @@ that watermark-freedom depends on the vendor you choose.
 **Do not expect a free API tier of these.** The ones that exist are trials of
 minutes or a handful of generations — not a production pipeline.
 
+### The anime video models that exist TODAY (verified live)
+
+The app reads the vendor's live catalog — nothing is invented. Fetched from
+`https://gen.pollinations.ai/video/models`, these are the **25 video models**
+that are reachable through Mirai Studio right now via the Pollinations adapter:
+
+| Model | Best for (anime pipeline) |
+|---|---|
+| `alibaba/wan-2.2-fast` | **Fast 5 s draft** — the quickest way to preview a shot |
+| `alibaba/wan-2.6` | 720p with sound, from a starting image |
+| `alibaba/wan-2.7` | **Wan 2.7** — opening/closing images + visual references, with sound |
+| `alibaba/wan-3.0` | The newest Wan — images, video or audio references |
+| `bytedance/seedance-2.0-fast` | Quick 4–5 s clips from opening/closing images |
+| `bytedance/seedance-2.0-mini` | 10 s clips, opening/closing image control |
+| `bytedance/seedance-2.0` | 720p with synchronized sound + reference images |
+| `bytedance/seedance-2.5` | 4 s with synchronized sound + reference frames |
+| `kwaivgi/kling-v3.0-std` | **Kling 3.0** — the sakuga leader: dynamic motion, camera orbits, impact frames |
+| `minimax/minimax-h3-max` | **Hailuo-class** — 5 s with stereo sound, physics-aware |
+| `minimax/minimax-h3-max-turbo` | 15 s fast drafts from opening/closing images |
+| `minimax/h3` | Text/scene → 5 s with synchronized stereo sound |
+| `x-ai/grok-imagine-video` | 720p up to 15 s with synchronized sound |
+| `x-ai/grok-imagine-video-1.5` | Opening image → video with synced sound |
+| `x-ai/grok-imagine-video-1.5-lite` | Fast 1080p draft from text or image |
+| `google/veo-3.1-fast` | Fast short clips, opening/closing image control |
+| `google/gemini-omni-1.2-flash` | **15 s with synchronized sound at up to 4K** |
+| `google/gemini-omni-1.1-flash` | 10 s with synchronized sound, up to 4K |
+| `black-forest-labs/flux-3-max` | Up to 20 s with optional sound + control |
+| `kandinskylab/kandinsky-6.0-lite` | Animates an opening image, 5 s clips |
+| `heygen/heygen-video-1` | Text/opening image → video **with dialogue** (lip-sync use) |
+| `prunaai/p-video` | Description/opening image → 720p or 1080p |
+| `alibaba/happyhorse-1.1` | Text/opening image → 720p up to 15 s |
+| `alibaba/wan-2.6` | 720p with sound from a starting image |
+| `mirelo/sfx-2.0` | Adds matched sound effects to an existing video |
+
+**Every one of them is `paid_only: true`.** They are all already selectable in
+the Marketplace → Live models tab, and the adapter already speaks the protocol.
+Adding the vendor key turns them on — no code change needed.
+
+**The anime pipeline that uses them:**
+1. Generate the **keyframe** first (local GPU, or a paid image model).
+2. Pick **one** video model as the animator.
+3. Send the keyframe as the opening image → image-to-video keeps your
+   character design locked.
+4. For dialogue: generate the voice first (`ai:speakShot`), then a
+   dialogue-capable model like `heygen/heygen-video-1` can carry it.
+
 ### What Route C is *not*
 
 There is no Route C. Specifically:

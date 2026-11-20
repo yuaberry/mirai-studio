@@ -18,7 +18,7 @@
  * dossier and the backups.
  */
 import { app, BrowserWindow, screen } from 'electron'
-import { join } from 'node:path'
+import { join, basename } from 'node:path'
 import { homedir } from 'node:os'
 import { existsSync, copyFileSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { bootstrap, type Container } from '../src/main/bootstrap'
@@ -479,6 +479,58 @@ async function main(): Promise<void> {
     }
     if (dubbed === 0) throw new Error(`no shot was dubbed (${failed} failures)`)
     pass(`${dubbed} shots dubbed with real audio${failed > 0 ? ` (${failed} failed)` : ''}`)
+  })
+
+  // ---------------------------------------------------------------- subtitles
+  // A dubbed shot without a subtitle track is half a feature: the studio
+  // pipeline must prove the SRT/VTT codec, the per-scene storage AND the
+  // real file export — not just the CRUD.
+  await step('SUBTITLES: real cues per scene + a real exported .srt', async () => {
+    const { episodes } = await call<{ episodes: Array<{ id: string }> }>(win, 'episodes:list')
+    const sceneList = await call<{ scenes: Array<{ id: string; title: string }> }>(win, 'scenes:list', {
+      episodeId: episodes[0]!.id,
+    })
+    let created = 0
+    let exported = 0
+    for (const scene of sceneList.scenes) {
+      // The cues come from the SHOT DIALOGUE that was just dubbed — a subtitle
+      // that does not match the audio would be a lie.
+      const { shots } = await call<
+        { shots: Array<{ id: string; dialogue: string | null; title: string; durationSeconds: number }> }
+      >(win, 'shots:list', { sceneId: scene.id })
+      let cursor = 0
+      for (const shot of shots) {
+        if (!shot.dialogue || shot.dialogue.trim().length === 0) continue
+        // One cue per shot, kept inside the shot's own duration (the record
+        // comes from `shots:list`, so there is no extra round-trip).
+        const dur = Math.max(1.5, Math.min(shot.durationSeconds, 6))
+        await call(win, 'subtitles:create', {
+          sceneId: scene.id,
+          startSec: Number(cursor.toFixed(2)),
+          endSec: Number((cursor + dur).toFixed(2)),
+          text: shot.dialogue.trim().slice(0, 180),
+        })
+        cursor += dur
+        created++
+      }
+      const listed = await call<{ subtitles: Array<{ id: string; text: string }> }>(win, 'subtitles:list', {
+        sceneId: scene.id,
+      })
+      if (listed.subtitles.length === 0) throw new Error(`no subtitle persisted for "${scene.title}"`)
+
+      const exportedFile = await call<{ path: string; count: number }>(win, 'subtitles:exportFile', {
+        sceneId: scene.id,
+        format: 'srt',
+      })
+      if (!existsSync(exportedFile.path)) throw new Error('the exported .srt is not on disk')
+      if (exportedFile.count !== listed.subtitles.length) {
+        throw new Error(`exported ${exportedFile.count} cues but ${listed.subtitles.length} are stored`)
+      }
+      exported += exportedFile.count
+      log(`"${scene.title}" → ${listed.subtitles.length} cues → ${basename(exportedFile.path)}`)
+    }
+    if (created === 0) throw new Error('no subtitle cue was created')
+    pass(`${created} cues across ${sceneList.scenes.length} scenes · ${exported} exported to real .srt files`)
   })
 
   await step('CONSISTENCY: lock + check against a real generated frame', async () => {

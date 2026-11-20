@@ -319,6 +319,113 @@ describe('LocalImageProvider — ComfyUI', () => {
   })
 })
 
+describe('LocalImageProvider — checkpoints (the "every anime model" answer)', () => {
+  it('lists the checkpoints the backend actually has installed', async () => {
+    const { provider: instance, calls } = provider(() =>
+      new FakeResponse({
+        json: [
+          { title: 'ponyDiffusionV6XL.safetensors [aaa]', model_name: 'ponyDiffusionV6XL' },
+          { title: 'illustrious_v10.safetensors [bbb]', model_name: 'illustrious_v10' },
+        ],
+      }),
+    )
+
+    const list = await instance.listCheckpoints()
+
+    // The title is the value the options endpoint expects back.
+    expect(list).toEqual(['ponyDiffusionV6XL.safetensors [aaa]', 'illustrious_v10.safetensors [bbb]'])
+    expect(calls.some((c) => c.url.endsWith('/sdapi/v1/sd-models'))).toBe(true)
+  })
+
+  it('switches the checkpoint through the vendor options API', async () => {
+    const { provider: instance, calls } = provider(() => new FakeResponse({ json: {} }))
+
+    await instance.setCheckpoint('anythingV5_v15.safetensors [ccc]')
+
+    const call = calls.find((c) => c.url.endsWith('/sdapi/v1/options') && c.init.method === 'POST')
+    expect(call).toBeDefined()
+    expect(JSON.parse(String(call!.init.body))).toEqual({
+      sd_model_checkpoint: 'anythingV5_v15.safetensors [ccc]',
+    })
+  })
+
+  it('does NOT reload the model when the requested one is already loaded', async () => {
+    // A warm backend must not be forced to re-read a 6 GB file on every frame.
+    let getCount = 0
+    const { provider: instance, calls } = provider(
+      (call) => {
+        if (call.init.method === 'GET' && call.url.endsWith('/sdapi/v1/options')) {
+          getCount += 1
+          return new FakeResponse({ json: { sd_model_checkpoint: 'pony.safetensors [aaa]' } })
+        }
+        if (call.url.endsWith('/sdapi/v1/txt2img')) {
+          return new FakeResponse({ json: { images: [PNG_B64] } })
+        }
+        return new FakeResponse({ text: 'a1111' })
+      },
+    )
+
+    await instance.generate({
+      prompt: 'anime keyframe',
+      width: 512,
+      height: 512,
+      checkpoint: 'pony.safetensors [aaa]',
+    })
+
+    expect(getCount).toBeGreaterThan(0)
+    // No POST to options happened — the loaded model already matches.
+    const posts = calls.filter((c) => c.url.endsWith('/sdapi/v1/options') && c.init.method === 'POST')
+    expect(posts.length).toBe(0)
+  })
+
+  it('loads the requested checkpoint when the loaded one differs', async () => {
+    const { provider: instance, calls } = provider(
+      (call) => {
+        if (call.init.method === 'GET' && call.url.endsWith('/sdapi/v1/options')) {
+          return new FakeResponse({ json: { sd_model_checkpoint: 'dreamshaper.safetensors [zzz]' } })
+        }
+        if (call.url.endsWith('/sdapi/v1/txt2img')) {
+          return new FakeResponse({ json: { images: [PNG_B64] } })
+        }
+        return new FakeResponse({ text: 'a1111' })
+      },
+    )
+
+    await instance.generate({
+      prompt: 'anime keyframe',
+      width: 512,
+      height: 512,
+      checkpoint: 'pony.safetensors [aaa]',
+    })
+
+    const posts = calls.filter((c) => c.url.endsWith('/sdapi/v1/options') && c.init.method === 'POST')
+    expect(posts.length).toBe(1)
+    expect(JSON.parse(String(posts[0]!.init.body)).sd_model_checkpoint).toBe('pony.safetensors [aaa]')
+  })
+
+  it('surfaces a failed checkpoint switch with the model name for diagnostics', async () => {
+    const { provider: instance } = provider(
+      (call) => {
+        if (call.init.method === 'GET' && call.url.endsWith('/sdapi/v1/options')) {
+          return new FakeResponse({ json: { sd_model_checkpoint: 'other' } })
+        }
+        if (call.url.endsWith('/sdapi/v1/options')) {
+          return new FakeResponse({ status: 500, text: 'CUDA OOM while loading' })
+        }
+        return new FakeResponse({ text: 'a1111' })
+      },
+    )
+    try {
+      await instance.setCheckpoint('pony.safetensors [aaa]')
+      expect.unreachable()
+    } catch (err) {
+      const error = err as MiraiError
+      expect(error.code).toBe('AI_PROVIDER_ERROR')
+      expect(error.details).toMatchObject({ checkpoint: 'pony.safetensors [aaa]' })
+    }
+  })
+})
+
 describe('parseLocalBaseUrl', () => {
   it('maps the well-known ports to the right flavor', () => {
     expect(parseLocalBaseUrl('http://127.0.0.1:7860')).toEqual({

@@ -1661,6 +1661,7 @@ export class AiHost {
         width: 768,
         height: 1344,
         steps: local?.steps,
+        checkpoint: local?.checkpoint || undefined,
         cfgScale: local?.cfgScale,
         samplerName: local?.samplerName,
       })
@@ -1955,6 +1956,7 @@ export class AiHost {
         width,
         height,
         steps: local?.steps,
+        checkpoint: local?.checkpoint || undefined,
         cfgScale: local?.cfgScale,
         samplerName: local?.samplerName,
         imageB64,
