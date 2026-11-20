@@ -130,8 +130,9 @@ export function MarketplacePage() {
           </h1>
           <p className="mt-1 max-w-3xl text-xs leading-relaxed text-mirai-dim">
             Providers and models the studio can ACTUALLY drive — every card below is backed
-            by a real adapter, and the model list is read live from the vendors. Generation
-            runs in the vendor's cloud; nothing is processed on this machine.
+            by a real adapter, and the model list is read live from the vendors. Cloud
+            providers process on their servers; <strong className="text-mirai-dim">your-GPU
+            cards process on THIS machine</strong> — no key, no invoice, no vendor logo.
           </p>
         </div>
         <Button
