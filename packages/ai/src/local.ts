@@ -133,6 +133,24 @@ function isLoopbackBaseUrl(baseUrl: string): boolean {
   }
 }
 
+/** True for the tunnel hosts that carry a personal ComfyUI/A1111 to the web. */
+function isPersonalTunnel(url: URL): boolean {
+  // cloudflared / ngrok / gradio / huggingface give each user an UNIQUE host —
+  // that uniqueness IS the credential. These are not open shared endpoints.
+  return (
+    /\.(trycloudflare\.com|ngrok\.io|ngrok-free\.app|huggingface\.dev|hf\.space|gradio\.live|lo\.co)$/.test(
+      url.hostname,
+    ) || /\.dev$/.test(url.hostname)
+  )
+}
+
+/** Where the "you are about to expose/use an unauthenticated GPU" line is. */
+export const REMOTE_LOCAL_WARNING =
+  'The local backend API has NO authentication. Sending it a remote address means ' +
+  'anyone who learns that URL can use that GPU (and read what it is asked to draw). ' +
+  'Only use a URL that contains a SECRET you alone know, and shut the tunnel down ' +
+  'when you finish.'
+
 async function assertReachable(
   baseUrl: string,
   fetchFn: FetchLike,
@@ -270,13 +288,32 @@ export class LocalImageProvider {
       sleepFn?: (ms: number, signal?: AbortSignal) => Promise<void>
       /** ComfyUI poll timing — overridden by the tests. */
       comfyTiming?: ComfyTiming
+      /**
+       * EXPLICIT OPT-IN for a remote backend (Google Colab, Hugging Face
+       * ZeroGPU Spaces, an ngrok/cloudflared tunnel to a home GPU).
+       *
+       * This is the ONLY way the app talks to a non-loopback address, and it
+       * is off by default: the SD WebUI / ComfyUI API is unauthenticated, so
+       * a remote URL is a credential. The UI states the warning before the
+       * user turns it on — see REMOTE_LOCAL_WARNING.
+       */
+      allowRemote?: boolean
     },
   ) {
-    if (!isLoopbackBaseUrl(opts.baseUrl)) {
+    if (!isLoopbackBaseUrl(opts.baseUrl) && !opts.allowRemote) {
+      let host = ''
+      try {
+        host = new URL(opts.baseUrl).hostname
+      } catch {
+        host = '(unparseable URL)'
+      }
       throw new MiraiError(
         'VALIDATION_ERROR',
         `The local generator must run on this machine (127.0.0.1 / localhost). ` +
-          `"${opts.baseUrl}" is a remote address and the app refuses to send it prompts.`,
+          `"${host}" is a remote address and the app refuses to send it prompts. ` +
+          (isPersonalTunnel(new URL(opts.baseUrl))
+            ? 'This looks like a personal tunnel: enable "allow a remote GPU" in Settings → Providers to use it.'
+            : 'If this is YOUR OWN Colab / ZeroGPU Space, enable "allow a remote GPU" in Settings → Providers.'),
       )
     }
   }

@@ -621,6 +621,15 @@ function ProvidersCard() {
             checkpoint={localCheckpoint}
             onBaseUrlChange={setLocalImageUrl}
             onCheckpointChange={setLocalCheckpoint}
+            remoteOptIn={settings?.ai.image.local?.allowRemote === true}
+            onRemoteOptInChange={(on) =>
+              saveProviderPrefs({
+                image: {
+                  ...settings!.ai.image,
+                  local: { ...settings!.ai.image.local, allowRemote: on },
+                },
+              })
+            }
           />
           {settings?.ai.image.protocol === 'local' && (
             <div className="mt-2 grid grid-cols-[80px_70px_1fr_auto] items-end gap-2">
@@ -671,6 +680,7 @@ function ProvidersCard() {
                         ...settings!.ai.image.local,
                         baseUrl: localImageUrl.trim(),
                         checkpoint: localCheckpoint,
+                        allowRemote: settings!.ai.image.local?.allowRemote === true,
                         steps: localImageSteps,
                         cfgScale: localImageCfg,
                         samplerName: localImageSampler.trim() || 'DPM++ 2M Karras',
@@ -764,6 +774,15 @@ function ProvidersCard() {
             checkpoint=""
             onBaseUrlChange={setLocalVideoUrl}
             onCheckpointChange={() => undefined}
+            remoteOptIn={settings?.ai.video.local?.allowRemote === true}
+            onRemoteOptInChange={(on) =>
+              saveProviderPrefs({
+                video: {
+                  ...settings!.ai.video,
+                  local: { ...settings!.ai.video.local, allowRemote: on },
+                },
+              })
+            }
           />
           {settings?.ai.video.protocol === 'local' && (
             <div className="mt-2">
@@ -796,6 +815,7 @@ function ProvidersCard() {
                         ...settings!.ai.video.local,
                         baseUrl: localVideoUrl.trim(),
                         workflowJson: localWorkflow.trim(),
+                        allowRemote: settings!.ai.video.local?.allowRemote === true,
                       },
                     },
                   })

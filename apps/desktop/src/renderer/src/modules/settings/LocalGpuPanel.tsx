@@ -16,6 +16,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Cpu, RefreshCw, TriangleAlert, Check } from 'lucide-react'
+import { REMOTE_LOCAL_WARNING } from '@mirai/shared'
 import { useLocalPreflight } from '../../lib/queries'
 import { toast } from '../../store/appStore'
 import { useT } from '../../lib/i18n'
@@ -24,6 +25,16 @@ import { Badge, Button, Input, Label, Select } from '../../system/ui'
 function gib(bytes: number | null): string {
   if (bytes === null) return '—'
   return `${(bytes / 1024 ** 3).toFixed(1)} GiB`
+}
+
+/** Is this address the user's own machine? (The remote opt-in only shows otherwise.) */
+function isLoopback(url: string): boolean {
+  try {
+    const { hostname } = new URL(url)
+    return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '[::1]'
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -38,6 +49,8 @@ export function LocalGpuPanel({
   checkpoint,
   onBaseUrlChange,
   onCheckpointChange,
+  remoteOptIn,
+  onRemoteOptInChange = () => undefined,
 }: {
   capability: 'image' | 'video'
   protocol: string
@@ -45,6 +58,9 @@ export function LocalGpuPanel({
   checkpoint: string
   onBaseUrlChange: (url: string) => void
   onCheckpointChange: (name: string) => void
+  /** Whether the user opted into a REMOTE backend (Colab / ZeroGPU / tunnel). */
+  remoteOptIn: boolean
+  onRemoteOptInChange?: (on: boolean) => void
 }) {
   const tr = useT()
   const isLocal = protocol === 'local'
@@ -120,6 +136,29 @@ export function LocalGpuPanel({
           />
         </div>
       </div>
+
+      {/* ---- the remote opt-in: free GPU lives on Colab / ZeroGPU Spaces ---- */}
+      {!isLoopback(baseUrl) && (
+        <div className="mt-2 rounded border border-amber-500/30 bg-amber-500/5 p-2.5">
+          <label className="flex items-start gap-2 text-[11px] leading-relaxed text-amber-300">
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-amber-400"
+              checked={remoteOptIn}
+              onChange={(e) => onRemoteOptInChange(e.target.checked)}
+            />
+            <span>{tr('Allow a remote GPU')}</span>
+          </label>
+          {remoteOptIn ? (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-amber-200/80">{REMOTE_LOCAL_WARNING}</p>
+          ) : (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-amber-200/70">
+              {tr('This address is not on this machine, so the app refuses it by default. ')}
+              {tr('Free GPU today lives on Google Colab and Hugging Face ZeroGPU — enable the option above to use one.')}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ---- checkpoints (A1111 only; ComfyUI picks the model in its graph) ---- */}
       {capability === 'image' && checkpoints.length > 0 && (

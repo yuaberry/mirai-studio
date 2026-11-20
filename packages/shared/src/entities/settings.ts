@@ -74,6 +74,12 @@ export const AppSettings = z.object({
               steps: z.number().int().min(4).max(150).default(28),
               cfgScale: z.number().min(1).max(30).default(7),
               samplerName: z.string().default('DPM++ 2M Karras'),
+              /**
+               * EXPLICIT opt-in to talk to a REMOTE backend (Colab / Hugging
+               * Face ZeroGPU / a tunnel to a home GPU). Off by default: those
+               * APIs are unauthenticated, so a remote URL IS a credential.
+               */
+              allowRemote: z.boolean().default(false),
             })
             .default({}),
         })
@@ -134,6 +140,8 @@ export const AppSettings = z.object({
               baseUrl: z.string().default('http://127.0.0.1:8188'),
               /** The full ComfyUI API-format workflow JSON. */
               workflowJson: z.string().default(''),
+              /** Same opt-in as the image backend — see ai.image.local. */
+              allowRemote: z.boolean().default(false),
             })
             .default({}),
         })

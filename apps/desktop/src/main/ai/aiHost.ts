@@ -190,11 +190,18 @@ export class AiHost {
       }
     }
     const { baseUrl, flavor } = parseLocalBaseUrl(localUrl)
+    // The opt-in must reach the preflight too, or a Colab/ZeroGPU address would
+    // be refused BEFORE the user ever gets the VRAM answer they need.
+    const allowRemote =
+      capability === 'video'
+        ? this.deps.settings.get().ai.video.local?.allowRemote === true
+        : this.deps.settings.get().ai.image.local?.allowRemote === true
     const provider = new LocalImageProvider({
       baseUrl,
       flavor,
       fetchFn: globalFetch(),
       timeoutMs: 600_000,
+      allowRemote,
     })
     return provider.preflight(capability)
   }
@@ -520,6 +527,7 @@ export class AiHost {
         flavor: 'comfyui',
         fetchFn: globalFetch(),
         timeoutMs: 600_000,
+        allowRemote: localVideo?.allowRemote === true,
       })
       // IMAGE-TO-VIDEO: the storyboard frame is the animation reference, so it
       // must live inside ComfyUI's input dir before the workflow runs.
@@ -1696,6 +1704,7 @@ export class AiHost {
         flavor,
         fetchFn: globalFetch(),
         timeoutMs: 600_000,
+        allowRemote: local?.allowRemote === true,
       })
       result = await provider.generate({
         prompt,
@@ -1992,6 +2001,7 @@ export class AiHost {
         flavor,
         fetchFn: globalFetch(),
         timeoutMs: 600_000,
+        allowRemote: local?.allowRemote === true,
       })
       const { width, height } = parseSize(imageProvider.size)
       result = await provider.generate({

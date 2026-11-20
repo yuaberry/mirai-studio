@@ -275,6 +275,66 @@ Before blaming the pipeline, check these in order:
 
 ---
 
+## "I don't own a big GPU." — the FREE GPU routes
+
+You do not need to buy a GPU. A free one is available today, and the app can
+drive it. These are the three real routes, in the order that costs least:
+
+| Route | Cost | What you get | How the app connects |
+|---|---|---|---|
+| **Hugging Face ZeroGPU Spaces** | Free | A shared NVIDIA GPU in a Space you own | Open your Space, start it, copy its URL |
+| **Google Colab** | Free (T4, ~12 h/day) | A real T4 16 GB in a notebook | Run ComfyUI/A1111 in the cell, tunnel it |
+| **cloudflared / ngrok to a home GPU** | Free (you own the card) | Your own 12 GB+ card, anywhere | Run the tunnel, paste the URL |
+
+### The one thing the app needs you to decide
+
+Those backends listen on a **remote address**, and their HTTP API has **no
+authentication**. So the app refuses a non-loopback address **by default** and
+requires an explicit opt-in:
+
+> The local backend API has NO authentication. Sending it a remote address
+> means anyone who learns that URL can use that GPU (and read what it is asked
+> to draw). Only use a URL that contains a SECRET you alone know, and shut the
+> tunnel down when you finish.
+
+Enable it in **Settings → Providers → (image or video) → "Your GPU" → allow a
+remote GPU**. The warning is printed on the same panel, before you check it.
+
+**Rule of thumb:** a Colab/ZeroGPU/tunnel URL is long and random *because it is
+the password*. Never post it, never commit it, shut it down when done.
+
+### Colab, in four steps
+
+1. Open a new Colab notebook → **Runtime → Change runtime type → T4 GPU**.
+2. Install the backend (one cell):
+   ```bash
+   !git clone https://github.com/comfyanonymous/ComfyUI && cd ComfyUI
+   !pip install -r requirements.txt
+   ```
+3. Load an anime checkpoint into `models/checkpoints` (see the list in §3).
+4. Start it with a public URL (another cell):
+   ```bash
+   # A1111 image path:
+   !./webui.sh --api --share --gradio-auth user:pass
+   # ComfyUI path (needs the tunnel):
+   !python main.py --listen & cloudflared tunnel --url http://localhost:8188
+   ```
+5. Paste the resulting URL into Settings → Providers → Base URL, and tick the
+   remote opt-in.
+
+### Why this reaches the reference frames' quality
+
+The frames in the trend you pointed at are consistent because their creator
+used **a reference sheet + image-to-video from it**. That is exactly the path
+the app drives: `Character sheet (turnaround)` → `keyframe` →
+`image-to-video with the keyframe as reference` → voice → subtitle → render.
+The MALFOID LOCK step of the E2E measures that lock end-to-end (it scored 100).
+
+What still separates it from a CloverWorks broadcast is *directing and scale*,
+not the pipeline — see §5.
+
+---
+
 ## "Will my computer freeze?" — the app answers BEFORE it happens
 
 The most expensive mistake in this pipeline is starting a generation the machine

@@ -553,4 +553,5 @@ export type {
 
 export { ipcEventPayloads, IPC_EVENT_CHANNELS } from './ipc/events'
 export { LocalPreflightResult, LOCAL_MIN_VRAM_IMAGE_GIB, LOCAL_MIN_VRAM_VIDEO_GIB } from './ipc/localPreflight'
+export { REMOTE_LOCAL_WARNING } from './remoteLocal'
 export type { IpcEventChannel, IpcEventPayload } from './ipc/events'

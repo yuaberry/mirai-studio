@@ -25,6 +25,7 @@ import {
   LocalImageProvider,
   parseLocalBaseUrl,
   formatVramGib,
+  REMOTE_LOCAL_WARNING,
   LOCAL_A1111_DEFAULT_PORT,
   LOCAL_COMFYUI_DEFAULT_PORT,
 } from '../src/local'
@@ -429,6 +430,71 @@ describe('LocalImageProvider — checkpoints (the "every anime model" answer)', 
       expect(error.code).toBe('AI_PROVIDER_ERROR')
       expect(error.details).toMatchObject({ checkpoint: 'pony.safetensors [aaa]' })
     }
+  })
+})
+
+describe('LocalImageProvider — the REMOTE opt-in (Colab / ZeroGPU / tunnels)', () => {
+  // THE BLOCKER THAT MATTERS: the user found real FREE GPU (Hugging Face
+  // ZeroGPU Spaces, Google Colab). Those are NOT loopback addresses, so the
+  // adapter refused them by default — which is correct, but it must be
+  // escapable through an EXPLICIT opt-in, never silently.
+  it('refuses a remote address by default (the API has no authentication)', () => {
+    expect(
+      () =>
+        new LocalImageProvider({
+          baseUrl: 'https://my-comfyui.hf.space',
+          flavor: 'comfyui',
+          fetchFn: makeFetch(() => new FakeResponse({ text: '' })).fetchFn,
+        }),
+    ).toThrow(MiraiError)
+  })
+
+  it('the refusal names the personal-tunnel escape hatch, not a dead end', () => {
+    try {
+      new LocalImageProvider({
+        baseUrl: 'https://abc-143-92.tsnet.devspace.dev',
+        flavor: 'comfyui',
+        fetchFn: makeFetch(() => new FakeResponse({ text: '' })).fetchFn,
+      })
+      expect.unreachable()
+    } catch (err) {
+      const error = err as MiraiError
+      expect(error.code).toBe('VALIDATION_ERROR')
+      // The message must tell the user HOW to proceed, or they are stuck.
+      expect(error.message).toContain('allow a remote GPU')
+    }
+  })
+
+  it('works with a Colab / ZeroGPU address when the opt-in is explicit', async () => {
+    const transport = makeFetch(() => new FakeResponse({ json: { images: [PNG_B64] } }))
+    const remote = new LocalImageProvider({
+      baseUrl: 'https://abc123.trycloudflare.com',
+      flavor: 'a1111',
+      fetchFn: transport.fetchFn,
+      timeoutMs: 0,
+      // The whole point: an explicit, informed decision.
+      allowRemote: true,
+    })
+    const result = await remote.generate({ prompt: 'anime keyframe', width: 512, height: 512 })
+    expect(result.bytes.byteLength).toBeGreaterThan(50)
+    expect(transport.calls.some((c) => c.url.includes('abc123.trycloudflare.com'))).toBe(true)
+  })
+
+  it('remains loopback-first: a local address needs no opt-in at all', () => {
+    expect(
+      () =>
+        new LocalImageProvider({
+          baseUrl: 'http://127.0.0.1:7860',
+          flavor: 'a1111',
+          fetchFn: makeFetch(() => new FakeResponse({ text: '' })).fetchFn,
+        }),
+    ).not.toThrow()
+  })
+
+  it('exports the warning the UI must show before the user opts in', () => {
+    expect(REMOTE_LOCAL_WARNING).toContain('NO authentication')
+    expect(REMOTE_LOCAL_WARNING).toContain('anyone who learns that URL')
+    expect(REMOTE_LOCAL_WARNING).toContain('shut the tunnel down')
   })
 })
 

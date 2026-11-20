@@ -1555,6 +1555,9 @@ export function registerIpcHandlers(c: Container): void {
             baseUrl,
             flavor,
             fetchFn: globalThis.fetch as never,
+            // Same opt-in as generation — otherwise a Colab address is refused
+            // here and the checkpoint list stays empty for no reason.
+            allowRemote: c.settings.get().ai.image.local?.allowRemote === true,
           })
           checkpoints = await provider.listCheckpoints()
         }
