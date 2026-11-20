@@ -10,10 +10,28 @@ import { SHOT_TYPES, LENS_PRESETS as LENSES, CAMERA_MOVEMENTS } from './storyboa
 export const AutoproduceOptions = z.object({
   /** The user's anime idea, in their own words. */
   idea: z.string().min(10, 'Describe your idea in at least a few words.').max(6_000),
-  /** Scenes to plan for the episode (2-8). */
-  scenesCount: z.number().int().min(2).max(8).default(4),
+  /**
+   * Scenes to plan for the episode.
+   *
+   * The ceiling is 12, not 8: one "episode pass" must be able to fill a
+   * meaningful chunk of the `episodeLengthMinutes` the IP form promises. A
+   * 12-scene × 4-shot pass is ~6.4 minutes of screen time — enough to be
+   * useful, and small enough that ONE planning call still fits a free-tier
+   * model's output budget (lesson: a bigger scene list truncates the JSON and
+   * the whole pass fails).
+   */
+  scenesCount: z.number().int().min(2).max(12).default(4),
   /** Shots per scene (2-8). */
   shotsPerScene: z.number().int().min(2).max(8).default(4),
+  /**
+   * Target episode runtime in MINUTES, from the IP form
+   * (`episodeLengthMinutes`).
+   *
+   * When present and `scenesCount` was not given explicitly, the studio
+   * derives the scene count that fills it (see `planEpisodeFromRuntime`) —
+   * so filling the IP form is enough; the user never counts scenes by hand.
+   */
+  targetMinutes: z.number().int().min(1).max(240).optional(),
   /** Also generate keyframes per shot when an image provider is configured. */
   generateFrames: z.boolean().default(false),
   /** Episode number to produce into (defaults to the next free slot). */

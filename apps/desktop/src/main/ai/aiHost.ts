@@ -31,6 +31,7 @@ import {
   SceneTranslationDraft,
 } from '@mirai/shared'
 import { assertExplicitCastAllowed, maturePipelineActive } from '@mirai/core'
+import { planEpisodeFromRuntime } from '@mirai/shared'
 import type { DossierAiSections, DossierData } from '@mirai/core'
 import {
   ModelRegistry,
@@ -633,6 +634,32 @@ export class AiHost {
     const push = (step: string, detail: string, ok = true) => steps.push({ step, detail, ok })
     const guard = () => {
       if (signal.aborted) throw new MiraiError('CANCELLED', 'Production cancelled.')
+    }
+
+    // The IP form's promise: the user fills `episodeLengthMinutes` and the
+    // studio produces something that fills it. The scene count is DERIVED, not
+    // guessed — and the plan says out loud when the target had to be capped.
+    const runtimePlan =
+      options.targetMinutes !== undefined ? planEpisodeFromRuntime(options.targetMinutes) : null
+    const scenesCount = Math.max(2, Math.min(12, options.scenesCount ?? runtimePlan?.scenesCount ?? 4))
+    const shotsPerScene = Math.max(2, Math.min(8, options.shotsPerScene ?? 4))
+    options = { ...options, scenesCount, shotsPerScene }
+    if (runtimePlan) {
+      // Report what THIS pass will actually build, not the ideal plan: the
+      // schedule is capped at 12 scenes so one planning call still fits.
+      const perShot =
+        runtimePlan.shotsTotal > 0 ? runtimePlan.estimatedSeconds / runtimePlan.shotsTotal : 8
+      const builtSeconds = scenesCount * shotsPerScene * perShot
+      const builtMinutes = Math.floor(builtSeconds / 60)
+      const clips = Math.ceil(builtSeconds / 15)
+      push(
+        'Episode plan',
+        `${options.targetMinutes} min requested → ${scenesCount} scenes · ${scenesCount * shotsPerScene} shots ` +
+          `· ~${builtMinutes}m of screen time · ${clips} video clips to animate` +
+          (runtimePlan.clamped
+            ? ` · CAPPED at ${scenesCount} scenes/pass — ${runtimePlan.clampReason}`
+            : ''),
+      )
     }
 
     const mature = this.matureActive(ctx)
