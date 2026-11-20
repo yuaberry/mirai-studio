@@ -16,6 +16,7 @@ import { useMemo, useState } from 'react'
 import {
   AudioLines,
   Check,
+  Cpu,
   ExternalLink,
   Film,
   Image as ImageIcon,
@@ -348,6 +349,14 @@ function ProviderCard({
       )}
 
       <div className="mt-2.5 flex flex-wrap gap-1.5">
+        {/* The LOCAL cards get the loudest badge on the page: they are the
+            answer to "studio quality without paying" — a real anime model on
+            the user's own GPU. Cloud gets the opposite (honest) note. */}
+        {provider.protocol === 'local' && (
+          <Badge tone="accent">
+            <Cpu className="h-3 w-3" /> {tr('your GPU')}
+          </Badge>
+        )}
         {provider.freeTier && <Badge tone="info">{tr('free tier')}</Badge>}
         {provider.watermarkFree && <Badge tone="violet">{tr('no watermark')}</Badge>}
         {provider.cloud && (

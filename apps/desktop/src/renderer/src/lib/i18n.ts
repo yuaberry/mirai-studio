@@ -54,6 +54,8 @@ const PT_BR: Record<string, string> = {
   'no key needed': 'sem chave',
   'free tier': 'camada gratuita',
   'no watermark': 'sem marca d’água',
+  'your GPU': 'sua GPU',
+  'runs locally': 'roda na sua máquina',
   cloud: 'nuvem',
   'Script & dialogue': 'Roteiro & diálogo',
   'Frames & art': 'Quadros & arte',
