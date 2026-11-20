@@ -17,10 +17,10 @@
  * the experiment is left on disk — folder, database, frames, audio, the
  * dossier and the backups.
  */
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, copyFileSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { bootstrap, type Container } from '../src/main/bootstrap'
 import { registerIpcHandlers } from '../src/main/ipc/register'
 import { declareAssetScheme, registerAssetProtocol } from '../src/main/assets/assetProtocol'
@@ -45,6 +45,14 @@ function resolveAppOut(...parts: string[]): string {
 
 const SHOT_DIR = '/tmp/opencode/e2e-shots'
 const PROJECT_NAME = 'E2E Experimental — LGBT & Artes Marciais'
+
+/**
+ * VISIBLE mode: `MIRAI_E2E_VISIBLE=1` opens a REAL on-screen window (the
+ * user watches the production happen) instead of the offscreen renderer used
+ * on headless machines. The renderer, the preload bridge and the IPC path are
+ * the SAME code — only the presentation differs.
+ */
+const VISIBLE = process.env.MIRAI_E2E_VISIBLE === '1'
 const IDEA = `A contemporary LGBT anime about martial arts. Two young adult women —
 Haruka, a 24-year-old competitive jiujitsu athlete who works night shifts at a
 24h gym, and Lin, a 23-year-old trans woman who teaches capoeira at a community
@@ -154,6 +162,26 @@ async function screenshot(win: BrowserWindow, name: string): Promise<void> {
   }
 }
 
+/**
+ * Navigates the REAL UI by clicking the sidebar item with the given view id.
+ *
+ * The click is done through the `data-nav-view` hook, NOT by the visible
+ * text: the labels are translated (pt-BR) and a text-based click breaks the
+ * day a translation changes.
+ */
+async function navigate(win: BrowserWindow, view: string, settleMs = 1_600): Promise<boolean> {
+  // The view ids are our own literals (no quotes, no CSS-special chars).
+  const clicked = await win.webContents.executeJavaScript(
+    `(() => { const b = document.querySelector('[data-nav-view="${view}"]'); if (!b) return false; b.click(); return true })()`,
+  )
+  if (!clicked) {
+    log(`nav: "${view}" not found in the sidebar`)
+    return false
+  }
+  await new Promise((r) => setTimeout(r, settleMs))
+  return true
+}
+
 /** The prefix every project of this experiment carries. */
 const EXPERIMENT_PREFIX = 'E2E Experimental'
 
@@ -196,10 +224,13 @@ async function main(): Promise<void> {
     registerIpcHandlers(container)
     registerAssetProtocol(() => container.projects.current()?.storyboard ?? null)
 
+    const wa = screen.getPrimaryDisplay().workAreaSize
     win = new BrowserWindow({
-      width: 1440,
-      height: 900,
-      show: false,
+      // NEVER hardcode a size bigger than the screen (lesson 39): a 1440x900
+      // window on a 1366x768 laptop hangs off the edges.
+      width: Math.min(1440, wa.width - 24),
+      height: Math.min(900, wa.height - 24),
+      show: VISIBLE,
       backgroundColor: '#0a0c10',
       webPreferences: {
         preload: resolveAppOut('preload/index.js'),
@@ -209,9 +240,16 @@ async function main(): Promise<void> {
         // Offscreen rendering: the CI/headless machines have no display, and
         // an on-screen window never finishes its first paint there. The
         // renderer, the preload bridge and the IPC path are identical.
-        offscreen: true,
+        // With MIRAI_E2E_VISIBLE=1 the window is REAL — the user watches it.
+        offscreen: !VISIBLE,
       },
     })
+    // The push channel (project:changed, jobs:updated, notify, logs) is
+    // delivered through the emitter — and the emitter DROPS every event when
+    // no window is attached. Without this the renderer never learns that a
+    // project was opened and the whole live-update path stays untested.
+    container.emitter.attach(win)
+    win.on('closed', () => container.emitter.detach())
     win.webContents.on('did-fail-load', (_e, code, desc, url) => {
       console.error(`renderer failed to load (${code}) ${desc} — ${url}`)
     })
@@ -271,7 +309,12 @@ async function main(): Promise<void> {
       },
     }
     const { settings: after } = await call<{ settings: AppSettings }>(win, 'settings:update', {
-      settings: { ...settings, ai },
+      settings: {
+        ...settings,
+        ai,
+        // The onboarding tour would sit on top of the UI during the gallery.
+        session: { ...settings.session, onboardingCompleted: true },
+      },
     })
     if (after.ai.image.protocol !== 'pollinations') throw new Error('image protocol not persisted')
     if (after.ai.tts.protocol !== 'google-translate') throw new Error('tts protocol not persisted')
@@ -344,6 +387,26 @@ async function main(): Promise<void> {
     const current = await call<{ project: { id: string } | null }>(win, 'projects:current')
     if (current.project?.id !== projectId) throw new Error('the opened project is not the current one')
     pass('project is open in the studio')
+  })
+
+  await step('PUSH CHANNEL: the renderer learned about it (live update)', async () => {
+    // The `project:changed` push event must reach the renderer and make the
+    // sidebar grow the project navigation. Before this was wired, the emitter
+    // had no window attached and EVERY push event was silently dropped —
+    // the E2E passed while the whole live-update path was untested.
+    const deadline = Date.now() + 10_000
+    let navCount = 0
+    while (Date.now() < deadline) {
+      navCount = await win.webContents.executeJavaScript(
+        `document.querySelectorAll('[data-nav-view]').length`,
+      )
+      if (navCount > 4) break
+      await new Promise((r) => setTimeout(r, 500))
+    }
+    if (navCount <= 4) {
+      throw new Error(`the renderer never received project:changed (nav items: ${navCount})`)
+    }
+    pass(`${navCount} sidebar items — the push event reached the renderer`)
   })
 
   // ---------------------------------------------------------------- producer
@@ -512,6 +575,51 @@ async function main(): Promise<void> {
     const result = job.result as { outputPath: string; fileBytes: number }
     if (!existsSync(result.outputPath)) throw new Error('no MP4 on disk')
     pass(`MP4: ${result.outputPath} (${(result.fileBytes / 1024).toFixed(0)} KB)`)
+  })
+
+  // ---------------------------------------------------------------- gallery
+  // The quality evidence: the REAL UI with the REAL produced content, plus
+  // the raw assets on disk (frames, MP4, dossier). Captured BEFORE the
+  // delete, because the delete is the point.
+  let capturedFrames: string[] = []
+  await step('GALLERY: the real UI with the real production', async () => {
+    const pages: Array<[string, string]> = [
+      ['storyboard', '10-storyboard'],
+      ['characters', '11-characters'],
+      ['episodes', '12-episodes'],
+      ['render', '13-render-export'],
+      ['media', '14-media-library'],
+      ['marketplace', '15-marketplace'],
+    ]
+    const visited: string[] = []
+    for (const [view, name] of pages) {
+      if (await navigate(win, view)) {
+        visited.push(view)
+        await screenshot(win, name)
+      }
+    }
+    if (visited.length === 0) throw new Error('the sidebar navigation hook did not work')
+    pass(`${visited.length} pages visited and captured: ${visited.join(', ')}`)
+  })
+
+  await step('EVIDENCE: the raw generated assets on disk', async () => {
+    const frameDir = join(SHOT_DIR, 'frames')
+    mkdirSync(frameDir, { recursive: true })
+    // The real frames the vendor produced — the only honest quality proof.
+    const imageRoot = join(projectPath, 'images')
+    const frames = existsSync(imageRoot)
+      ? readdirSync(imageRoot, { recursive: true, withFileTypes: true })
+          .filter((e) => e.isFile() && /\.(png|jpe?g|webp)$/i.test(e.name))
+          .map((e) => join(e.parentPath, e.name))
+      : []
+    capturedFrames = frames.slice(0, 12)
+    capturedFrames.forEach((src, i) => {
+      // Keep the ORIGINAL extension — renaming a JPEG to .png would be a lie.
+      const ext = src.slice(src.lastIndexOf('.'))
+      copyFileSync(src, join(frameDir, `frame-${String(i + 1).padStart(2, '0')}${ext}`))
+    })
+    if (capturedFrames.length === 0) throw new Error('no generated frame found on disk')
+    pass(`${capturedFrames.length} real frame(s) copied to ${frameDir}`)
   })
 
   // ---------------------------------------------------------------- cleanup

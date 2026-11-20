@@ -1,0 +1,242 @@
+# Anime Quality — generating at Japanese-studio level, for FREE
+
+This document is the honest answer to *"I want it to look like Re:Zero / My
+Dress-Up Darling / KonoSuba, and I don't want to pay anything."*
+
+It has three parts:
+
+1. **What was wrong** — why the free stack produced photorealistic output.
+2. **What the app now does** — the anime contract that is enforced in code.
+3. **How to get the quality** — the local GPU path (zero cost), and the paid
+   cloud path, with the real requirements for each.
+
+---
+
+## 1. What was wrong (measured, not assumed)
+
+The keyless free stack is:
+
+| Capability | Provider | Measured behaviour |
+|---|---|---|
+| Chat / script | NVIDIA NIM | Real, works |
+| Image | Pollinations classic (`flux`) | **GENERAL model** — photorealistic/live-action output, logo-stamped |
+| Video | Pollinations media (`wan-2.2-fast`) | **24/24 models `paid_only`** → HTTP 401 without a key |
+| Voice | Google Translate speech | Real MP3, one voice per locale |
+
+`flux` is **not an anime model**. It has no cel-shading, no anime lineart, no
+broadcast palette, no anime proportions. Asking it for "anime style, beautiful,
+high quality" produces *a beautiful photograph* — because that is what the model
+knows how to make. Measured from the E2E frames: skin texture, lens bokeh,
+depth-of-field blur, photorealistic hair — every marker of a camera photo.
+
+**No prompt can fix this.** Adjectives compete with a model's entire training
+distribution. Naming the *medium* and *excluding the unwanted media by name* is
+what works.
+
+---
+
+## 2. What the app now enforces (in code, not in a README)
+
+### The MEDIUM CONTRACT — `buildImagePrompt()`
+
+Every image prompt now carries a non-negotiable medium statement:
+
+```
+MEDIUM (non-negotiable): this is a 2D JAPANESE ANIME CEL-ANIMATION KEYFRAME —
+hand-drawn animation as broadcast on Japanese television. It is NOT a
+photograph, NOT photorealistic, NOT a 3D render, NOT live action, NOT
+documentary, NOT a real person. Nothing that looks like a camera photo.
+```
+
+The unwanted media are **named and excluded**. A generalist model then has
+nowhere to drift to.
+
+### The STUDIO QUALITY REFERENCE
+
+The prompt names the production language of the studios that set the bar:
+
+> CloverWorks (My Dress-Up Darling), White Fox (Re:Zero), Studio Deen
+> (KonoSuba), Toei Animation, Kyoto Animation, A-1 Pictures, Wit Studio,
+> Ufotable.
+
+…and translates it into the terms these pipelines actually understand:
+
+- clean confident **outline** (variable line weight, ink-like, no sketchy strokes)
+- **flat cel-shaded** colour blocks with hard shadow edges
+- crisp bright anime palette with a defined key palette
+- large expressive eyes with clean highlight shapes
+- stylised hair as defined shapes with specular bands
+- simplified expressive faces, anime proportions
+- painted background with atmospheric depth and bokeh
+- intentional **pose** with weight and gesture (not a static snapshot)
+
+### The ANIME NEGATIVE PROMPT
+
+Exported as `ANIME_NEGATIVE_PROMPT` and sent verbatim as `negative_prompt` to
+the local backends. It excludes, by name: `photorealistic, realistic, photo,
+photograph, 3d render, cgi, live action, real person, DSLR, film grain,
+documentary, sketch, pencil, unfinished, monochrome…` plus the usual quality
+traps (`bad anatomy, extra limbs, deformed hands…`).
+
+> Measured: the same SDXL checkpoints drift to live-action photography within a
+> few steps unless the unwanted medium is named **exclusively**.
+
+### Locked by tests
+
+`packages/ai/test/consistency.test.ts` fails the build if the prompt ever
+regresses to "beautiful image" without the medium contract, the studio
+references, or the exclusion list.
+
+---
+
+## 3. Getting the quality
+
+There are two routes. **Neither is free *and* instant** — that combination does
+not exist for this quality bar, and this document will not pretend otherwise.
+
+### Route A — your own GPU (zero recurring cost)
+
+This is the **only** route with no invoice, and the app is now built for it.
+
+**Requirements**
+
+| Component | Minimum | Recommended |
+|---|---|---|
+| GPU (NVIDIA) | 8 GB VRAM (image) | 12–24 GB VRAM (video) |
+| CUDA | 11.8+ | 12.x |
+| System RAM | 32 GB | 64 GB |
+| Disk | 100 GB SSD | 500 GB NVMe |
+| OS | Linux (Ubuntu recommended) | Linux with NVIDIA drivers installed |
+
+> **A VM with GPU counts.** Cloud GPU instances (RunPod, Lambda, Vast.ai…)
+> satisfy this — they just bill by the hour. Free-tier VMs do **not** include
+> usable NVIDIA GPUs for this workload.
+
+**Install Automatic1111 (images)**
+
+```bash
+git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui
+cd stable-diffusion-webui
+# The app calls the API — it MUST be enabled:
+./webui.sh --api --listen     # then keep it running on port 7860
+```
+
+Load an **anime checkpoint** — the quality depends on the model you choose, not
+on a cloud tier. The current industry references:
+
+| Model | Notes |
+|---|---|
+| **Pony Diffusion V6 XL** | Strongest general anime; excellent prompt adherence |
+| **Illustrious** | The modern successor line; very clean lineart |
+| **Anything V5** | Classic, lightweight, easy to run on 8 GB |
+| **Counterfeit** | Anime + illustration hybrid |
+| **Animagine XL** | Good for character design sheets |
+
+Download from Civitai and drop the `.safetensors` into
+`models/Stable-diffusion/`.
+
+**In Mirai Studio**
+
+1. Open **AI Marketplace** → pick **"Your Own GPU (Automatic1111)"**.
+2. The app sets `protocol: local` and the address `http://127.0.0.1:7860`.
+3. Generate frames. They come back **without any vendor logo** (`watermarked`
+   is `false` — a measured fact, because there is no vendor).
+
+> **Security:** the adapter **refuses any non-loopback address**. The SD WebUI
+> API is unauthenticated by design; exposing it would leak your GPU to the
+> network. `127.0.0.1` / `localhost` / `[::1]` only.
+
+**Install ComfyUI (video)**
+
+```bash
+git clone https://github.com/comfyanonymous/ComfyUI
+cd ComfyUI
+python main.py --listen       # runs on port 8188
+```
+
+Video needs a **workflow** — the app does not guess node layouts. Build one for
+AnimateDiff / Wan 2.2 / LTXV / Hyper-SD, then use **Save (API Format)** and
+paste the JSON into **Settings → Providers → Video (local)**.
+
+The adapter injects these placeholders into your workflow:
+
+| Placeholder | Replaced with |
+|---|---|
+| `{{prompt}}` | the studio prompt (positive prompt) |
+| `{{negative}}` | `ANIME_NEGATIVE_PROMPT` |
+| `{{seed}}` | a resolved seed |
+| `{{image}}` | the reference frame's file name inside ComfyUI |
+
+Because the workflow is yours, **any** video model works — the app never has to
+know a vendor's graph.
+
+**Runtime expectations (honest)**
+
+- Image: a few seconds to ~30 s per keyframe on a modern GPU.
+- Video: minutes per clip, and it scales directly with resolution/frames. A
+  3-second 1080p clip can take 10+ minutes on a 12 GB card.
+
+### Route B — paid cloud APIs (no GPU of your own)
+
+For when you want the quality but not the hardware. The app already speaks the
+OpenAI-compatible protocol, so a vendor that offers `/images/generations` or
+`/videos/generations` needs no new code:
+
+1. **AI Marketplace** → **Custom OpenAI-compatible (Image)** or **(Video)**.
+2. Paste the base URL and model in **Settings → Providers**.
+3. Add the API key in the credential vault.
+
+Vendors in this category include Fal.ai / Replicate aggregators and the video
+specialists (Kling, Seedance, Hailuo, Wan 2.2 hosted, LTXV hosted). The app
+does not endorse any specific one — and the Marketplace card states plainly
+that watermark-freedom depends on the vendor you choose.
+
+**Do not expect a free API tier of these.** The ones that exist are trials of
+minutes or a handful of generations — not a production pipeline.
+
+### What Route C is *not*
+
+There is no Route C. Specifically:
+
+- **No free cloud API** serves Pony Diffusion / Illustrious / Wan 2.2 at
+  production quality and scale.
+- **No free GPU tier** exists for sustained video generation.
+- **CPU-only generation** is not viable for this workload (hours per clip).
+- **The keyless Pollinations tier** can validate the *pipeline* (script,
+  storyboard, consistency, voice, timeline, render, dossier) but **cannot**
+  deliver studio-grade *visuals* — it serves a general photorealistic model
+  with a logo.
+
+---
+
+## 4. Quality checklist
+
+Before blaming the pipeline, check these in order:
+
+1. **Is `protocol` actually `local`?** Settings → Providers. If it still says
+   `pollinations`, you are on the model that cannot do this.
+2. **Is the backend running and reachable?** The app reports
+   "Could not reach the local generator" with the address it tried.
+3. **Is the checkpoint an anime model?** A photorealistic checkpoint
+   (`realisticVision`, `DreamShaper`…) will undo every instruction in the
+   prompt. Check the A1111/ComfyUI console for the loaded model.
+4. **Is the negative prompt reaching the model?** The local route sends
+   `ANIME_NEGATIVE_PROMPT` automatically; a custom sampler may ignore it.
+5. **Character consistency** comes from the model sheet + reference frame —
+   generate the character's turnaround sheet FIRST (`AI sheet` in the Character
+   editor), then generate shots with it as the image-to-image reference
+   (`denoise` 0.55 keeps the design lock).
+
+---
+
+## 5. Honest limitations
+
+- **No provider is guaranteed "watermark-free"** — the Marketplace reports the
+  *measured* fact per provider. Local generation has no vendor logo because
+  there is no vendor.
+- **Voice is one voice per locale** on the keyless path.
+- **Consistency score 100** means the prompt honoured the lock, not that two
+  independent generations are pixel-identical. Lock characters with model
+  sheets + reference frames for that.
+- **The final render is local FFmpeg** — deterministic, licensed, already
+  bundled. Generation is the cloud/GPU step; encoding is not.

@@ -1567,6 +1567,11 @@ export function registerIpcHandlers(c: Container): void {
     if (!provider) {
       throw new MiraiError('NOT_FOUND', `Unknown provider: ${req.providerId}`)
     }
+    // The image/video sections accept a NARROWER protocol set than the whole
+    // Marketplace (no 'google-translate'), so the value is narrowed here.
+    // A voice protocol applied to an image section would be a silent misroute.
+    const mediaProtocol: 'openai' | 'pollinations' | 'local' =
+      provider.protocol === 'google-translate' ? 'openai' : provider.protocol
     // "Bring your own" cards have no base URL: we still switch the protocol
     // and tell the user exactly what is left to type.
     const manual = provider.baseUrl.trim().length === 0
@@ -1593,13 +1598,18 @@ export function registerIpcHandlers(c: Container): void {
       }
     } else if (provider.capability === 'image') {
       const current = c.settings.get().ai.image
+      // The protocol is written VERBATIM — including 'local'. Degrading it to
+      // 'openai' would silently send the user's own-GPU setup to a cloud
+      // endpoint that needs a key they never provided.
       c.settings.patch({
         ai: {
           ...c.settings.get().ai,
           image: {
             ...current,
-            protocol: provider.protocol === 'pollinations' ? 'pollinations' : 'openai',
+            protocol: mediaProtocol,
             ...(manual ? {} : { baseUrl: provider.baseUrl, model: model ?? current.model }),
+            // The local backend's address lives in its own block.
+            ...(provider.protocol === 'local' ? { local: { ...current.local, baseUrl: provider.baseUrl } } : {}),
           },
         },
       })
@@ -1610,8 +1620,9 @@ export function registerIpcHandlers(c: Container): void {
           ...c.settings.get().ai,
           video: {
             ...current,
-            protocol: provider.protocol === 'pollinations' ? 'pollinations' : 'openai',
+            protocol: mediaProtocol,
             ...(manual ? {} : { baseUrl: provider.baseUrl, model: model ?? current.model }),
+            ...(provider.protocol === 'local' ? { local: { ...current.local, baseUrl: provider.baseUrl } } : {}),
           },
         },
       })
@@ -1627,6 +1638,22 @@ export function registerIpcHandlers(c: Container): void {
           },
         },
       })
+    }
+
+    // The Marketplace's own answer for a local card must name the real
+    // prerequisite (the backend + an anime model), not pretend a key is missing.
+    if (provider.protocol === 'local') {
+      return {
+        applied: true,
+        needsManualSetup: false,
+        requiresKey: false,
+        credentialKey: null,
+        message:
+          `Backend selected: ${provider.name}. ` +
+          (provider.capability === 'video'
+            ? 'Paste a ComfyUI “Save (API Format)” workflow into Settings → Providers → Video.'
+            : 'Start it with --api and load an anime checkpoint (Pony / Illustrious / Anything V5).'),
+      }
     }
 
     const hasKey = provider.credentialKey ? c.credentials.get(provider.credentialKey) !== null : true

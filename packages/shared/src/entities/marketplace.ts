@@ -18,8 +18,15 @@ export type AiCapability = z.infer<typeof AiCapability>
 /**
  * Wire protocol of the endpoint. The app has one adapter per protocol, so
  * this value decides WHICH code talks to the vendor.
+ *
+ *   'openai'         → any OpenAI-compatible cloud endpoint
+ *   'pollinations'   → Pollinations' REST API (keyless image / paid video)
+ *   'google-translate→ the keyless speech endpoint
+ *   'local'          → the user's OWN Automatic1111 / ComfyUI on 127.0.0.1 —
+ *                      no key, no invoice, and the ONLY route to a real
+ *                      anime model without paying a cloud provider.
  */
-export const ProviderProtocol = z.enum(['openai', 'pollinations', 'google-translate'])
+export const ProviderProtocol = z.enum(['openai', 'pollinations', 'google-translate', 'local'])
 export type ProviderProtocol = z.infer<typeof ProviderProtocol>
 
 /** A provider the user can select for a capability. */
@@ -94,13 +101,49 @@ export type MarketplaceCatalog = z.infer<typeof MarketplaceCatalog>
  * CURATED PROVIDERS — every single one is implemented by the app:
  *
  *   openai              → OpenAIImagesProvider / OpenAIVideoProvider / OpenAITtsProvider
- *   pollinations        → PollinationsImagesProvider / PollinationsVideoProvider
- *   google-translate    → GoogleTranslateTtsProvider
+ *   pollinations         → PollinationsImagesProvider / PollinationsVideoProvider
+ *   google-translate     → GoogleTranslateTtsProvider
+ *   local                → LocalImageProvider (A1111 / ComfyUI on the user's OWN GPU)
  *
  * There is no entry the app cannot drive: an entry we cannot use would be a
  * fake button.
  */
 export const MARKETPLACE_PROVIDERS: readonly MarketplaceProvider[] = [
+  // ---------------------------------------------- LOCAL GPU — zero cost
+  // These are the FIRST cards on purpose: they are the only free path to a
+  // REAL anime model, and the honest answer to "which provider do I pick?".
+  {
+    id: 'local-image',
+    name: 'Your Own GPU (Automatic1111)',
+    capability: 'image',
+    protocol: 'local',
+    baseUrl: 'http://127.0.0.1:7860',
+    requiresKey: false,
+    freeTier: true,
+    watermarkFree: true,
+    cloud: false,
+    docsUrl: 'https://github.com/AUTOMATIC1111/stable-diffusion-webui',
+    summary:
+      'Runs anime models (Pony Diffusion, Illustrious, Anything V5, Counterfeit, Animagine) on YOUR GPU — no key, no invoice, no logo.',
+    notes:
+      'Install Automatic1111 with --api, load an anime checkpoint, and the app calls it on 127.0.0.1:7860. Needs a NVIDIA GPU (8-12 GB VRAM). Requires the anime model YOU choose — quality depends on the checkpoint, not on a cloud tier. The adapter refuses any non-loopback address.',
+  },
+  {
+    id: 'local-video',
+    name: 'Your Own GPU (ComfyUI)',
+    capability: 'video',
+    protocol: 'local',
+    baseUrl: 'http://127.0.0.1:8188',
+    requiresKey: false,
+    freeTier: true,
+    watermarkFree: true,
+    cloud: false,
+    docsUrl: 'https://github.com/comfyanonymous/ComfyUI',
+    summary:
+      '2D anime VIDEO on your own GPU via ComfyUI — AnimateDiff, Wan 2.2, LTXV or Hyper-SD, animated from your own storyboard frames.',
+    notes:
+      'Paste a "Save (API Format)" workflow JSON into Settings → Providers → Video. Needs a NVIDIA GPU (12-24 GB VRAM for video models). Runtime depends on your hardware and the workflow, never on a cloud quota.',
+  },
   {
     id: 'openrouter-chat',
     name: 'OpenRouter',

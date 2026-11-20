@@ -41,6 +41,9 @@ import {
   PollinationsVideoProvider,
   GoogleTranslateTtsProvider,
   parseGoogleVoice,
+  LocalImageProvider,
+  parseLocalBaseUrl,
+  ANIME_NEGATIVE_PROMPT,
   buildSystemPrompt,
   buildImagePrompt,
   draftScreenplayInstruction,
@@ -249,7 +252,7 @@ export class AiHost {
    * Returns null when the provider is not configured yet.
    */
   resolveImageProvider(): {
-    protocol: 'openai' | 'pollinations'
+    protocol: 'openai' | 'pollinations' | 'local'
     apiKey: string | null
     baseUrl: string
     model: string
@@ -259,11 +262,20 @@ export class AiHost {
     const settings = this.deps.settings.get()
     const image = settings.ai.image
     const protocol = image.protocol ?? 'openai'
+    const size = image.size || '1344x768'
+    const noWatermark = image.noWatermark ?? true
+
+    // LOCAL: the user's own GPU. No key, no cloud, no vendor logo — and the
+    // only free route to a real anime model.
+    if (protocol === 'local') {
+      const localBase = image.local?.baseUrl?.trim()
+      if (!localBase) return null
+      return { protocol: 'local', apiKey: null, baseUrl: localBase, model: image.model ?? 'local', size, noWatermark }
+    }
+
     const baseUrl = image.baseUrl
     const model = image.model
     if (!baseUrl || !model) return null
-    const size = image.size || '1344x768'
-    const noWatermark = image.noWatermark ?? true
     if (protocol === 'pollinations') {
       // The classic image endpoint is keyless — a key is optional here.
       return { protocol, apiKey: this.deps.credentials.get('image'), baseUrl, model, size, noWatermark }
@@ -307,7 +319,7 @@ export class AiHost {
    * precise error when the vendor asks for credentials.
    */
   resolveVideoProvider(): {
-    protocol: 'openai' | 'pollinations'
+    protocol: 'openai' | 'pollinations' | 'local'
     apiKey: string | null
     baseUrl: string
     model: string
@@ -320,6 +332,25 @@ export class AiHost {
     const settings = this.deps.settings.get()
     const video = settings.ai.video
     const protocol = video.protocol ?? 'openai'
+
+    // LOCAL: ComfyUI on the user's own GPU. No key, no invoice — the only
+    // free 2D-anime video path.
+    if (protocol === 'local') {
+      const localBase = video.local?.baseUrl?.trim()
+      if (!localBase) return null
+      return {
+        protocol: 'local',
+        apiKey: null,
+        baseUrl: localBase,
+        model: 'local-comfyui',
+        size: video.size || '1920x1080',
+        fps: video.fps ?? 24,
+        quality: video.quality ?? 'hd',
+        useReferenceFrame: video.useReferenceFrame ?? true,
+        noWatermark: video.noWatermark ?? true,
+      }
+    }
+
     if (!video?.baseUrl || !video.model) return null
     const apiKey = this.deps.credentials.get('videogen')
     if (protocol === 'openai' && !apiKey) return null
@@ -432,7 +463,41 @@ export class AiHost {
     ].join('\n\n')
     progress(10)
     let result: { bytes: Buffer; mimeType: string; seconds: number; referenceUsed?: boolean }
-    if (videoProvider.protocol === 'pollinations') {
+    if (videoProvider.protocol === 'local') {
+      // The user's OWN GPU via ComfyUI — the only free 2D-anime video path.
+      // The workflow is the user's, so the app never guesses node layouts.
+      const localVideo = this.deps.settings.get().ai.video.local
+      if (!localVideo?.workflowJson || localVideo.workflowJson.trim().length === 0) {
+        throw new MiraiError(
+          'CREDENTIALS_UNAVAILABLE',
+          'The local video backend needs a workflow — paste the ComfyUI ' +
+            '"Save (API Format)" JSON into Settings → Providers → Video (local).',
+        )
+      }
+      const { baseUrl } = parseLocalBaseUrl(videoProvider.baseUrl)
+      const provider = new LocalImageProvider({
+        baseUrl,
+        flavor: 'comfyui',
+        fetchFn: globalFetch(),
+        timeoutMs: 600_000,
+      })
+      // IMAGE-TO-VIDEO: the storyboard frame is the animation reference, so it
+      // must live inside ComfyUI's input dir before the workflow runs.
+      let workflow = localVideo.workflowJson
+      let referenceUsed = false
+      if (imageB64 !== undefined) {
+        const uploadedName = await provider.uploadImage(imageB64, signal)
+        workflow = workflow.replaceAll('{{image}}', uploadedName)
+        referenceUsed = true
+      }
+      const generated = await provider.runComfyWorkflow({
+        workflowJson: workflow,
+        prompt,
+        negativePrompt: ANIME_NEGATIVE_PROMPT,
+        signal,
+      })
+      result = { ...generated, seconds, referenceUsed }
+    } else if (videoProvider.protocol === 'pollinations') {
       const provider = new PollinationsVideoProvider({
         baseUrl: videoProvider.baseUrl,
         apiKey: videoProvider.apiKey ?? undefined,
@@ -1578,7 +1643,28 @@ export class AiHost {
       .join('\n')
 
     let result: { bytes: Buffer; mimeType: string }
-    if (imageProvider.protocol === 'pollinations') {
+    if (imageProvider.protocol === 'local') {
+      // The model sheet is the SINGLE most consistency-critical image in the
+      // whole production — it must come from a model that can actually draw
+      // anime, which is exactly why the local route exists.
+      const local = this.deps.settings.get().ai.image.local
+      const { baseUrl, flavor } = parseLocalBaseUrl(imageProvider.baseUrl)
+      const provider = new LocalImageProvider({
+        baseUrl,
+        flavor,
+        fetchFn: globalFetch(),
+        timeoutMs: 600_000,
+      })
+      result = await provider.generate({
+        prompt,
+        negativePrompt: ANIME_NEGATIVE_PROMPT,
+        width: 768,
+        height: 1344,
+        steps: local?.steps,
+        cfgScale: local?.cfgScale,
+        samplerName: local?.samplerName,
+      })
+    } else if (imageProvider.protocol === 'pollinations') {
       const provider = new PollinationsImagesProvider({
         baseUrl: imageProvider.baseUrl,
         fetchFn: globalFetch(),
@@ -1850,7 +1936,32 @@ export class AiHost {
 
     progress(20)
     let result: { bytes: Buffer; mimeType: string; watermarked?: boolean }
-    if (imageProvider.protocol === 'pollinations') {
+    if (imageProvider.protocol === 'local') {
+      // The user's OWN GPU (Automatic1111 / ComfyUI). No key, no cloud, no
+      // vendor logo — and the only free route to a REAL anime model. A home
+      // GPU needs minutes, not seconds, so the timeout is generous.
+      const local = this.deps.settings.get().ai.image.local
+      const { baseUrl, flavor } = parseLocalBaseUrl(imageProvider.baseUrl)
+      const provider = new LocalImageProvider({
+        baseUrl,
+        flavor,
+        fetchFn: globalFetch(),
+        timeoutMs: 600_000,
+      })
+      const { width, height } = parseSize(imageProvider.size)
+      result = await provider.generate({
+        prompt,
+        negativePrompt: ANIME_NEGATIVE_PROMPT,
+        width,
+        height,
+        steps: local?.steps,
+        cfgScale: local?.cfgScale,
+        samplerName: local?.samplerName,
+        imageB64,
+        denoise: imageB64 ? 0.55 : undefined,
+        signal,
+      })
+    } else if (imageProvider.protocol === 'pollinations') {
       const provider = new PollinationsImagesProvider({
         baseUrl: imageProvider.baseUrl,
         fetchFn: globalFetch(),

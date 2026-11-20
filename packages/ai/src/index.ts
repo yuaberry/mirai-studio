@@ -70,3 +70,16 @@ export type {
 // --------------------------------------------- google translate (keyless)
 export { GoogleTranslateTtsProvider, parseGoogleVoice, splitText } from './googleTts'
 export type { GoogleTtsOptions, GoogleTtsResult } from './googleTts'
+
+// ---------------------------------------------------- local GPU (zero cost)
+// A1111 / ComfyUI running on the user's own machine: no API key, no invoice,
+// no vendor logo. This is the only way to reach studio-grade anime without
+// paying a cloud provider.
+export {
+  LocalImageProvider,
+  parseLocalBaseUrl,
+  LOCAL_A1111_DEFAULT_PORT,
+  LOCAL_COMFYUI_DEFAULT_PORT,
+} from './local'
+export type { LocalFlavor, LocalImageOptions, LocalMediaResult, LocalVideoOptions } from './local'
+export { ANIME_NEGATIVE_PROMPT } from './consistency'

@@ -58,8 +58,23 @@ describe('MarketplaceService.providers', () => {
     const ids = new Set(providers.map((p) => p.id))
     expect(ids.size).toBe(providers.length)
     for (const provider of providers) {
-      expect(['openai', 'pollinations', 'google-translate']).toContain(provider.protocol)
+      expect(['openai', 'pollinations', 'google-translate', 'local']).toContain(provider.protocol)
     }
+    // The zero-cost local cards carry the honest shape: no key, no invoice,
+    // no cloud, no vendor logo — and their base URL is loopback.
+    const localImage = providers.find((p) => p.id === 'local-image')
+    const localVideo = providers.find((p) => p.id === 'local-video')
+    expect(localImage).toBeDefined()
+    expect(localVideo).toBeDefined()
+    for (const card of [localImage!, localVideo!]) {
+      expect(card.requiresKey).toBe(false)
+      expect(card.freeTier).toBe(true)
+      expect(card.watermarkFree).toBe(true)
+      expect(card.cloud).toBe(false)
+      expect(card.baseUrl).toMatch(/^https?:\/\/(127\.0\.0\.1|localhost)/)
+    }
+    expect(localImage!.capability).toBe('image')
+    expect(localVideo!.capability).toBe('video')
   })
 
   it('does not promise a watermark-free output the vendor does not deliver', () => {

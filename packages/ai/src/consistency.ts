@@ -120,12 +120,47 @@ export function buildImagePrompt(data: ConsistencyData): string {
     )
   }
 
-  // ---- 5. professional output language
+  // ---- 5. MEDIUM CONTRACT — the frame is ANIME, not a photograph
+  //
+  // MEASURED: the keyless image endpoint (`flux` via Pollinations classic)
+  // ignored every earlier stylistic phrase and delivered PHOTOREALISTIC,
+  // live-action-looking output — the one thing a Japanese-anime studio never
+  // produces. Adjectives do not fix that; naming the MEDIUM does. This block
+  // states what the image IS, what it is NOT, and which production language
+  // it belongs to, so a generalist model has nowhere to drift to.
   sections.push(
-    'OUTPUT: single anime production keyframe, TV-anime quality (comparable to top broadcast ' +
-      'productions), 16:9, clean edges, no text, no watermark, no speech bubbles.',
+    'MEDIUM (non-negotiable): this is a 2D JAPANESE ANIME CEL-ANIMATION KEYFRAME — ' +
+      'hand-drawn animation as broadcast on Japanese television. ' +
+      'It is NOT a photograph, NOT photorealistic, NOT a 3D render, NOT live action, ' +
+      'NOT documentary, NOT a real person. Nothing that looks like a camera photo.',
   )
 
+  sections.push(
+    'STUDIO QUALITY REFERENCE (draw at this production level): the visual language of ' +
+      'modern Japanese animation studios — CloverWorks (My Dress-Up Darling), ' +
+      'White Fox (Re:Zero), Studio Deen (KonoSuba), Toei Animation, Kyoto Animation, ' +
+      'A-1 Pictures, Wit Studio, Ufotable. Match their discipline: ' +
+      'clean confident OUTLINE (variable line weight, ink-like, no sketchy strokes), ' +
+      'FLAT CEL-SHADED colour blocks with hard shadow edges (no soft gradients, no ' +
+      'unrealistic light bleed), crisp bright anime colour palette with a defined key ' +
+      'palette, large expressive eyes with clean highlight shapes, stylised hair as ' +
+      'defined shapes with specular bands, simplified expressive faces, 2:1 or realistic ' +
+      'anime proportions, painted background with atmospheric depth and bokeh, ' +
+      'intentional POSE with weight and gesture (not a static snapshot), ' +
+      'cinematic composition with depth of field.',
+  )
+
+  sections.push(
+    'ANIME KEYFRAME SPECS: single keyframe (ga-kan / “original drawing”), ' +
+      '16:9 broadcast framing, clean final line — no construction lines, no pencil ' +
+      'roughness, no unfinished look, no visible paper texture. ' +
+      'ABSENT FROM THE IMAGE: text, captions, watermarks, logos, UI, speech bubbles, ' +
+      'signatures, borders, split panels, collage, multiple-panel layout, duplicate ' +
+      'figures. High resolution, sharp, poster-clean.',
+  )
+
+  // The artist's own notes go BEFORE the reference block, so the canon frame
+  // always has the last word on a conflicting instruction.
   if (data.extraPrompt && data.extraPrompt.trim().length > 0) {
     sections.push(`EXTRA DIRECTION FROM THE ARTIST:\n${data.extraPrompt.trim()}`)
   }
@@ -141,6 +176,22 @@ export function buildImagePrompt(data: ConsistencyData): string {
 
   return sections.join('\n\n')
 }
+
+/**
+ * The negative prompt that keeps a local anime model honest.
+ *
+ * MEASURED: the same SDXL checkpoints drift to live-action photography within
+ * a few steps unless the unwanted medium is named EXCLUSIVELY. A1111 and
+ * ComfyUI both accept this verbatim as `negative_prompt`.
+ */
+export const ANIME_NEGATIVE_PROMPT =
+  'photorealistic, realistic, photo, photograph, 3d render, cgi, live action, ' +
+  'real person,真人, realistic skin, DSLR, film grain, documentary, ' +
+  'sketch, pencil, unfinished, lineart-only, monochrome, greyscale, ' +
+  'lowres, blurry, jpeg artifacts, watermark, signature, logo, text, caption, ' +
+  'subtitle, speech bubble, panel border, collage, grid, multiple views, ' +
+  'duplicate characters, deformed hands, extra limbs, bad anatomy, ' +
+  'disfigured, malformed, cross-eyed, mutated, amateur, ugly, worst quality'
 
 /**
  * The Scene Writer agent's drafting instruction — the "screenwriter brain".

@@ -167,6 +167,10 @@ function NavGroup({
             <button
               key={item.view}
               onClick={() => setView(item.view)}
+              // Stable test hook: the visible label is TRANSLATED (pt-BR), so
+              // an E2E that clicks by text would break the day a translation
+              // changes. The view id never changes.
+              data-nav-view={item.view}
               className={cn(
                 'relative flex items-center gap-2.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
                 active

@@ -36,8 +36,16 @@ export const AppSettings = z.object({
       /** Image generation provider. */
       image: z
         .object({
-          /** Wire protocol of the endpoint — decides which adapter talks to it. */
-          protocol: z.enum(['openai', 'pollinations']).default('openai'),
+          /**
+           * Wire protocol of the endpoint — decides which adapter talks to it.
+           *
+           *   'openai'       → POST /images/generations (needs a key)
+           *   'pollinations' → GET /prompt/{prompt} (keyless, GENERAL model)
+           *   'local'        → the user's OWN Automatic1111 / ComfyUI on
+           *                    127.0.0.1 — no key, no invoice, and the ONLY
+           *                    free path to a real anime model.
+           */
+          protocol: z.enum(['openai', 'pollinations', 'local']).default('openai'),
           baseUrl: z.string().optional(),
           model: z.string().optional(),
           /** e.g. '1024x1024' | '1344x768' | '768x1344'. */
@@ -46,6 +54,21 @@ export const AppSettings = z.object({
            *  The prompt always says "no watermark"; this also sends the
            *  provider-specific switch (e.g. Pollinations' nologo=true). */
           noWatermark: z.boolean().default(true),
+          /**
+           * LOCAL GPU backend (protocol = 'local'). The address is the ONLY
+           * trust boundary — it must be 127.0.0.1 / localhost, because the
+           * SD WebUI / ComfyUI APIs are unauthenticated by design.
+           */
+          local: z
+            .object({
+              /** A1111 defaults to 7860, ComfyUI to 8188. */
+              baseUrl: z.string().default('http://127.0.0.1:7860'),
+              /** Sampling steps — 20..30 is the anime sweet spot. */
+              steps: z.number().int().min(4).max(150).default(28),
+              cfgScale: z.number().min(1).max(30).default(7),
+              samplerName: z.string().default('DPM++ 2M Karras'),
+            })
+            .default({}),
         })
         .default({}),
       /** AI voice acting — OpenAI-audio-compatible endpoint, or the
@@ -63,8 +86,16 @@ export const AppSettings = z.object({
       /** Video generation provider. */
       video: z
         .object({
-          /** Wire protocol of the endpoint — decides which adapter talks to it. */
-          protocol: z.enum(['openai', 'pollinations']).default('openai'),
+          /**
+           * Wire protocol of the endpoint — decides which adapter talks to it.
+           *
+           *   'openai'       → POST /videos/generations (needs a key)
+           *   'pollinations' → GET /video/{prompt} (paid-only models)
+           *   'local'        → ComfyUI on 127.0.0.1 running a VIDEO workflow
+           *                    (AnimateDiff, Wan 2.2, LTXV, Hyper-SD…) — the
+           *                    only 2D-anime video path with no invoice.
+           */
+          protocol: z.enum(['openai', 'pollinations', 'local']).default('openai'),
           baseUrl: z.string().optional(),
           model: z.string().optional(),
           /** e.g. '1344x768' | '1920x1080' (HD) | '3840x2160' (4K). */
@@ -80,6 +111,24 @@ export const AppSettings = z.object({
            *  The prompt always says "no watermark"; this also sends the
            *  provider-specific switch (e.g. Pollinations' nologo=true). */
           noWatermark: z.boolean().default(true),
+          /**
+           * LOCAL VIDEO backend (protocol = 'local') — ComfyUI only.
+           *
+           * The user pastes the COMPLETE “Save (API Format)” workflow JSON
+           * here, so ANY video model works (AnimateDiff, Wan 2.2, LTXV, SVD)
+           * without the app having to know its node layout. Placeholders:
+           *   {{prompt}}   → the studio prompt
+           *   {{negative}} → ANIME_NEGATIVE_PROMPT
+           *   {{seed}}     → a resolved seed
+           *   {{image}}    → the reference frame's file name in ComfyUI
+           */
+          local: z
+            .object({
+              baseUrl: z.string().default('http://127.0.0.1:8188'),
+              /** The full ComfyUI API-format workflow JSON. */
+              workflowJson: z.string().default(''),
+            })
+            .default({}),
         })
         .default({}),
       temperature: z.number().min(0).max(2).default(0.7),
