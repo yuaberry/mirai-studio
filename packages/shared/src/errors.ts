@@ -21,6 +21,12 @@ export const MIRAI_ERROR_CODES = [
   'SECURE_STORAGE_UNAVAILABLE',
   'AI_PROVIDER_ERROR',
   'AI_OFFLINE',
+  /**
+   * The configured provider CANNOT do the job (a local GPU too small for
+   * anime video generation, for instance). Distinct from
+   * CREDENTIALS_UNAVAILABLE: here the problem is capability, not a key.
+   */
+  'PROVIDER_UNSUITABLE',
   'PROJECT_INVALID',
   'PATH_INVALID',
   'CANCELLED',

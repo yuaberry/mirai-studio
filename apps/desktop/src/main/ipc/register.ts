@@ -13,6 +13,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { newEntityId, LicenseService } from '@mirai/core'
 import { RenderService, NotesImportService, DossierService, EpubService, DocxService, type DossierData } from '@mirai/core'
 import { MEDIUM_LABEL, StoredBrief, type DossierResult } from '@mirai/shared'
+import { LocalImageProvider, parseLocalBaseUrl } from '@mirai/ai'
 
 export function registerIpcHandlers(c: Container): void {
   // ---------------------------------------------------------------- projects
@@ -1531,6 +1532,44 @@ export function registerIpcHandlers(c: Container): void {
       })
       throw err
     }
+  })
+
+  handleIpc('local:preflight', async (req) => {
+    // The answer to "will my machine die trying this?" — asked BEFORE the user
+    // clicks generate, so an unusable GPU is diagnosed now and not after an
+    // hour of a frozen laptop.
+    const gate = await c.ai.preflightLocal(req.capability)
+    // A1111 can list its installed checkpoints — that is how the Settings UI
+    // offers the anime models the user ACTUALLY has, never a hardcoded list.
+    let checkpoints: string[] = []
+    const localSettings = c.settings.get().ai
+    const localUrl =
+      req.capability === 'video'
+        ? localSettings.video.local?.baseUrl?.trim()
+        : localSettings.image.local?.baseUrl?.trim()
+    if (localUrl && req.capability === 'image') {
+      try {
+        const { baseUrl, flavor } = parseLocalBaseUrl(localUrl)
+        if (flavor === 'a1111') {
+          const provider = new LocalImageProvider({
+            baseUrl,
+            flavor,
+            fetchFn: globalThis.fetch as never,
+          })
+          checkpoints = await provider.listCheckpoints()
+        }
+      } catch {
+        // An unreachable backend reports no checkpoints — the page says so.
+      }
+    }
+    c.logger.log('info', 'AI', 'Local preflight', {
+      capability: req.capability,
+      ok: gate.ok,
+      vram: gate.vramTotalBytes,
+      gpu: gate.gpuName,
+      checkpoints: checkpoints.length,
+    })
+    return { ...gate, checkpoints }
   })
 
   handleIpc('marketplace:apply', (req) => {

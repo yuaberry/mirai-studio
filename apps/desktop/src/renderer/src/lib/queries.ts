@@ -249,6 +249,25 @@ export function useMarketplaceCatalog() {
   })
 }
 
+/**
+ * Preflight for the LOCAL backend — the answer to "will my machine die trying
+ * this?". Asked BEFORE the user clicks generate, so an unusable GPU is
+ * diagnosed now and not after an hour of a frozen laptop.
+ *
+ * Only polled when the local protocol is actually selected, so the hook is
+ * inert for cloud users.
+ */
+export function useLocalPreflight(capability: 'image' | 'video', enabled: boolean) {
+  return useQuery({
+    queryKey: ['local', 'preflight', capability] as const,
+    queryFn: () => invoke('local:preflight', { capability }),
+    enabled,
+    // VRAM does not change while the app runs; re-check only on refetch.
+    staleTime: 60_000,
+    retry: false,
+  })
+}
+
 /** Applies a provider card (or a live model) to the real settings. */
 export function useApplyMarketplaceProvider() {
   const queryClient = useQueryClient()

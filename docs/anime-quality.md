@@ -275,6 +275,55 @@ Before blaming the pipeline, check these in order:
 
 ---
 
+## "Will my computer freeze?" — the app answers BEFORE it happens
+
+The most expensive mistake in this pipeline is starting a generation the machine
+cannot finish. An hour later nothing is done and the laptop is unusable.
+
+So the app runs a **preflight** and refuses with an actionable message:
+
+| Capability | Minimum VRAM | Why |
+|---|---|---|
+| Anime image | **6 GiB** | SDXL-based anime checkpoints (Pony V6 XL, Illustrious) |
+| Anime video | **12 GiB** | Wan 2.2 / AnimateDiff / LTXV |
+
+The check reads the backend's own GPU inventory (ComfyUI `/system_stats`), so
+the number is **measured, never assumed**. When the GPU is too small the app
+says:
+
+> This machine's GPU has 2.0 GiB of VRAM, but anime VIDEO generation needs
+> about 12.0 GiB. Generating would take hours and make the machine unusable —
+> the app refuses instead. Options: use a cloud video provider (Marketplace →
+> video model + key), or run the local backend on a machine with a larger
+> NVIDIA GPU.
+
+And it offers the cloud path right there in the same panel.
+
+**Where you see it:** Settings → Providers → (image or video) → the "Your GPU"
+panel shows the GPU, free/total VRAM, and the refusal before you spend the
+afternoon. The image panel also lists the checkpoints your backend actually has
+installed, read live — so you pick from models you really own, never a
+hardcoded list.
+
+### A concrete reading (this dev machine, measured)
+
+| Component | Value |
+|---|---|
+| GPU | Intel Haswell iGPU + NVIDIA GeForce GT 740M |
+| VRAM | **2 GiB** (and no NVIDIA driver loaded) |
+| System RAM | 7.7 GiB (2 GiB swap) |
+| CPU | 4 threads (Haswell era) |
+
+**Verdict: anime VIDEO generation is impossible here, and anime image
+generation with SDXL is impractical.** The preflight refuses, and it is right to.
+For this workload the honest options are: a machine with a real NVIDIA GPU
+(12 GB+), a cloud GPU rented by the hour, or a cloud API with a key.
+
+**A GT 740M / 2 GiB cannot be fixed with settings.** No workflow, checkpoint or
+offload trick turns 2 GiB into 12 GiB — the app refuses rather than pretend.
+
+---
+
 ## 5. Honest limitations
 
 - **No provider is guaranteed "watermark-free"** — the Marketplace reports the

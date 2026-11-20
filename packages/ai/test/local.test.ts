@@ -21,7 +21,13 @@
  */
 import { describe, expect, it } from 'vitest'
 import { MiraiError } from '@mirai/shared'
-import { LocalImageProvider, parseLocalBaseUrl, LOCAL_A1111_DEFAULT_PORT, LOCAL_COMFYUI_DEFAULT_PORT } from '../src/local'
+import {
+  LocalImageProvider,
+  parseLocalBaseUrl,
+  formatVramGib,
+  LOCAL_A1111_DEFAULT_PORT,
+  LOCAL_COMFYUI_DEFAULT_PORT,
+} from '../src/local'
 import { FakeResponse, makeFetch, type RecordedCall } from './fakes'
 
 /** A 1x1 PNG (real bytes — the adapter validates the decoded length). */
@@ -423,6 +429,123 @@ describe('LocalImageProvider — checkpoints (the "every anime model" answer)', 
       expect(error.code).toBe('AI_PROVIDER_ERROR')
       expect(error.details).toMatchObject({ checkpoint: 'pony.safetensors [aaa]' })
     }
+  })
+})
+
+describe('LocalImageProvider — preflight ("will my machine die trying this?")', () => {
+  function comfyProvider(
+    responder: (call: RecordedCall) => FakeResponse,
+    opts: { timing?: { pollIntervalMs?: number; pollTimeoutMs?: number } } = {},
+  ) {
+    const transport = makeFetch(responder)
+    const instance = new LocalImageProvider({
+      baseUrl: 'http://127.0.0.1:8188',
+      flavor: 'comfyui',
+      fetchFn: transport.fetchFn,
+      timeoutMs: 0,
+      sleepFn: async () => undefined,
+      comfyTiming: opts.timing,
+    })
+    return { provider: instance, calls: transport.calls }
+  }
+
+  const statsWith = (vram: number, name = 'NVIDIA GeForce RTX 3060 12GB') =>
+    new FakeResponse({
+      json: {
+        system: { os: 'linux' },
+        devices: [{ name: 'cuda:0 ' + name, type: 'cuda', index: 0, vram_total: vram, vram_free: vram }],
+      },
+    })
+
+  it('refuses video generation on a GPU too small — with an actionable reason', async () => {
+    // THE GUARANTEE: the user learns now, not after an hour of a frozen laptop.
+    const { provider: instance } = comfyProvider((call) =>
+      call.url.endsWith('/system_stats')
+        ? statsWith(2 * 1024 ** 3, 'NVIDIA GeForce GT 740M')
+        : new FakeResponse({ text: 'comfyui' }),
+    )
+
+    const gate = await instance.preflight('video')
+
+    expect(gate.ok).toBe(false)
+    expect(gate.capability).toBe('video')
+    expect(gate.vramTotalBytes).toBe(2 * 1024 ** 3)
+    expect(gate.gpuName).toContain('GT 740M')
+    expect(gate.reason).toContain('2.0 GiB')
+    expect(gate.reason).toContain('12.0 GiB')
+    // The message must offer the two real escapes, not a dead end.
+    expect(gate.reason).toContain('cloud video provider')
+    expect(gate.reason).toContain('larger NVIDIA GPU')
+  })
+
+  it('allows image generation on a modest GPU that could never do video', async () => {
+    const { provider: instance } = comfyProvider((call) =>
+      call.url.endsWith('/system_stats') ? statsWith(8 * 1024 ** 3) : new FakeResponse({ text: 'comfyui' }),
+    )
+
+    expect((await instance.preflight('image')).ok).toBe(true)
+    expect((await instance.preflight('video')).ok).toBe(false)
+  })
+
+  it('picks the CUDA device when the backend also reports a CPU one', async () => {
+    const { provider: instance } = comfyProvider(() =>
+      new FakeResponse({
+        json: {
+          devices: [
+            { name: 'cpu', type: 'cpu', vram_total: 4 * 1024 ** 3 },
+            { name: 'cuda:0 NVIDIA GeForce RTX 4090', type: 'cuda', vram_total: 24 * 1024 ** 3, vram_free: 20 * 1024 ** 3 },
+          ],
+        },
+      }),
+    )
+
+    const gate = await instance.preflight('video')
+
+    expect(gate.ok).toBe(true)
+    expect(gate.gpuName).toContain('RTX 4090')
+    expect(gate.gpuName).not.toContain('cuda:')
+    // Free VRAM is reported too — it is what the model actually gets to use.
+    expect(gate.vramFreeBytes).toBe(20 * 1024 ** 3)
+  })
+
+  it('an unreachable backend fails the gate instead of hanging', async () => {
+    const { provider: instance } = comfyProvider(() => {
+      throw new Error('connect ECONNREFUSED')
+    })
+
+    const gate = await instance.preflight('image')
+
+    expect(gate.ok).toBe(false)
+    expect(gate.reachable).toBe(false)
+    // The reason names the address it tried AND what to start.
+    expect(gate.reason).toContain('127.0.0.1:8188')
+    expect(gate.reason).toContain('Start Automatic1111')
+  })
+
+  it('A1111 cannot report VRAM — the gate walks forward and proves nothing', async () => {
+    const transport = makeFetch(() => new FakeResponse({ text: 'a1111' }))
+    const instance = new LocalImageProvider({
+      baseUrl: 'http://127.0.0.1:7860',
+      flavor: 'a1111',
+      fetchFn: transport.fetchFn,
+      timeoutMs: 0,
+    })
+
+    const gate = await instance.preflight('image')
+
+    // Honest: no invented number, no false refusal.
+    expect(gate.ok).toBe(true)
+    expect(gate.vramTotalBytes).toBeNull()
+    expect(gate.gpuName).toBeNull()
+    expect(gate.reason).toBeNull()
+  })
+})
+
+describe('formatVramGib', () => {
+  it('reports VRAM in GiB, never raw bytes', () => {
+    expect(formatVramGib(2 * 1024 ** 3)).toBe('2.0 GiB')
+    expect(formatVramGib(24 * 1024 ** 3)).toBe('24.0 GiB')
+    expect(formatVramGib(6.5 * 1024 ** 3)).toBe('6.5 GiB')
   })
 })
 

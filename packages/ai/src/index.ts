@@ -78,8 +78,18 @@ export type { GoogleTtsOptions, GoogleTtsResult } from './googleTts'
 export {
   LocalImageProvider,
   parseLocalBaseUrl,
+  formatVramGib,
   LOCAL_A1111_DEFAULT_PORT,
   LOCAL_COMFYUI_DEFAULT_PORT,
+  LOCAL_MIN_VRAM_IMAGE_BYTES,
+  LOCAL_MIN_VRAM_VIDEO_BYTES,
 } from './local'
-export type { LocalFlavor, LocalImageOptions, LocalMediaResult, LocalVideoOptions } from './local'
+export type {
+  LocalFlavor,
+  LocalImageOptions,
+  LocalMediaResult,
+  LocalVideoOptions,
+  LocalPreflight,
+  LocalSystemStats,
+} from './local'
 export { ANIME_NEGATIVE_PROMPT } from './consistency'

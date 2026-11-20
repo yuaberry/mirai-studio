@@ -44,6 +44,7 @@ import {
   LocalImageProvider,
   parseLocalBaseUrl,
   ANIME_NEGATIVE_PROMPT,
+  type LocalPreflight,
   buildSystemPrompt,
   buildImagePrompt,
   draftScreenplayInstruction,
@@ -162,6 +163,41 @@ function matchCast(speaker: string, cast: Array<{ name: string; ttsVoice?: strin
 }
 
 export class AiHost {
+  /**
+   * Preflight for the LOCAL backend: can this machine actually do the job?
+   *
+   * Exposed so the Settings UI can show the truth BEFORE the user clicks
+   * "generate" — an unusable GPU is diagnosed now, not after an hour of a
+   * frozen laptop.
+   */
+  async preflightLocal(capability: 'image' | 'video'): Promise<LocalPreflight> {
+    const settings = this.deps.settings.get()
+    const localUrl =
+      capability === 'video'
+        ? settings.ai.video.local?.baseUrl?.trim()
+        : settings.ai.image.local?.baseUrl?.trim()
+    if (!localUrl) {
+      return {
+        ok: false,
+        capability,
+        vramTotalBytes: null,
+        vramFreeBytes: null,
+        requiredBytes:
+          capability === 'video' ? 12 * 1024 ** 3 : 6 * 1024 ** 3,
+        gpuName: null,
+        reachable: false,
+        reason: 'No local generator address configured — set it in Settings → Providers.',
+      }
+    }
+    const { baseUrl, flavor } = parseLocalBaseUrl(localUrl)
+    const provider = new LocalImageProvider({
+      baseUrl,
+      flavor,
+      fetchFn: globalFetch(),
+      timeoutMs: 600_000,
+    })
+    return provider.preflight(capability)
+  }
   private readonly registry: ModelRegistry
   private readonly active = new Map<string, AbortController>()
 
@@ -464,6 +500,10 @@ export class AiHost {
     progress(10)
     let result: { bytes: Buffer; mimeType: string; seconds: number; referenceUsed?: boolean }
     if (videoProvider.protocol === 'local') {
+      // REFUSE BEFORE THE HOUR: an unusable GPU is diagnosed now, not after
+      // the user watches a frozen laptop.
+      const gate = await this.preflightLocal('video')
+      if (!gate.ok) throw new MiraiError('PROVIDER_UNSUITABLE', gate.reason ?? 'This machine cannot run local video generation.')
       // The user's OWN GPU via ComfyUI — the only free 2D-anime video path.
       // The workflow is the user's, so the app never guesses node layouts.
       const localVideo = this.deps.settings.get().ai.video.local
@@ -1644,6 +1684,8 @@ export class AiHost {
 
     let result: { bytes: Buffer; mimeType: string }
     if (imageProvider.protocol === 'local') {
+      const gate = await this.preflightLocal('image')
+      if (!gate.ok) throw new MiraiError('PROVIDER_UNSUITABLE', gate.reason ?? 'This machine cannot run local image generation.')
       // The model sheet is the SINGLE most consistency-critical image in the
       // whole production — it must come from a model that can actually draw
       // anime, which is exactly why the local route exists.
@@ -1938,6 +1980,8 @@ export class AiHost {
     progress(20)
     let result: { bytes: Buffer; mimeType: string; watermarked?: boolean }
     if (imageProvider.protocol === 'local') {
+      const gate = await this.preflightLocal('image')
+      if (!gate.ok) throw new MiraiError('PROVIDER_UNSUITABLE', gate.reason ?? 'This machine cannot run local image generation.')
       // The user's OWN GPU (Automatic1111 / ComfyUI). No key, no cloud, no
       // vendor logo — and the only free route to a REAL anime model. A home
       // GPU needs minutes, not seconds, so the timeout is generous.

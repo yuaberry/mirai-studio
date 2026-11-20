@@ -172,6 +172,91 @@ async function assertReachable(
  * The local generator. One class, one HTTP surface, two flavors — the app
  * never branches on the vendor elsewhere, it just calls `generate`.
  */
+  // ---------------------------------------------------------------- preflight
+
+/** What the local backend reports about itself (ComfyUI `/system_stats`). */
+export interface LocalSystemStats {
+  /** Per-GPU VRAM in bytes (the best card first). */
+  vramTotalBytes: number | null
+  vramFreeBytes: number | null
+  gpuName: string | null
+  /** The raw answer, for diagnostics. */
+  backend: 'comfyui' | 'a1111' | 'unknown'
+}
+
+/** Minimum VRAM the app considers usable for anime IMAGE generation. */
+export const LOCAL_MIN_VRAM_IMAGE_BYTES = 6 * 1024 ** 3
+/** Minimum VRAM the app considers usable for anime VIDEO generation. */
+export const LOCAL_MIN_VRAM_VIDEO_BYTES = 12 * 1024 ** 3
+
+/**
+ * Reads the local backend's GPU inventory.
+ *
+ * ComfyUI answers `/system_stats` with a `devices` array (vram_total in
+ * bytes). A1111 has no equivalent endpoint, so the app reports "unknown"
+ * instead of inventing a number — and the preflight then only warns about
+ * what it can actually prove.
+ */
+async function readSystemStats(
+  baseUrl: string,
+  flavor: LocalFlavor,
+  fetchFn: FetchLike,
+  signal?: AbortSignal,
+): Promise<LocalSystemStats> {
+  const base = baseUrl.replace(/\/$/, '')
+  if (flavor === 'comfyui') {
+    const response = await fetchFn(`${base}/system_stats`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal,
+    })
+    if (!response.ok) {
+      throw new MiraiError(
+        'AI_PROVIDER_ERROR',
+        `The local generator answered ${response.status} for /system_stats.`,
+        { retryable: response.status >= 500, details: { status: response.status } },
+      )
+    }
+    const parsed = JSON.parse(await response.text()) as {
+      devices?: Array<{ name?: string; type?: string; vram_total?: number; vram_free?: number }>
+    }
+    // Prefer a CUDA device — a machine can list a CPU "device" too.
+    const gpus = (parsed.devices ?? []).filter((d) => (d.type ?? '').toLowerCase() === 'cuda')
+    const best = gpus.length > 0 ? gpus[0]! : (parsed.devices ?? [])[0]
+    return {
+      vramTotalBytes: best?.vram_total ?? null,
+      vramFreeBytes: best?.vram_free ?? null,
+      gpuName: best?.name?.replace(/^cuda:\d+\s*/, '') ?? null,
+      backend: 'comfyui',
+    }
+  }
+  return { vramTotalBytes: null, vramFreeBytes: null, gpuName: null, backend: 'a1111' }
+}
+
+/** Formatting helper — VRAM is always reported in GiB, never raw bytes. */
+export function formatVramGib(bytes: number): string {
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`
+}
+
+/**
+ * The answer to "will my machine die trying this?".
+ *
+ * `ok: false` means the app REFUSES before the user waits an hour and finds
+ * out through a frozen laptop. The reason says what is missing and what to
+ * do — that is a guarantee, not a suggestion.
+ */
+export interface LocalPreflight {
+  ok: boolean
+  /** The capability being checked, so the caller knows which bar applies. */
+  capability: 'image' | 'video'
+  vramTotalBytes: number | null
+  vramFreeBytes: number | null
+  requiredBytes: number
+  reason: string | null
+  gpuName: string | null
+  reachable: boolean
+}
+
 export class LocalImageProvider {
   readonly id = 'local-image'
 
@@ -438,7 +523,7 @@ export class LocalImageProvider {
     return parsed.sd_model_checkpoint ?? null
   }
 
-  // ---------------------------------------------------------------- checkpoints
+// ---------------------------------------------------------------- checkpoints
   /**
    * Lists the checkpoints the local backend has INSTALLED.
    *
@@ -474,6 +559,79 @@ export class LocalImageProvider {
    * concrete: the user picks the model inside Mirai Studio and the app loads
    * it, instead of requiring them to change it in the WebUI every time.
    */
+  /**
+   * Preflight: can THIS machine actually do the job?
+   *
+   * The honest answer comes from the backend itself. When the GPU is too
+   * small the app refuses with an actionable message instead of starting a
+   * generation that would take hours and make the laptop unusable.
+   */
+  async preflight(
+    capability: 'image' | 'video',
+    signal?: AbortSignal,
+  ): Promise<LocalPreflight> {
+    const required = capability === 'video' ? LOCAL_MIN_VRAM_VIDEO_BYTES : LOCAL_MIN_VRAM_IMAGE_BYTES
+    try {
+      await assertReachable(this.opts.baseUrl, this.opts.fetchFn, signal)
+    } catch {
+      return {
+        ok: false,
+        capability,
+        vramTotalBytes: null,
+        vramFreeBytes: null,
+        requiredBytes: required,
+        gpuName: null,
+        reachable: false,
+        reason:
+          'Could not reach the local generator at ' +
+          `${this.opts.baseUrl}. Start Automatic1111 (with --api) or ComfyUI first.`,
+      }
+    }
+    const stats = await readSystemStats(this.opts.baseUrl, this.opts.flavor, this.opts.fetchFn, signal)
+    // A1111 cannot report VRAM: the app proves nothing, so it WALKS forward
+    // and lets the generation fail (or succeed) on its own merits.
+    if (stats.vramTotalBytes === null) {
+      return {
+        ok: true,
+        capability,
+        vramTotalBytes: null,
+        vramFreeBytes: null,
+        requiredBytes: required,
+        gpuName: null,
+        reachable: true,
+        reason: null,
+      }
+    }
+    if (stats.vramTotalBytes < required) {
+      return {
+        ok: false,
+        capability,
+        vramTotalBytes: stats.vramTotalBytes,
+        vramFreeBytes: stats.vramFreeBytes,
+        requiredBytes: required,
+        gpuName: stats.gpuName,
+        reachable: true,
+        reason:
+          `This machine's GPU has ${formatVramGib(stats.vramTotalBytes)} of VRAM, but ${
+            capability === 'video' ? 'anime VIDEO generation' : 'anime image generation'
+          } needs about ${formatVramGib(required)}. ` +
+          'Generating would take hours and make the machine unusable — the app refuses instead. ' +
+          'Options: use a cloud video provider (Marketplace → video model + key), or run the local ' +
+          'backend on a machine with a larger NVIDIA GPU.',
+      }
+    }
+    return {
+      ok: true,
+      capability,
+      vramTotalBytes: stats.vramTotalBytes,
+      vramFreeBytes: stats.vramFreeBytes,
+      requiredBytes: required,
+      gpuName: stats.gpuName,
+      reachable: true,
+      reason: null,
+    }
+  }
+
   async setCheckpoint(title: string, signal?: AbortSignal): Promise<void> {
     await assertReachable(this.opts.baseUrl, this.opts.fetchFn, signal)
     const base = this.opts.baseUrl.replace(/\/$/, '')

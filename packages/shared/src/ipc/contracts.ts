@@ -14,6 +14,7 @@ import { AppSettings, AppSettingsPatch, zCredentialKey } from '../entities/setti
 import { MarketplaceCatalog } from '../entities/marketplace'
 import { JobRecord } from '../entities/job'
 import { LogEntry } from '../entities/log'
+import { LocalPreflightResult } from './localPreflight'
 import type {
   AnimationPipeline,
   AnimationFrame,
@@ -1669,6 +1670,18 @@ export const ipcContracts = {
   'logs:revealLogsFolder': {
     request: emptyRequest,
     response: z.object({ ok: z.boolean() }),
+  },
+
+  // ---- Local generation preflight ---------------------------------------------
+  /**
+   * Can this machine run the LOCAL backend (Automatic1111 / ComfyUI)?
+   *
+   * The renderer asks this before the user clicks "generate": an unusable GPU
+   * is diagnosed NOW, not after an hour of a frozen laptop.
+   */
+  'local:preflight': {
+    request: z.object({ capability: z.enum(['image', 'video']) }),
+    response: LocalPreflightResult,
   },
 
   // ---- System ----------------------------------------------------------------

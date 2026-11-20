@@ -17,6 +17,7 @@ import { comboFromEvent } from '../../lib/shortcuts'
 import { cn } from '../../lib/utils'
 import { useT } from '../../lib/i18n'
 import { ContentCard } from './ContentCard'
+import { LocalGpuPanel } from './LocalGpuPanel'
 import { Badge, Button, Card, Input, Label, SectionTitle, Select, Spinner } from '../../system/ui'
 import { ErrorState } from '../../system/EmptyState'
 import { Kbd } from '../../system/ui'
@@ -260,6 +261,14 @@ function ProvidersCard() {
   const [videoBaseUrl, setVideoBaseUrl] = useState(settings?.ai.video.baseUrl ?? '')
   const [videoModel, setVideoModel] = useState(settings?.ai.video.model ?? '')
   const [videoUseRef, setVideoUseRef] = useState(settings?.ai.video.useReferenceFrame ?? true)
+  // The LOCAL GPU backend (Automatic1111 / ComfyUI) — the zero-cost anime path.
+  const [localImageUrl, setLocalImageUrl] = useState(settings?.ai.image.local?.baseUrl ?? 'http://127.0.0.1:7860')
+  const [localCheckpoint, setLocalCheckpoint] = useState(settings?.ai.image.local?.checkpoint ?? '')
+  const [localImageSteps, setLocalImageSteps] = useState(settings?.ai.image.local?.steps ?? 28)
+  const [localImageCfg, setLocalImageCfg] = useState(settings?.ai.image.local?.cfgScale ?? 7)
+  const [localImageSampler, setLocalImageSampler] = useState(settings?.ai.image.local?.samplerName ?? 'DPM++ 2M Karras')
+  const [localVideoUrl, setLocalVideoUrl] = useState(settings?.ai.video.local?.baseUrl ?? 'http://127.0.0.1:8188')
+  const [localWorkflow, setLocalWorkflow] = useState(settings?.ai.video.local?.workflowJson ?? '')
   const [ttsKey, setTtsKey] = useState('')
   const [ttsBaseUrl, setTtsBaseUrl] = useState(settings?.ai.tts?.baseUrl ?? '')
   const [ttsModel, setTtsModel] = useState(settings?.ai.tts?.model ?? '')
@@ -604,6 +613,76 @@ function ProvidersCard() {
           <p className="mt-1.5 text-[10px] text-mirai-faint">
             All three fields (key, URL, model) enable the “Generate (AI)” button on storyboard shots.
           </p>
+          {/* The user's OWN GPU — configured and diagnosed here, never guessed. */}
+          <LocalGpuPanel
+            capability="image"
+            protocol={settings?.ai.image.protocol ?? 'openai'}
+            baseUrl={localImageUrl}
+            checkpoint={localCheckpoint}
+            onBaseUrlChange={setLocalImageUrl}
+            onCheckpointChange={setLocalCheckpoint}
+          />
+          {settings?.ai.image.protocol === 'local' && (
+            <div className="mt-2 grid grid-cols-[80px_70px_1fr_auto] items-end gap-2">
+              <div>
+                <Label htmlFor="lg-steps">Steps</Label>
+                <Input
+                  id="lg-steps"
+                  type="number"
+                  className="h-8 text-xs"
+                  min={4}
+                  max={150}
+                  value={localImageSteps}
+                  onChange={(e) => setLocalImageSteps(Number(e.target.value) || 28)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="lg-cfg">CFG</Label>
+                <Input
+                  id="lg-cfg"
+                  type="number"
+                  className="h-8 text-xs"
+                  min={1}
+                  max={30}
+                  step={0.5}
+                  value={localImageCfg}
+                  onChange={(e) => setLocalImageCfg(Number(e.target.value) || 7)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="lg-sampler">Sampler</Label>
+                <Input
+                  id="lg-sampler"
+                  className="h-8 text-xs"
+                  value={localImageSampler}
+                  onChange={(e) => setLocalImageSampler(e.target.value)}
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="primary"
+                loading={updateSettings.isPending}
+                onClick={() =>
+                  saveProviderPrefs({
+                    image: {
+                      ...settings!.ai.image,
+                      protocol: 'local',
+                      local: {
+                        ...settings!.ai.image.local,
+                        baseUrl: localImageUrl.trim(),
+                        checkpoint: localCheckpoint,
+                        steps: localImageSteps,
+                        cfgScale: localImageCfg,
+                        samplerName: localImageSampler.trim() || 'DPM++ 2M Karras',
+                      },
+                    },
+                  })
+                }
+              >
+                Save
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Video provider (image-to-video — the AI-anime motion piece) */}
@@ -677,6 +756,55 @@ function ProvidersCard() {
             />
             animate the shot's storyboard frame (image-to-video — recommended)
           </label>
+          {/* ComfyUI on the user's own GPU — the only free 2D-anime video path. */}
+          <LocalGpuPanel
+            capability="video"
+            protocol={settings?.ai.video.protocol ?? 'openai'}
+            baseUrl={localVideoUrl}
+            checkpoint=""
+            onBaseUrlChange={setLocalVideoUrl}
+            onCheckpointChange={() => undefined}
+          />
+          {settings?.ai.video.protocol === 'local' && (
+            <div className="mt-2">
+              <Label htmlFor="lg-workflow">ComfyUI workflow (API format)</Label>
+              <textarea
+                id="lg-workflow"
+                value={localWorkflow}
+                onChange={(e) => setLocalWorkflow(e.target.value)}
+                rows={6}
+                spellCheck={false}
+                placeholder={'{ "prompt": { "1": { "inputs": { "text": "{{prompt}}" } } } }'}
+                className="w-full rounded-md border border-mirai-border bg-mirai-bg px-2 py-1.5 font-mono text-[10px] text-mirai-dim outline-none placeholder:text-mirai-faint/40 focus:border-mirai-accent"
+              />
+              <p className="mt-1 text-[10px] text-mirai-faint">
+                Paste the workflow from ComfyUI → <strong>Save (API Format)</strong>. The app injects{' '}
+                <code>{'{{prompt}}'}</code>, <code>{'{{negative}}'}</code>, <code>{'{{seed}}'}</code> and{' '}
+                <code>{'{{image}}'}</code> (your storyboard frame) before submitting.
+              </p>
+              <Button
+                className="mt-2"
+                size="sm"
+                variant="primary"
+                loading={updateSettings.isPending}
+                onClick={() =>
+                  saveProviderPrefs({
+                    video: {
+                      ...settings!.ai.video,
+                      protocol: 'local',
+                      local: {
+                        ...settings!.ai.video.local,
+                        baseUrl: localVideoUrl.trim(),
+                        workflowJson: localWorkflow.trim(),
+                      },
+                    },
+                  })
+                }
+              >
+                Save workflow
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* AI Voice provider (TTS — the voice-acting piece) */}
