@@ -498,9 +498,16 @@ async function main(): Promise<void> {
       const { shots } = await call<
         { shots: Array<{ id: string; dialogue: string | null; title: string; durationSeconds: number }> }
       >(win, 'shots:list', { sceneId: scene.id })
+      const withDialogue = shots.filter((s) => (s.dialogue ?? '').trim().length > 0)
+      // A scene with NO dialogue cannot carry a subtitle — requiring one would
+      // be demanding the app invent text. MEASURED: the producer's plan decides
+      // how many scenes speak, so this must be per-scene, not global.
+      if (withDialogue.length === 0) {
+        log(`"${scene.title}" has no dialogue — no subtitle expected`)
+        continue
+      }
       let cursor = 0
-      for (const shot of shots) {
-        if (!shot.dialogue || shot.dialogue.trim().length === 0) continue
+      for (const shot of withDialogue) {
         // One cue per shot, kept inside the shot's own duration (the record
         // comes from `shots:list`, so there is no extra round-trip).
         const dur = Math.max(1.5, Math.min(shot.durationSeconds, 6))
@@ -578,7 +585,7 @@ async function main(): Promise<void> {
       episodeId: episodes[0]!.id,
     })
     // Find a shot that already has a frame — that frame becomes the reference.
-    let target: { id: string; title: string; frameAssetId: string } | null = null
+    let target: { id: string; title: string; frameAssetId: string; sceneId: string } | null = null
     for (const scene of sceneList.scenes) {
       const { shots } = await call<{ shots: Array<{ id: string; title: string; frameAssetId: string | null }> }>(
         win,
@@ -587,7 +594,7 @@ async function main(): Promise<void> {
       )
       const withFrame = shots.find((s) => s.frameAssetId)
       if (withFrame) {
-        target = { id: withFrame.id, title: withFrame.title, frameAssetId: withFrame.frameAssetId! }
+        target = { id: withFrame.id, title: withFrame.title, frameAssetId: withFrame.frameAssetId!, sceneId: scene.id }
         break
       }
     }
@@ -608,7 +615,7 @@ async function main(): Promise<void> {
     const { shots } = await call<{ shots: Array<{ id: string; frameAssetId: string | null }> }>(
       win,
       'shots:list',
-      { sceneId: sceneList.scenes[0]!.id },
+      { sceneId: target.sceneId },
     )
     const updated = shots.find((s) => s.id === target.id)
     if (!updated?.frameAssetId) throw new Error('the shot lost its frame')
@@ -634,7 +641,7 @@ async function main(): Promise<void> {
     const sceneList = await call<{ scenes: Array<{ id: string }> }>(win, 'scenes:list', {
       episodeId: episodes[0]!.id,
     })
-    const totalShots = sceneList.scenes.reduce((acc, sc) => acc + 1, 0)
+    const totalShots = sceneList.scenes.length
 
     const { jobId } = await call<{ jobId: string }>(win, 'ai:assembleEpisode', {
       episodeId: episodes[0]!.id,
@@ -666,6 +673,73 @@ async function main(): Promise<void> {
     pass(
       `resume pass generated 0 · skipped ${result.skippedNoFrame} · ` +
         `no finished work was redone across ${totalShots} scenes`,
+    )
+  })
+
+  await step('ONE-CLICK EPISODE: next slot + producer + assembly, one job', async () => {
+    // THE PICTURE THE USER ASKED FOR: fill the IP form, press one button, get
+    // one real episode. This step proves the whole chain in ONE job.
+    const before = await call<{ episodes: Array<{ season: number; number: number }> }>(win, 'episodes:list')
+    const beforeCount = before.episodes.length
+    const maxNumber = before.episodes.reduce((m, e) => Math.max(m, e.number), 0)
+
+    const { jobId } = await call<{ jobId: string }>(win, 'ai:autoEpisode', {
+      idea:
+        'Episode 2 — Haruka and Lin travel to the state grappling tournament. Lin faces an old rival from her ' +
+        'capoeira days who knows her secret, and Haruka has to decide whether to fight for her or beside her.',
+      season: 1,
+      // A short target keeps the real test honest AND affordable. The assembly
+      // is skipped here ON PURPOSE: it draws a keyframe per shot, and the free
+      // image tier serves ONE image every 45 s — a 32-shot episode would spend
+      // ~24 minutes just waiting, which is not what this step proves.
+      // MEASURED: with assemble=true the run exceeded 22 minutes and the honest
+      // verdict was a timeout, not a failure. The assembly path itself is
+      // covered by the "AI ANIME" and "RESUMIBLE" steps above.
+      targetMinutes: 4,
+      generateFrames: false,
+      assemble: false,
+    })
+    // Generous, because the producer writes a screenplay per scene and the
+    // free chat tier is slow; still bounded, so a hang is a failure.
+    const job = await waitJob(win, jobId, 18 * 60_000, 'auto-episode')
+    if (job.status !== 'COMPLETED') throw new Error(`auto episode ${job.status}: ${describe(job.error)}`)
+    const result = job.result as {
+      episodeId: string
+      episodeNumber: number
+      season: number
+      production: { scenesCreated: number; shotsCreated: number; framesGenerated: number }
+      assembly: { videosGenerated: number; skippedNoFrame: number; rendered: string | null } | null
+    }
+
+    // 1. the NEXT slot was computed on the SERVER, not guessed in the UI.
+    if (result.episodeNumber !== maxNumber + 1) {
+      throw new Error(`expected episode ${maxNumber + 1}, got ${result.episodeNumber}`)
+    }
+    if (result.season !== 1) throw new Error('wrong season')
+
+    // 2. the producer actually built content for it.
+    if (result.production.scenesCreated < 1 || result.production.shotsCreated < 1) {
+      throw new Error('the producer did not build scenes/shots')
+    }
+    if (result.assembly !== null) {
+      throw new Error('assembly was disabled but the result carries one')
+    }
+
+    // 3. the episode now exists in the studio.
+    const after = await call<{ episodes: Array<{ id: string; number: number }> }>(win, 'episodes:list')
+    if (after.episodes.length !== beforeCount + 1) {
+      throw new Error(`episode count ${beforeCount} → ${after.episodes.length}, expected +1`)
+    }
+    if (!after.episodes.some((e) => e.id === result.episodeId)) {
+      throw new Error('the new episode is not listed')
+    }
+
+    pass(
+      `S${result.season}E${result.episodeNumber} created · ${result.production.scenesCreated} scenes · ` +
+        `${result.production.shotsCreated} shots · ${result.production.framesGenerated} frames · ` +
+        `${result.production.timelinesBuilt} timelines · assembly ${
+          result.assembly ? `${result.assembly.videosGenerated} clips / rendered ${result.assembly.rendered ? 'yes' : 'no'}` : 'disabled on purpose (see note)'
+        }`,
     )
   })
 

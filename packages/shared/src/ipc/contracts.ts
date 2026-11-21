@@ -15,6 +15,7 @@ import { MarketplaceCatalog } from '../entities/marketplace'
 import { JobRecord } from '../entities/job'
 import { LogEntry } from '../entities/log'
 import { LocalPreflightResult } from './localPreflight'
+import { AutoEpisodeRequest } from './autoEpisode'
 import type {
   AnimationPipeline,
   AnimationFrame,
@@ -460,6 +461,16 @@ export const ipcContracts = {
       text: z.string().min(1),
     }),
   },
+  // ---- THE ONE-CLICK EPISODE ------------------------------------------------
+  /**
+   * Fills the IP form, presses ONE button, gets ONE real episode:
+   * create the next slot → Producer Agent → assembly (voices → clips → render).
+   */
+  'ai:autoEpisode': {
+    request: AutoEpisodeRequest,
+    response: z.object({ jobId: zEntityId }),
+  },
+
   /** AI ANIME EPISODE (v0.30): voices + image-to-video + timeline + render. */
   'ai:assembleEpisode': {
     request: z.object({

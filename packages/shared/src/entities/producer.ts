@@ -74,8 +74,17 @@ export const ScenePlan = z.object({
 })
 export type ScenePlan = z.infer<typeof ScenePlan>
 
+/**
+ * The scene-plan the storyboard/director model returns.
+ *
+ * The cap is 12, and it MUST match `AutoproduceOptions.scenesCount`'s cap: the
+ * runtime planner can ask for up to 12 scenes, and a model that obeys would be
+ * rejected by a smaller ceiling here. MEASURED: the one-click episode E2E
+ * failed exactly this way ("Array must contain at most 8 element(s)") when the
+ * two limits disagreed.
+ */
 export const ScenePlanList = z
-  .object({ scenes: z.array(ScenePlan).min(1).max(8) })
+  .object({ scenes: z.array(ScenePlan).min(1).max(12) })
   .transform((v) => v.scenes)
 
 /** v0.18: full-season episode plan extracted from the author's document. */

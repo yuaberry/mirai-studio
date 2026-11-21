@@ -1788,6 +1788,114 @@ export class AiHost {
    * 3. timeline assembly per scene + episode render → a REAL MP4.
    * Honest skips are reported, never fabricated.
    */
+  /**
+   * THE ONE-CLICK EPISODE — the user fills the IP form once and presses ONE
+   * button per episode.
+   *
+   * It does, in order, and reports progress as it goes:
+   *   1. create the NEXT episode (number derived on the server — the renderer
+   *      never guesses it),
+   *   2. Producer Agent: the idea becomes bible → cast → scenes → screenplays →
+   *      shots → keyframes → timelines,
+   *   3. Assembly: voices → image-to-video clips → timeline + render to MP4.
+   *
+   * It is ONE job, so a mid-episode interruption parks it (the app's job queue
+   * already does that at boot) and a resume only completes what is missing —
+   * the assembly is idempotent per shot (see assembleEpisode). The user gets
+   * one episode per press, honestly, instead of a fake "whole season" button.
+   */
+  async autoEpisode(
+    options: {
+      idea: string
+      season?: number
+      /** Target runtime in MINUTES, from the IP form. */
+      targetMinutes?: number
+      generateFrames?: boolean
+      assemble?: boolean
+    },
+    progress: (pct: number, detail: string) => void,
+    signal: { readonly aborted: boolean },
+  ): Promise<{
+    episodeId: string
+    episodeNumber: number
+    season: number
+    production: AutoproduceSummary
+    assembly: Awaited<ReturnType<AiHost['assembleEpisode']>> | null
+  }> {
+    const ctx = this.deps.projects.current()
+    if (!ctx) throw new MiraiError('NOT_FOUND', 'Open a project first.')
+
+    // ---- 1. WHICH slot the producer will fill ------------------------------
+    // The producer ALREADY creates the episode (and computes the next free
+    // number). Creating one here as well made it try the same (season, number)
+    // twice and fail with ALREADY_EXISTS — MEASURED by the E2E. So we only
+    // predict the slot, then look up what was actually created.
+    const season = Math.max(1, options.season ?? 1)
+    const existingNumbers = ctx.creative
+      .listEpisodes()
+      .filter((e) => e.season === season)
+      .map((e) => e.number)
+    const predictedNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1
+    if (signal.aborted) throw new MiraiError('CANCELLED', 'Episode production cancelled.')
+    progress(4, `Episode S${season}E${predictedNumber} — planning`)
+
+    // ---- 2. Producer Agent (it creates the episode slot itself) -----------
+    const runtimePlan =
+      options.targetMinutes !== undefined ? planEpisodeFromRuntime(options.targetMinutes) : null
+    const production = await this.autoproduce(
+      {
+        idea: options.idea,
+        scenesCount: runtimePlan ? Math.max(2, Math.min(12, runtimePlan.scenesCount)) : 4,
+        shotsPerScene: 4,
+        generateFrames: options.generateFrames ?? true,
+        episodeNumber: predictedNumber,
+        ...(options.targetMinutes !== undefined ? { targetMinutes: options.targetMinutes } : {}),
+      },
+      // The producer owns 4..55 % of the total bar.
+      (pct) => progress(4 + Math.round((Math.max(4, Math.min(99, pct)) - 4) * 0.51), 'Producer Agent'),
+      signal,
+    )
+    if (signal.aborted) throw new MiraiError('CANCELLED', 'Episode production cancelled.')
+
+    // ---- 3. find the episode that was really created ----------------------
+    const created = ctx.creative
+      .listEpisodes()
+      .filter((e) => e.season === season && e.number === predictedNumber)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]
+    if (!created) {
+      throw new MiraiError(
+        'NOT_FOUND',
+        `The producer did not create S${season}E${predictedNumber} — nothing to assemble.`,
+      )
+    }
+    this.deps.logger.info('AI', 'Auto episode: slot', {
+      season,
+      number: created.number,
+      episodeId: created.id,
+    })
+    progress(58, `S${season}E${created.number} planned — assembling`)
+
+    // ---- 3. Assembly (voices → clips → render) ---------------------------
+    let assembly: Awaited<ReturnType<AiHost['assembleEpisode']>> | null = null
+    if (options.assemble !== false) {
+      assembly = await this.assembleEpisode(
+        created.id,
+        { frames: true, voices: true, videos: true, render: true },
+        (pct, detail) => progress(58 + Math.round(Math.min(99, pct) * 0.4), detail || 'assembling'),
+        signal,
+      )
+    }
+    progress(100, `Episode S${season}E${created.number} complete`)
+
+    return {
+      episodeId: created.id,
+      episodeNumber: created.number,
+      season,
+      production,
+      assembly,
+    }
+  }
+
   async assembleEpisode(
     episodeId: string,
     opts: { frames: boolean; voices: boolean; videos: boolean; render: boolean },

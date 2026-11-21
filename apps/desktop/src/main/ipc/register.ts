@@ -519,6 +519,34 @@ export function registerIpcHandlers(c: Container): void {
     const result = await c.ai.speakShot(req.shotId)
     return result
   })
+  handleIpc('ai:autoEpisode', async (req) => {
+    const ctx = requireActive(c)
+    // ONE job for the whole episode, so an interruption parks it and the app's
+    // boot-time recovery + the idempotent assembly resume only finish what is
+    // missing — never redo the finished clips.
+    ctx.jobs.register('ai.autoEpisode', async (_job, jobCtx) => {
+      return c.ai.autoEpisode(
+        {
+          idea: req.idea,
+          season: req.season,
+          targetMinutes: req.targetMinutes,
+          generateFrames: req.generateFrames,
+          assemble: req.assemble,
+        },
+        jobCtx.reportProgress,
+        { aborted: jobCtx.signal.aborted },
+      )
+    })
+    const job = await ctx.jobs.enqueue('ai.autoEpisode', { ...req }, { priority: 9, maxAttempts: 1 })
+    c.logger.info('AI', 'Auto episode started', {
+      season: req.season ?? 1,
+      targetMinutes: req.targetMinutes ?? null,
+      assemble: req.assemble,
+      frames: req.generateFrames,
+    })
+    return { jobId: job.id }
+  })
+
   handleIpc('ai:assembleEpisode', async (req) => {
     const ctx = requireActive(c)
     ctx.jobs.register('ai.assembleEpisode', async (job, jobCtx) => {

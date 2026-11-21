@@ -268,6 +268,23 @@ export function useLocalPreflight(capability: 'image' | 'video', enabled: boolea
   })
 }
 
+/**
+ * THE ONE-CLICK EPISODE: fills the IP form, presses one button, gets one real
+ * episode (create slot → Producer Agent → assembly). One job, so an
+ * interruption parks it and the resume only finishes what is missing.
+ */
+export function useAutoEpisode() {
+  return useMutation({
+    mutationFn: (input: {
+      idea: string
+      season?: number
+      targetMinutes?: number
+      generateFrames: boolean
+      assemble: boolean
+    }) => invoke('ai:autoEpisode', input).then((r) => r.jobId),
+  })
+}
+
 /** Applies a provider card (or a live model) to the real settings. */
 export function useApplyMarketplaceProvider() {
   const queryClient = useQueryClient()

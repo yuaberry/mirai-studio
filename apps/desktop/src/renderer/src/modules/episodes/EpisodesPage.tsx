@@ -36,6 +36,8 @@ import {
   useExportEpub,
   useExportDocx,
   useAssembleEpisode,
+  useAutoEpisode,
+  useCurrentProject,
 } from '../../lib/queries'
 import { invoke } from '../../lib/ipc'
 import { toast } from '../../store/appStore'
@@ -58,6 +60,41 @@ export function EpisodesPage() {
   const { data: episodes, isLoading, isError, error, refetch } = useEpisodes()
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null)
   const [newEpisodeOpen, setNewEpisodeOpen] = useState(false)
+  // THE ONE-CLICK EPISODE: the idea is remembered so the user presses ONE
+  // button per episode and never retypes anything.
+  const autoEpisode = useAutoEpisode()
+  const { data: currentProject } = useCurrentProject()
+  const targetMinutes = currentProject?.manifest?.config?.episodeLengthMinutes
+  const [autoOpen, setAutoOpen] = useState(false)
+  const [episodeIdea, setEpisodeIdea] = useState('')
+
+  const runAutoEpisode = () => {
+    const idea = episodeIdea.trim()
+    if (idea.length < 10) {
+      setAutoOpen(true)
+      return
+    }
+    autoEpisode.mutate(
+      {
+        idea,
+        season: 1,
+        generateFrames: true,
+        assemble: true,
+        ...(targetMinutes && targetMinutes > 0 ? { targetMinutes } : {}),
+      },
+      {
+        onSuccess: (jobId) => {
+          setAutoOpen(false)
+          toast({
+            kind: 'success',
+            title: 'Episode production started',
+            description: `Job ${String(jobId).slice(-6)} — the studio is building the next episode. Follow it in Jobs.`,
+          })
+        },
+        onError: (err) => toast({ kind: 'error', title: 'Could not start the episode', description: err.message }),
+      },
+    )
+  }
 
   const selected = useMemo(
     () => (episodes ?? []).find((e) => e.id === selectedEpisodeId) ?? null,
@@ -90,6 +127,21 @@ export function EpisodesPage() {
               }
             >
               <BookOpen className="h-3.5 w-3.5" /> EPUB
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              loading={autoEpisode.isPending}
+              title="One click: creates the next episode, runs the Producer Agent on your idea and assembles it (voices → clips → render). Follow the progress in Jobs."
+              onClick={() => {
+                if (!episodeIdea.trim() || episodeIdea.trim().length < 10) {
+                  setAutoOpen(true)
+                  return
+                }
+                runAutoEpisode()
+              }}
+            >
+              <Sparkles className="h-3.5 w-3.5" /> <T k="New Episode" />
             </Button>
             <Button
               size="sm"
@@ -241,6 +293,49 @@ export function EpisodesPage() {
             </div>
           </div>
         </Modal>
+      <Modal open={autoOpen} onClose={() => setAutoOpen(false)} title="New episode — one click">
+        <div className="space-y-3">
+          <p className="text-[11px] leading-relaxed text-mirai-dim">
+            Describe this episode. The studio creates the next episode slot, runs the{' '}
+            <strong>Producer Agent</strong> on your text (bible → cast → scenes → screenplays → shots →
+            keyframes → timelines) and then <strong>assembles</strong> it: voices → image-to-video clips →
+            timeline → MP4.
+          </p>
+          {targetMinutes && targetMinutes > 0 && (
+            <p className="rounded-md border border-mirai-border bg-mirai-bg/40 px-3 py-2 text-[10px] text-mirai-faint">
+              <T k="From your IP form" /> · <strong className="text-mirai-dim">{targetMinutes} min</strong> — the
+              scene plan is derived from it; the app tells you how many clips the episode needs before it starts.
+            </p>
+          )}
+          <div>
+            <Label className="text-[10px]">What happens in this episode?</Label>
+            <Textarea
+              rows={5}
+              value={episodeIdea}
+              onChange={(e) => setEpisodeIdea(e.target.value)}
+              placeholder="Ep. 2 — Haruka and Lin travel to the state tournament. Lin's first match is against an old rival who knows her secret…"
+            />
+          </div>
+          <p className="text-[10px] leading-relaxed text-mirai-faint">
+            One button, one episode. A long episode is many short clips — no video model generates long video
+            yet — and the studio keeps what it already made if the run is interrupted.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setAutoOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              loading={autoEpisode.isPending}
+              disabled={episodeIdea.trim().length < 10}
+              onClick={runAutoEpisode}
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Generate the episode
+            </Button>
+          </div>
+        </div>
+      </Modal>
       <NewEpisodeModal
         open={newEpisodeOpen}
         onClose={() => setNewEpisodeOpen(false)}
