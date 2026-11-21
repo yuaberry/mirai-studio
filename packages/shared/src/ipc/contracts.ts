@@ -16,6 +16,7 @@ import { JobRecord } from '../entities/job'
 import { LogEntry } from '../entities/log'
 import { LocalPreflightResult } from './localPreflight'
 import { AutoEpisodeRequest } from './autoEpisode'
+import { UserProfile, UserProfilePatch, PublicProfileCard } from '../entities/profile'
 import type {
   AnimationPipeline,
   AnimationFrame,
@@ -1693,6 +1694,32 @@ export const ipcContracts = {
   'local:preflight': {
     request: z.object({ capability: z.enum(['image', 'video']) }),
     response: LocalPreflightResult,
+  },
+
+  // ---- Profile (v2.1) ----------------------------------------------------------
+  'profile:get': {
+    request: emptyRequest,
+    response: UserProfile,
+  },
+  /** Applies a patch. Omitted fields keep their value — never blind defaults. */
+  'profile:update': {
+    request: UserProfilePatch,
+    response: UserProfile,
+  },
+  /** The public card (no internal ids) — safe to render anywhere. */
+  'profile:card': {
+    request: emptyRequest,
+    response: PublicProfileCard,
+  },
+  /** Stores a new avatar as a real file (validated: type + 8 MB ceiling). */
+  'profile:avatar:set': {
+    request: z.object({ fileName: z.string().max(200), bytes: z.string().max(24_000_000) }),
+    response: UserProfile,
+  },
+  /** The avatar bytes, or `{ hasAvatar: false }`. */
+  'profile:avatar:read': {
+    request: emptyRequest,
+    response: z.object({ hasAvatar: z.boolean(), mimeType: z.string().default(''), bytes: z.string().default('') }),
   },
 
   // ---- System ----------------------------------------------------------------

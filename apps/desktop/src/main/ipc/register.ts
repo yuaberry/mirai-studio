@@ -1562,6 +1562,19 @@ export function registerIpcHandlers(c: Container): void {
     }
   })
 
+  handleIpc('profile:get', () => c.profile.get())
+  handleIpc('profile:update', (req) => c.profile.patch(req))
+  handleIpc('profile:card', () => c.profile.publicCard())
+  handleIpc('profile:avatar:set', (req) => c.profile.setAvatar(Buffer.from(req.bytes, 'base64'), req.fileName))
+  handleIpc('profile:avatar:read', () => {
+    const bytes = c.profile.avatarBytes()
+    if (!bytes) return { hasAvatar: false, mimeType: '', bytes: '' }
+    const ext = c.profile.get().avatarPath.slice(c.profile.get().avatarPath.lastIndexOf('.'))
+    const mimeType =
+      ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : 'image/jpeg'
+    return { hasAvatar: true, mimeType, bytes: bytes.toString('base64') }
+  })
+
   handleIpc('local:preflight', async (req) => {
     // The answer to "will my machine die trying this?" — asked BEFORE the user
     // clicks generate, so an unusable GPU is diagnosed now and not after an

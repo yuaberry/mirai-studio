@@ -72,6 +72,31 @@ export const APP_DB_MIGRATIONS: Migration[] = [
     },
   },
   {
+    name: '0005_user_profile',
+    up: (db) => {
+      // One row per machine: the local maker's profile. Not per project — an
+      // identity does not belong to a story.
+      db.exec(`
+        CREATE TABLE user_profile (
+          id TEXT PRIMARY KEY,
+          display_name TEXT NOT NULL DEFAULT 'Newcomer',
+          social_name TEXT NOT NULL DEFAULT '',
+          company_name TEXT NOT NULL DEFAULT '',
+          maker TEXT NOT NULL DEFAULT 'solo',
+          gender TEXT NOT NULL DEFAULT '',
+          pronouns TEXT NOT NULL DEFAULT '',
+          bio TEXT NOT NULL DEFAULT '',
+          location TEXT NOT NULL DEFAULT '',
+          website TEXT NOT NULL DEFAULT '',
+          social TEXT NOT NULL DEFAULT '{}',
+          avatar_path TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+      `)
+    },
+  },
+  {
     name: '0004_derived_works',
     up: (db) => {
       db.exec(`

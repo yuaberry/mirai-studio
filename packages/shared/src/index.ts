@@ -555,6 +555,15 @@ export { ipcEventPayloads, IPC_EVENT_CHANNELS } from './ipc/events'
 export { LocalPreflightResult, LOCAL_MIN_VRAM_IMAGE_GIB, LOCAL_MIN_VRAM_VIDEO_GIB } from './ipc/localPreflight'
 export { REMOTE_LOCAL_WARNING } from './remoteLocal'
 export { AutoEpisodeRequest, AutoEpisodeResult } from './ipc/autoEpisode'
+// Exported as VALUES only: a zod schema IS both the runtime validator and the
+// type, and exporting the same name twice (value + type) is TS2300.
+export {
+  UserProfile,
+  UserProfilePatch,
+  PublicProfileCard,
+  GENDER_OPTIONS,
+  preferredName,
+} from './entities/profile'
 export {
   planEpisodeFromRuntime,
   describeEpisodePlan,

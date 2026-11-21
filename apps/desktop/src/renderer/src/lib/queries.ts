@@ -197,6 +197,23 @@ export function useBackupActions(projectId: string) {
 
 // ---------------------------------------------------------------- settings
 
+export function useProfile() {
+  return useQuery({
+    queryKey: ['profile'] as const,
+    queryFn: () => invoke('profile:get', {}),
+    staleTime: 60_000,
+  })
+}
+
+/** The public card — safe to render anywhere (no internal ids). */
+export function useProfileCard() {
+  return useQuery({
+    queryKey: ['profile', 'card'] as const,
+    queryFn: () => invoke('profile:card', {}),
+    staleTime: 60_000,
+  })
+}
+
 export function useSettings() {
   return useQuery({
     queryKey: queryKeys.settings,

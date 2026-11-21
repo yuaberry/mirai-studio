@@ -18,6 +18,7 @@ import {
   AudioMixService,
   MarketplaceService,
   AssetIntelligenceService,
+  ProfileService,
 } from '@mirai/core'
 import type { IpcEventChannel, IpcEventPayload, OpenedProject } from '@mirai/shared'
 import { ipcEventPayloads } from '@mirai/shared'
@@ -65,6 +66,7 @@ export interface Container {
   credentials: CredentialStore
   projects: ProjectService
   ai: AiHost
+  profile: ProfileService
   aiUsage: AiUsageService
   /** v0.36: Sound & Voice Studio — real audio mix + master via FFmpeg. */
   audio: AudioMixService
@@ -118,6 +120,12 @@ export function bootstrap(): Container {
   const ai = new AiHost({ credentials, settings, projects, logger, emitter, aiUsage })
   const audio = new AudioMixService(appDb, systemClock, dirs.root)
   const assetIntelligence = new AssetIntelligenceService(appDb)
+  // v2.1: who is making the anime. Avatars live as real files in a folder
+  // inside userData — a database is a bad place for megabytes of pixels.
+  const profile = new ProfileService(appDb, {
+    profileDir: join(dirs.root, 'profile'),
+    clock: systemClock,
+  })
 
   // The AI Marketplace reads the vendors' LIVE catalogs (Pollinations'
   // public media catalog) and the configured chat provider's model list.
@@ -143,6 +151,7 @@ export function bootstrap(): Container {
     credentials,
     projects,
     ai,
+    profile,
     aiUsage,
     audio,
     assetIntelligence,
