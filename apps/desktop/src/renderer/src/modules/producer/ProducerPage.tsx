@@ -4,7 +4,7 @@
  * → storyboard → keyframes (optional) → timelines, all as one job.
  */
 import { useMemo, useState } from 'react'
-import { type AutoproduceSummary } from '@mirai/shared'
+import { type AutoproduceSummary, planEpisodeFromRuntime, describeEpisodePlan } from '@mirai/shared'
 import { Clapperboard, Sparkles, Wand2 } from 'lucide-react'
 import { useAutoproduce, useCurrentProject, useJobs, useSettings } from '../../lib/queries'
 import { toast } from '../../store/appStore'
@@ -24,7 +24,17 @@ export function ProducerPage() {
   const autoproduce = useAutoproduce()
   const { data: jobs } = useJobs()
   const [idea, setIdea] = useState('')
-  const [scenesCount, setScenesCount] = useState(4)
+  // THE IP FORM'S PROMISE, HONOURED HERE: the episode length the user typed at
+  // project creation drives the plan. The scene count is DERIVED from it, so the
+  // user fills the IP form once and never counts scenes by hand.
+  const targetMinutes = current?.manifest?.config?.episodeLengthMinutes
+  const runtimePlan = useMemo(
+    () => (targetMinutes && targetMinutes > 0 ? planEpisodeFromRuntime(targetMinutes) : null),
+    [targetMinutes],
+  )
+  const [scenesCount, setScenesCount] = useState(() =>
+    runtimePlan ? Math.max(2, Math.min(12, runtimePlan.scenesCount)) : 4,
+  )
   const [shotsPerScene, setShotsPerScene] = useState(4)
   const [generateFrames, setGenerateFrames] = useState(false)
   const [summary, setSummary] = useState<AutoproduceSummary | null>(null)
@@ -46,6 +56,8 @@ export function ProducerPage() {
         scenesCount,
         shotsPerScene,
         generateFrames,
+        // Pass the runtime so the backend can report the honest plan (and cap).
+        ...(targetMinutes && targetMinutes > 0 ? { targetMinutes } : {}),
       },
       {
         onSuccess: (jobId) =>
@@ -117,7 +129,7 @@ export function ProducerPage() {
             <div>
               <Label className="text-[10px]">Scenes</Label>
               <Select className="h-8 text-xs" value={String(scenesCount)} onChange={(e) => setScenesCount(Number(e.target.value))}>
-                {[2, 3, 4, 5, 6].map((n) => (
+                {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
@@ -142,6 +154,33 @@ export function ProducerPage() {
               </Select>
             </div>
           </div>
+
+          {/* The plan the IP form's episode length adds up to — shown BEFORE the
+              user spends the afternoon, because a long episode is many clips. */}
+          {runtimePlan && (
+            <div className="mt-2 rounded-md border border-mirai-border bg-mirai-bg/40 px-3 py-2">
+              <p className="text-[10px] text-mirai-faint">
+                <T k="From your IP form" /> · <strong className="text-mirai-dim">{targetMinutes} min</strong>
+              </p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-mirai-dim">
+                {describeEpisodePlan({
+                  ...runtimePlan,
+                  scenesCount,
+                  shotsPerScene,
+                  shotsTotal: scenesCount * shotsPerScene,
+                  estimatedSeconds: scenesCount * shotsPerScene *
+                    (runtimePlan.shotsTotal > 0 ? runtimePlan.estimatedSeconds / runtimePlan.shotsTotal : 8),
+                  estimatedMinutes: 0,
+                  clipsNeeded: scenesCount * shotsPerScene,
+                  clamped: runtimePlan.clamped || scenesCount * shotsPerScene < runtimePlan.shotsTotal,
+                  clampReason: runtimePlan.clampReason ??
+                    (scenesCount * shotsPerScene < runtimePlan.shotsTotal
+                      ? `This pass builds ${scenesCount * shotsPerScene} shots; the ${targetMinutes}-minute target needs ${runtimePlan.shotsTotal}. Run again on the same episode for the rest, or raise the scene count.`
+                      : null),
+                })}
+              </p>
+            </div>
+          )}
 
           {matureNote && (
             <p className="rounded-md border border-mirai-pink/30 bg-mirai-pink/5 px-3 py-2 text-[11px] text-mirai-pink">
