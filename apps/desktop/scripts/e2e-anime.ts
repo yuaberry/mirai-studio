@@ -626,6 +626,49 @@ async function main(): Promise<void> {
     pass(`"${target.title}" regenerated FROM its own keyframe · score ${check.score}`)
   })
 
+  await step('RESUMIBLE ASSEMBLY: a second pass does not redo finished work', async () => {
+    // Free GPUs disconnect after hours. The assembly must therefore be
+    // RESUMABLE, not repeatable: a second pass over the same episode keeps the
+    // clips it already made and only fills what is missing.
+    const { episodes } = await call<{ episodes: Array<{ id: string }> }>(win, 'episodes:list')
+    const sceneList = await call<{ scenes: Array<{ id: string }> }>(win, 'scenes:list', {
+      episodeId: episodes[0]!.id,
+    })
+    const totalShots = sceneList.scenes.reduce((acc, sc) => acc + 1, 0)
+
+    const { jobId } = await call<{ jobId: string }>(win, 'ai:assembleEpisode', {
+      episodeId: episodes[0]!.id,
+      frames: false,
+      voices: false,
+      videos: true,
+      render: false,
+    })
+    const job = await waitJob(win, jobId, 10 * 60_000, 'assembly-2')
+    if (job.status !== 'COMPLETED') throw new Error(`assembly ${job.status}: ${describe(job.error)}`)
+    const result = job.result as {
+      videosGenerated: number
+      skippedNoFrame: number
+      skippedNoDialogue: number
+    }
+
+    // With no usable video provider the honest outcome is: NOTHING regenerated
+    // and every shot accounted for as skipped. A implementation that redid the
+    // work would report videosGenerated > 0 — that is the regression this locks.
+    if (result.videosGenerated > 0) {
+      throw new Error(
+        `the resume pass regenerated ${result.videosGenerated} clip(s) — it must skip finished shots`,
+      )
+    }
+    const accounted = result.skippedNoFrame + result.skippedNoDialogue
+    if (accounted < totalShots) {
+      throw new Error(`only ${accounted} of ${totalShots} scenes were accounted for`)
+    }
+    pass(
+      `resume pass generated 0 · skipped ${result.skippedNoFrame} · ` +
+        `no finished work was redone across ${totalShots} scenes`,
+    )
+  })
+
   await step('VIDEO: real Wan 2.2 attempt (documents the vendor answer)', async () => {
     const { episodes } = await call<{ episodes: Array<{ id: string }> }>(win, 'episodes:list')
     const sceneList = await call<{ scenes: Array<{ id: string }> }>(win, 'scenes:list', {

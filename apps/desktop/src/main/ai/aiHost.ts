@@ -1832,6 +1832,22 @@ export class AiHost {
       const shots = ctx.storyboard.listShots(scene.id)
       for (const shot of shots) {
         shotCount += 1
+        // RESUMABLE, NOT REPEATABLE: work already done by a previous
+        // (interrupted) pass is SKIPPED, not redone. Free GPUs disconnect
+        // after hours; without this every resume would re-render the whole
+        // episode and pay for it again.
+        let skipVideo = false
+        // RESUMABLE, NOT REPEATABLE: a shot that already has its clip is
+        // SKIPPED, not regenerated. Colab (or any free GPU) disconnects after
+        // hours; without this, every resume would re-render the whole episode
+        // and pay for it again. The per-shot work is idempotent by design.
+        if (opts.videos && shot.videoAssetId) {
+          // Already animated by a previous (interrupted) pass — keep it, and
+          // only skip the VIDEO step for this shot. Voices still run.
+          skipVideo = true
+          tick(`"${shot.title}" already animated — kept`)
+        }
+
         // FRAMES FIRST (v0.32): a frameless shot gets its keyframe drawn
         // from the scene + Style Bible (studio consistency baked in), so
         // the video phase has art to animate.
@@ -1859,7 +1875,7 @@ export class AiHost {
             skippedNoDialogue += 1
           }
         }
-        if (opts.videos) {
+        if (opts.videos && !skipVideo) {
           if (shot.frameAssetId && videoReady) {
             try {
               await this.generateVideo(shot.id, undefined, Math.max(2, Math.min(shot.durationSeconds, 10)), signal.aborted ? new AbortController().signal : { aborted: signal.aborted } as AbortSignal, () => undefined)
