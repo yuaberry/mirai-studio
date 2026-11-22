@@ -11,6 +11,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PublishStore } from '../src/publishStore'
+import { AccountStore } from '../src/accountStore'
 import { createMiraiServer } from '../src/httpServer'
 
 const AUTHOR = {
@@ -23,19 +24,37 @@ const AUTHOR = {
   avatarPath: '',
 }
 
-async function boot() {
+async function boot(withAccounts = false) {
   const root = mkdtempSync(join(tmpdir(), 'mirai-srv-'))
+  const accountsDir = withAccounts ? mkdtempSync(join(tmpdir(), 'mirai-acc-')) : undefined
   const store = new PublishStore({ root })
-  const { server, listen } = createMiraiServer({ store, port: 0, serverName: 'Test registry' })
+  const accounts = accountsDir ? new AccountStore(accountsDir) : undefined
+  const { server, listen } = createMiraiServer({ store, accounts, port: 0, serverName: 'Test registry' })
   const { port } = await listen(0, '127.0.0.1')
   const base = `http://127.0.0.1:${port}`
   return {
     base,
     store,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    accounts,
+    close: () =>
+      new Promise<void>((resolve) => {
+        accounts?.close()
+        server.close(() => resolve())
+      }),
     root,
+    accountsDir,
   }
 }
+
+const authPost = (base: string, path: string, body: unknown, token?: string) =>
+  fetch(`${base}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  })
 
 const post = async (base: string, path: string, body: unknown) => {
   const res = await fetch(`${base}${path}`, {
@@ -56,6 +75,7 @@ describe('collaboration server (real HTTP)', () => {
     if (srv) {
       await srv.close()
       rmSync(srv.root, { recursive: true, force: true })
+      if (srv.accountsDir) rmSync(srv.accountsDir, { recursive: true, force: true })
     }
   })
 
@@ -162,5 +182,99 @@ describe('collaboration server (real HTTP)', () => {
     const manifest = await fetch(`${srv.base}/projects/${id}`).then((r) => r.json())
     const { createHash } = await import('node:crypto')
     expect(manifest.checksum).toBe(createHash('sha256').update(zip).digest('hex'))
+  })
+})
+describe('accounts + revocation (over real HTTP)', () => {
+  let srv: Awaited<ReturnType<typeof boot>> | null = null
+  beforeEach(() => {
+    srv = null
+  })
+  afterEach(async () => {
+    if (srv) {
+      await srv.close()
+      rmSync(srv.root, { recursive: true, force: true })
+      if (srv.accountsDir) rmSync(srv.accountsDir, { recursive: true, force: true })
+    }
+  })
+
+  it('registers, logs in and resolves /me', async () => {
+    srv = await boot(true)
+    const reg = await authPost(srv.base, '/register', { handle: 'zey.hashi', password: 'supersecret1' })
+    expect(reg.status).toBe(201)
+    const token = ((await reg.json()) as { token: string }).token
+
+    const logged = await authPost(srv.base, '/login', { handle: 'zey.hashi', password: 'supersecret1' })
+    expect(logged.status).toBe(200)
+
+    const me = await fetch(`${srv.base}/me`, { headers: { Authorization: `Bearer ${token}` } })
+    expect(me.status).toBe(200)
+    expect((await me.json()).handle).toBe('zey.hashi')
+  })
+
+  it('a publish WITH a session records the owner on the manifest', async () => {
+    srv = await boot(true)
+    const reg = await authPost(srv.base, '/register', { handle: 'owner.user', password: 'supersecret1' })
+    const { token } = (await reg.json()) as { token: string }
+
+    const pub = await authPost(
+      srv.base,
+      '/projects',
+      {
+        title: 'Owned project',
+        author: {
+          displayName: 'Owner', socialName: '', companyName: '', maker: 'solo',
+          pronouns: '', bio: '', avatarPath: '',
+        },
+        bundleB64: Buffer.from('bundle').toString('base64'),
+      },
+      token,
+    )
+    expect(pub.status).toBe(201)
+
+    const me = await fetch(`${srv.base}/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+    expect(me.projects).toHaveLength(1)
+    expect(me.projects[0].owner).toBe('owner.user')
+  })
+
+  it('revoke closes sessions AND removes the account projects', async () => {
+    srv = await boot(true)
+    const reg = await authPost(srv.base, '/register', { handle: 'gone.user', password: 'supersecret1' })
+    const { token } = (await reg.json()) as { token: string }
+
+    await authPost(
+      srv.base,
+      '/projects',
+      {
+        title: 'Take me down',
+        author: {
+          displayName: 'Gone', socialName: '', companyName: '', maker: 'solo',
+          pronouns: '', bio: '', avatarPath: '',
+        },
+        bundleB64: Buffer.from('x').toString('base64'),
+      },
+      token,
+    )
+    expect((await fetch(`${srv.base}/projects`).then((r) => r.json())).projects).toHaveLength(1)
+
+    const rev = await authPost(srv.base, '/revoke', {}, token)
+    const body = await rev.json()
+    expect(body.ok).toBe(true)
+    expect(body.revokedSessions).toBe(1)
+    expect(body.removedProjects).toBe(1)
+
+    // The session is dead, and the project is gone.
+    const me = await fetch(`${srv.base}/me`, { headers: { Authorization: `Bearer ${token}` } })
+    expect(me.status).toBe(401)
+    expect((await fetch(`${srv.base}/projects`).then((r) => r.json())).projects).toHaveLength(0)
+  })
+
+  it('a wrong password is refused, not a crash', async () => {
+    srv = await boot(true)
+    await authPost(srv.base, '/register', { handle: 'real.user', password: 'supersecret1' })
+    const bad = await authPost(srv.base, '/login', { handle: 'real.user', password: 'wrongpassword' })
+    expect(bad.status).toBe(401)
+    const health = await fetch(`${srv.base}/health`)
+    expect(health.status).toBe(200)
   })
 })

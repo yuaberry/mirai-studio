@@ -120,6 +120,8 @@ export class PublishStore {
       author: PublishManifestType['author']
       totalBytes: number
       bundle: NodeJS.ReadableStream | Buffer
+      /** Handle of the publishing account, when the client has a session. */
+      owner?: string | null
     },
   ): Promise<{ id: string; token: string; manifest: PublishManifestType }> {
     if (input.title.trim().length === 0) throw new Error('A title is required.')
@@ -193,6 +195,7 @@ export class PublishStore {
       publishedAt: now,
       updatedAt: now,
       downloads: 0,
+      owner: input.owner ?? null,
     })
 
     writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2))
@@ -231,6 +234,27 @@ export class PublishStore {
     }
     rmSync(join(this.opts.root, id), { recursive: true, force: true })
     return { ok: true, message: `"${stored.manifest.title}" removed.` }
+  }
+
+  /**
+   * Removes EVERY project an account owns — the revocation a user asks for
+   * when a laptop is lost or an account is compromised.
+   */
+  removeByOwner(handle: string): { removed: number } {
+    let removed = 0
+    for (const stored of this.list()) {
+      if (stored.manifest.owner !== handle) continue
+      rmSync(join(this.opts.root, stored.manifest.id), { recursive: true, force: true })
+      removed += 1
+    }
+    return { removed }
+  }
+
+  /** Projects an account owns (for the account page). */
+  listByOwner(handle: string): PublishManifestType[] {
+    return this.list()
+      .map((s) => s.manifest)
+      .filter((m) => m.owner === handle)
   }
 
   /** The bundle's size, or -1 when it is gone. */

@@ -16,14 +16,22 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { PublishStore } from './publishStore'
+import { AccountStore } from './accountStore'
 import { PublishCatalog, PublishManifest, type PublishManifest as PublishManifestType } from '@mirai/shared'
 
 export interface MiraiServerOptions {
   store: PublishStore
+  accounts?: AccountStore
   port?: number
   host?: string
   /** Public name of this registry, shown to browsing clients. */
   serverName?: string
+}
+
+/** Reads a bearer token from the Authorization header. */
+function bearer(req: IncomingMessage): string {
+  const header = req.headers.authorization ?? ''
+  return header.startsWith('Bearer ') ? header.slice(7) : ''
 }
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024 * 1024
@@ -104,6 +112,91 @@ export function createMiraiServer(opts: MiraiServerOptions) {
         return
       }
 
+      // ---- accounts (v2.1) ------------------------------------------------
+      if (req.method === 'POST' && path === '/register') {
+        const raw = await readBody(req, 64 * 1024)
+        let body: { handle?: string; password?: string }
+        try {
+          body = JSON.parse(raw.toString('utf8')) as { handle?: string; password?: string }
+        } catch {
+          json(res, 400, { error: 'The body must be JSON.' })
+          return
+        }
+        if (!opts.accounts) {
+          json(res, 501, { error: 'This server has no account database.' })
+          return
+        }
+        try {
+          const account = opts.accounts.register(body.handle ?? '', body.password ?? '')
+          const { token } = opts.accounts.login(body.handle ?? '', body.password ?? '')
+          json(res, 201, { id: account.id, handle: account.handle, token })
+        } catch (err) {
+          json(res, 400, { error: err instanceof Error ? err.message : String(err) })
+        }
+        return
+      }
+
+      if (req.method === 'POST' && path === '/login') {
+        const raw = await readBody(req, 64 * 1024)
+        let body: { handle?: string; password?: string }
+        try {
+          body = JSON.parse(raw.toString('utf8')) as { handle?: string; password?: string }
+        } catch {
+          json(res, 400, { error: 'The body must be JSON.' })
+          return
+        }
+        if (!opts.accounts) {
+          json(res, 501, { error: 'This server has no account database.' })
+          return
+        }
+        try {
+          const session = opts.accounts.login(body.handle ?? '', body.password ?? '')
+          json(res, 200, { token: session.token, handle: session.handle })
+        } catch (err) {
+          json(res, 401, { error: err instanceof Error ? err.message : String(err) })
+        }
+        return
+      }
+
+      if (req.method === 'GET' && path === '/me') {
+        const token = bearer(req)
+        const account = opts.accounts?.resolve(token)
+        if (!account) {
+          json(res, 401, { error: 'That session is not valid.' })
+          return
+        }
+        const sessions = opts.accounts!.listSessions(account.handle)
+        json(res, 200, {
+          handle: account.handle,
+          createdAt: account.createdAt,
+          sessions: sessions.length,
+          projects: opts.store.listByOwner(account.handle),
+        })
+        return
+      }
+
+      if (req.method === 'POST' && path === '/logout') {
+        const token = bearer(req)
+        json(res, 200, { ok: opts.accounts?.logout(token) ?? false })
+        return
+      }
+
+      if (req.method === 'POST' && path === '/revoke') {
+        const token = bearer(req)
+        const account = opts.accounts?.resolve(token)
+        if (!account) {
+          json(res, 401, { error: 'That session is not valid.' })
+          return
+        }
+        // Revoking means BOTH: every session of this account, and every
+        // project it published. A user who says "take my work down" means the
+        // work, not just the login.
+        const revoked = opts.accounts!.revokeAllSessions(account.handle)
+        const projects = opts.store.removeByOwner(account.handle)
+        json(res, 200, { ok: true, revokedSessions: revoked, removedProjects: projects.removed })
+        return
+      }
+
       // ---- publish ------------------------------------------------------
       if (req.method === 'POST' && path === '/projects') {
         const raw = await readBody(req)
@@ -123,12 +216,17 @@ export function createMiraiServer(opts: MiraiServerOptions) {
           return
         }
         const bundle = Buffer.from(body.bundleB64, 'base64')
+        // The session (when present) becomes the project's OWNER — it is what
+        // "revoke my projects" will act on. Publishing without an account
+        // still works: that is the legacy token path.
+        const session = opts.accounts ? opts.accounts.resolve(bearer(req)) : null
         const published = await opts.store.publish({
           title: body.title,
           tagline: body.tagline,
           tags: body.tags,
           medium: body.medium,
           author: body.author,
+          owner: session?.handle ?? null,
           totalBytes: bundle.byteLength,
           bundle,
         })

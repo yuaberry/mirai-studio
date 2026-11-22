@@ -49,6 +49,11 @@ export const PublishManifest = z.object({
   updatedAt: z.string().min(1),
   /** Downloads other users performed — the only social signal we show. */
   downloads: z.number().int().min(0).default(0),
+  /**
+   * Handle of the account that published this, when published with a session.
+   * `null` = anonymous (the legacy per-project token is the only credential).
+   */
+  owner: z.string().max(40).nullable().default(null),
 })
 export type PublishManifest = z.infer<typeof PublishManifest>
 

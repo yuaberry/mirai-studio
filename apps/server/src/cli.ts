@@ -13,6 +13,7 @@
 import { mkdirSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { PublishStore } from './publishStore'
+import { AccountStore } from './accountStore'
 import { createMiraiServer } from './httpServer'
 
 function arg(name: string, fallback: string): string {
@@ -33,12 +34,15 @@ const name = arg('name', 'Mirai Studio registry')
 
 mkdirSync(root, { recursive: true })
 const store = new PublishStore({ root })
-const { server, listen } = createMiraiServer({ store, port, host, serverName: name })
+// Accounts live beside the published projects, in their own SQLite file.
+const accounts = new AccountStore(join(root, '.accounts'))
+const { server, listen } = createMiraiServer({ store, accounts, port, host, serverName: name })
 await listen(port, host)
 
 console.log(`\n  MIRAI STUDIO — collaboration server`)
 console.log(`  name     ${name}`)
-console.log(`  root     ${root}`)
+console.log(`  root     ${root}
+  accounts ${join(root, '.accounts')}/accounts.sqlite (register/login/revoke)`)
 console.log(`  listen   ${host}:${port}`)
 console.log(`\n  Point Mirai Studio at  Settings → Collaboration → ${host === '0.0.0.0' ? 'localhost' : host}:${port}`)
 console.log(`  Projects published: ${store.list().length}\n`)
