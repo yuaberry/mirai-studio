@@ -11,7 +11,7 @@
  *   --name   Public name of this registry
  */
 import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { PublishStore } from './publishStore'
 import { createMiraiServer } from './httpServer'
 
@@ -24,7 +24,11 @@ function arg(name: string, fallback: string): string {
 
 const port = Number(arg('port', '8787'))
 const host = arg('host', '0.0.0.0')
-const root = join(process.cwd(), arg('root', 'published'))
+// An ABSOLUTE --root is used as given; only a relative one is resolved against
+// the current directory. MEASURED: joining an absolute path silently nested it
+// under the cwd (`apps/server/tmp/opencode/...`), publishing into nowhere.
+  const rootArg = arg('root', 'published')
+  const root = isAbsolute(rootArg) ? rootArg : join(process.cwd(), rootArg)
 const name = arg('name', 'Mirai Studio registry')
 
 mkdirSync(root, { recursive: true })
