@@ -146,6 +146,16 @@ export const AppSettings = z.object({
             .default({}),
         })
         .default({}),
+      /**
+       * V2.1: the collaboration server (a registry you run — see apps/server).
+       * App-level, not per project: an identity does not belong to a story.
+       */
+      collaboration: z
+        .object({
+          url: z.string().default(''),
+          token: z.string().default(''),
+        })
+        .default({}),
       temperature: z.number().min(0).max(2).default(0.7),
       maxTokens: z.number().int().min(1).max(1_000_000).default(2_048),
       streaming: z.boolean().default(true),

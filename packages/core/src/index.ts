@@ -115,6 +115,8 @@ export { PluginRegistry, EXAMPLE_MANIFESTS } from './plugins/pluginRegistry'
 // AI marketplace (provider cards + live model catalogs)
 export { MarketplaceService } from './marketplace/marketplaceService'
 export { ProfileService, MAX_AVATAR_BYTES } from './profile/profileService'
+export { CollaborationService } from './collaboration/collaborationService'
+export type { CollaborationOptions } from './collaboration/collaborationService'
 export type { ProfileServiceOptions } from './profile/profileService'
 export type { MarketplaceServiceOptions, MarketplaceFetch } from './marketplace/marketplaceService'
 

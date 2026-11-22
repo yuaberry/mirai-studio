@@ -565,6 +565,14 @@ export {
   preferredName,
 } from './entities/profile'
 export {
+  PublishManifest,
+  PublishFileEntry,
+  PublishCatalog,
+  PublishResult,
+  ServerStatus,
+  sanitizeRelativePath,
+} from './entities/publish'
+export {
   planEpisodeFromRuntime,
   describeEpisodePlan,
   SECONDS_PER_SHOT,

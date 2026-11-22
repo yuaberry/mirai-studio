@@ -1,0 +1,22 @@
+{
+  "name": "@mirai/server",
+  "version": "2.1.0-beta.1",
+  "private": true,
+  "description": "Mirai Studio collaboration server \u2014 publish, discover and import anime projects",
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "mirai-server": "src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun src/cli.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mirai/shared": "workspace:*",
+    "@mirai/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

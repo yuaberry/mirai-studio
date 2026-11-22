@@ -17,6 +17,7 @@ import { LogEntry } from '../entities/log'
 import { LocalPreflightResult } from './localPreflight'
 import { AutoEpisodeRequest } from './autoEpisode'
 import { UserProfile, UserProfilePatch, PublicProfileCard } from '../entities/profile'
+import { PublishCatalog, PublishResult, ServerStatus } from '../entities/publish'
 import type {
   AnimationPipeline,
   AnimationFrame,
@@ -1694,6 +1695,27 @@ export const ipcContracts = {
   'local:preflight': {
     request: z.object({ capability: z.enum(['image', 'video']) }),
     response: LocalPreflightResult,
+  },
+
+  // ---- Collaboration (v2.1) ------------------------------------------------------
+  'server:status': {
+    request: emptyRequest,
+    response: ServerStatus,
+  },
+  /** Publishes the CURRENT project to the configured server. */
+  'server:publish': {
+    request: z.object({ title: z.string().min(1).max(120), tagline: z.string().max(300).default(''), tags: z.array(z.string().max(40)).max(30).default([]) }),
+    response: PublishResult,
+  },
+  /** The server's catalog. */
+  'server:browse': {
+    request: emptyRequest,
+    response: PublishCatalog,
+  },
+  /** Downloads a published project into the user's own projects dir. */
+  'server:import': {
+    request: z.object({ id: z.string().min(12).max(12) }),
+    response: PublishResult,
   },
 
   // ---- Profile (v2.1) ----------------------------------------------------------

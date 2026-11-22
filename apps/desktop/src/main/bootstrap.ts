@@ -19,6 +19,7 @@ import {
   MarketplaceService,
   AssetIntelligenceService,
   ProfileService,
+  CollaborationService,
 } from '@mirai/core'
 import type { IpcEventChannel, IpcEventPayload, OpenedProject } from '@mirai/shared'
 import { ipcEventPayloads } from '@mirai/shared'
@@ -67,6 +68,7 @@ export interface Container {
   projects: ProjectService
   ai: AiHost
   profile: ProfileService
+  collaboration: CollaborationService
   aiUsage: AiUsageService
   /** v0.36: Sound & Voice Studio — real audio mix + master via FFmpeg. */
   audio: AudioMixService
@@ -126,6 +128,13 @@ export function bootstrap(): Container {
     profileDir: join(dirs.root, 'profile'),
     clock: systemClock,
   })
+  // v2.1: publish/import projects between makers (the server is user-run).
+  const collaboration = new CollaborationService({
+    profile,
+    settings,
+    projectsDir: dirs.projectsDefaultDir,
+    clock: systemClock,
+  })
 
   // The AI Marketplace reads the vendors' LIVE catalogs (Pollinations'
   // public media catalog) and the configured chat provider's model list.
@@ -152,6 +161,7 @@ export function bootstrap(): Container {
     projects,
     ai,
     profile,
+    collaboration,
     aiUsage,
     audio,
     assetIntelligence,

@@ -1562,6 +1562,12 @@ export function registerIpcHandlers(c: Container): void {
     }
   })
 
+  // ---- Collaboration (v2.1) ----------------------------------------------
+  handleIpc('server:status', () => c.collaboration.status())
+  handleIpc('server:publish', (req) => c.collaboration.publish(c.projects.current()!.summary.path, req.title, req.tagline, req.tags))
+  handleIpc('server:browse', () => c.collaboration.browse())
+  handleIpc('server:import', (req) => c.collaboration.import(req.id))
+
   handleIpc('profile:get', () => c.profile.get())
   handleIpc('profile:update', (req) => c.profile.patch(req))
   handleIpc('profile:card', () => c.profile.publicCard())

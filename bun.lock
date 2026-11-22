@@ -95,6 +95,20 @@
         "vite": "^5.4.11",
       },
     },
+    "apps/server": {
+      "name": "@mirai/server",
+      "version": "2.1.0-beta.1",
+      "bin": {
+        "mirai-server": "src/cli.ts",
+      },
+      "dependencies": {
+        "@mirai/core": "workspace:*",
+        "@mirai/shared": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "^5.6.3",
+      },
+    },
     "packages/ai": {
       "name": "@mirai/ai",
       "version": "2.1.0-beta.1",
@@ -367,6 +381,8 @@
     "@mirai/desktop": ["@mirai/desktop@workspace:apps/desktop"],
 
     "@mirai/mobile-companion": ["@mirai/mobile-companion@workspace:apps/mobile"],
+
+    "@mirai/server": ["@mirai/server@workspace:apps/server"],
 
     "@mirai/shared": ["@mirai/shared@workspace:packages/shared"],
 
