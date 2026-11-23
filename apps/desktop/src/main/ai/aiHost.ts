@@ -30,7 +30,7 @@ import {
   TaglineDraft,
   SceneTranslationDraft,
 } from '@mirai/shared'
-import { assertExplicitCastAllowed, maturePipelineActive } from '@mirai/core'
+import { assertExplicitCastAllowed, maturePipelineActive, VoicePolish } from '@mirai/core'
 import { planEpisodeFromRuntime } from '@mirai/shared'
 import type { DossierAiSections, DossierData } from '@mirai/core'
 import {
@@ -1617,7 +1617,7 @@ export class AiHost {
     }
 
     let finalBytes = results[0]!.bytes
-    const finalMime = results[0]!.mime
+    let finalMime = results[0]!.mime
     let voiceLabel = results[0]!.voice
     if (results.length > 1) {
       // MULTIPLE VOICES: concatenate the clips with the bundled FFmpeg —
@@ -1663,6 +1663,26 @@ export class AiHost {
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true })
       }
+    }
+
+    // VOICE POLISH (v2.1): the keyless endpoint is intelligible but FLAT — no
+    // dynamics, a thin presence band, no room. The chain is local ADR
+    // post-production (EQ → compressor → short room → broadcast loudness) with
+    // the bundled FFmpeg, so the voice sounds ACTED instead of read by a
+    // machine. On any failure the RAW voice is kept — a broken post-processor
+    // must never silence the actor.
+    const polish = new VoicePolish()
+    const polished = polish.polish(finalBytes, finalMime, 'neutral')
+    if (polished.appliedFilters.length > 0) {
+      finalBytes = polished.bytes
+      finalMime = polished.mimeType
+      this.deps.logger.log('info', 'AI', 'Voice polished', {
+        shotId,
+        stages: polished.appliedFilters.length,
+        bytes: polished.bytes.byteLength,
+      })
+    } else {
+      this.deps.logger.warn('AI', 'Voice polish skipped — the raw voice is kept.', { shotId })
     }
 
     const asset = ctx.storyboard.registerGeneratedVoice(shotId, finalBytes, finalMime)

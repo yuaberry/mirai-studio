@@ -2180,7 +2180,25 @@ async function main(): Promise<void> {
     if (lastTtsBody['voice'] !== 'ayaka-soft') throw new Error('voice not sent to the provider')
     if (!ctx.storyboard.getShotById(shot.id).voiceAssetId) throw new Error('AI voice not attached to the shot')
     const voiceAsset = ctx.storyboard.getAsset(ctx.storyboard.getShotById(shot.id).voiceAssetId!)
-    if (voiceAsset.bytes !== wavBytes.length) throw new Error('voice bytes mismatch')
+    // The voice asset is REAL, DECODABLE AUDIO — not a byte-for-byte copy of the
+    // provider's response: the v2.1 voice polish (EQ → compressor → room →
+    // loudness) intentionally re-encodes it. What matters is that the actor's
+    // voice is still there and playable, with the duration the clip has.
+    if (voiceAsset.bytes === 0) throw new Error('AI voice asset is empty')
+    const voiceFile = ctx.storyboard.assetAbsolutePath(voiceAsset.id)
+    if (!existsSync(voiceFile)) throw new Error('AI voice file is not on disk')
+    const voiceHead = readFileSync(voiceFile).subarray(0, 12)
+    const isWav = voiceHead.toString('latin1', 0, 4) === 'RIFF'
+    const isMp3 = voiceHead[0] === 0xff && (voiceHead[1]! & 0xe0) === 0xe0
+    if (!isWav && !isMp3) {
+      throw new Error(
+        `stored voice has no real audio container (head: ${voiceHead.toString('hex')}) — the polish broke it`,
+      )
+    }
+    // Real audio, not a stub: the 1-second clip the provider sent must be here.
+    if (voiceAsset.bytes < 1_000) {
+      throw new Error(`stored voice is suspiciously small (${voiceAsset.bytes} bytes)`)
+    }
 
     // ASSEMBLY with videos disabled (no video provider configured — honest skip)
     // and render enabled: a REAL MP4 of the scene, from the AI-voiced shot.
@@ -2302,12 +2320,23 @@ async function main(): Promise<void> {
     if (voicesRequested.filter((v) => v === 'ayaka-soft').length !== 1) throw new Error('ayaka voice not requested')
     if (voicesRequested.filter((v) => v === 'rin-bright').length !== 1) throw new Error('rin voice not requested')
     if (!spoken.voice.includes('+')) throw new Error('multi-speaker label missing')
-    // each clip is 1.0s at 8kHz (44 + 16000 bytes); the concatenation is
-    // ~2 clips (FFmpeg rewrites the container header — assert by margin)
+    // Each provider clip is 1.0s. The v2.1 voice polish re-encodes them to
+    // 48 kHz STEREO 16-bit (192000 bytes per second), and the short room reverb
+    // adds a tail — so the joined file is ~2 s of that format, not the raw
+    // 8 kHz mono the provider sent. The contract that matters is the DURATION
+    // (two voices actually joined), so it is asserted in the polished format.
     const voiceAsset = ctx.storyboard.getAsset(ctx.storyboard.getShotById(shot.id).voiceAssetId!)
-    const single = 44 + 16_000
-    if (voiceAsset.bytes < single * 1.9 || voiceAsset.bytes > single * 2.1) {
-      throw new Error(`concat length wrong: ${voiceAsset.bytes} (expected ~${single * 2})`)
+    const polishedPerSecond = 48_000 * 2 * 2
+    // The joined clip must hold BETWEEN 1.5 s and 3.5 s of polished audio:
+    // below that the second voice was never joined, above it a voice was
+    // duplicated. A single 1 s clip is 192 000 bytes — excluded by the floor.
+    const minBytes = 1.5 * polishedPerSecond
+    const maxBytes = 3.5 * polishedPerSecond
+    if (voiceAsset.bytes < minBytes || voiceAsset.bytes > maxBytes) {
+      throw new Error(
+        `concat length wrong: ${voiceAsset.bytes} (expected between ${minBytes} and ${maxBytes} ` +
+          `= 1.5–3.5 s of 48 kHz stereo)`,
+      )
     }
 
     // cleanup
