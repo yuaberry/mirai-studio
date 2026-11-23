@@ -1,6 +1,7 @@
 @import '@fontsource-variable/inter';
 @import '@fontsource-variable/space-grotesk';
 @import './tokens.css';
+@import './motion.css';
 
 @tailwind base;
 @tailwind components;
@@ -163,8 +164,10 @@
   }
 
   /* v0.26 — view content enters softly on navigation. */
+  /* v2.1: the duration is the USER'S setting, not a magic number. `--motion-ms`
+     is 0ms when motion is off, which turns this into a no-op. */
   .animate-view-in {
-    animation: mirai-view-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    animation: mirai-rise-in var(--motion-ms) var(--motion-ease) both;
   }
 }
 

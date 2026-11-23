@@ -36,6 +36,12 @@ import {
 } from 'lucide-react'
 import { isProjectView, PROJECT_VIEWS, useAppStore, type MainView, type ProjectView } from '../store/appStore'
 import type { AppSettingsPatch } from '@mirai/shared'
+import {
+  DEFAULT_MOTION,
+  motionStyleVars,
+  resolveMotion,
+  systemPrefersReducedMotion,
+} from '@mirai/shared'
 import { invoke } from '../lib/ipc'
 import { cn } from '../lib/utils'
 import { Wordmark } from '../system/Logo'
@@ -203,6 +209,22 @@ export function AppShell() {
   const { data: health } = useHealth()
   const [onboardingOpen, setOnboardingOpen] = useState(false)
   const queryClient = useQueryClient()
+
+  // MOTION (v2.1): the interface's rhythm is ONE setting, written to the root
+  // element as data attributes + CSS custom properties. Every rule in
+  // styles/motion.css reads `var(--motion-ms)`, so switching motion off
+  // collapses the WHOLE interface to a standstill — no per-component flags.
+  useEffect(() => {
+    const motion = settings?.appearance.motion ?? DEFAULT_MOTION
+    const reduced = systemPrefersReducedMotion()
+    const resolved = resolveMotion(motion, reduced)
+
+    document.documentElement.dataset.motion = resolved.dataMotion
+    document.documentElement.dataset.detail = resolved.detail
+    for (const [key, value] of Object.entries(motionStyleVars(resolved))) {
+      document.documentElement.style.setProperty(key, value)
+    }
+  }, [settings?.appearance.motion])
 
   // THEME (v0.17): data-theme swaps every CSS var (see tokens.css); the
   // custom theme also injects the user's accent color inline.

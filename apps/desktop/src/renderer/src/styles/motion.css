@@ -1,0 +1,134 @@
+/**
+ * Motion CSS (v2.1) — the visual layer of shared/motion.ts.
+ *
+ * ONE RULE: never write a duration here. Every rule reads `var(--motion-ms)`
+ * and `var(--motion-ease)`, which the AppShell writes from the user's setting
+ * (and which are 0ms when motion is off). That is why flipping the switch to
+ * "Off" takes the whole interface to a standstill without a single special
+ * case in a component.
+ *
+ * The `data-motion="off"` attribute is the belt-and-braces: anything that
+ * still animates without reading the variable is killed here.
+ */
+
+:root {
+  --motion-ms: 240ms;
+  --motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-stagger: 40ms;
+}
+
+/* ---------------------------------------------------------------- keyframes */
+
+@keyframes mirai-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mirai-rise-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.995); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes mirai-scale-in {
+  from { opacity: 0; transform: scale(0.975); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes mirai-slide-in {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* A page leaves as faintly as it arrives — a hard cut on exit looks like a
+   bug next to a soft entry. */
+@keyframes mirai-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; transform: translateY(-6px); }
+}
+
+/* ------------------------------------------------------------- the surface */
+
+[data-motion='on'] .motion-view {
+  animation: var(--motion-ms) var(--motion-ease) both;
+}
+
+/* Detail levels decide how much the interface decorates itself. */
+[data-detail='minimal'] .motion-decor {
+  display: none;
+}
+
+[data-detail='balanced'] .motion-decor {
+  opacity: 0.55;
+}
+
+[data-detail='rich'] .motion-decor {
+  opacity: 1;
+}
+
+/* --------------------------------------------------------------- the kill */
+
+/* Everything stops. Not "slower" — stopped. This is the attribute the app
+   writes when the user turns motion off or the OS asks for reduced motion. */
+[data-motion='off'] *,
+[data-motion='off'] *::before,
+[data-motion='off'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0ms !important;
+}
+
+/* The OS preference is honoured even if the app forgot to read it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* --------------------------------------------------- micro-interactions */
+
+/* A card that lifts when hovered: soft, short, and driven by the variable. */
+[data-motion='on'] .motion-lift {
+  transition:
+    transform var(--motion-ms) var(--motion-ease),
+    box-shadow var(--motion-ms) var(--motion-ease),
+    border-color var(--motion-ms) var(--motion-ease);
+}
+
+[data-motion='on'] .motion-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -12px rgb(0 0 0 / 0.55);
+}
+
+/* A button that answers the press — the cheapest "alive" cue there is. */
+[data-motion='on'] .motion-press {
+  transition: transform 90ms var(--motion-ease);
+}
+
+[data-motion='on'] .motion-press:active {
+  transform: scale(0.975);
+}
+
+/* Staggered children: a list that arrives in sequence rather than all at once.
+   The delay is a VARIABLE so 'off' collapses it to zero. */
+[data-motion='on'] .motion-stagger > * {
+  animation: mirai-rise-in var(--motion-ms) var(--motion-ease) both;
+}
+
+[data-motion='on'] .motion-stagger > *:nth-child(1) { animation-delay: calc(var(--motion-stagger) * 0); }
+[data-motion='on'] .motion-stagger > *:nth-child(2) { animation-delay: calc(var(--motion-stagger) * 1); }
+[data-motion='on'] .motion-stagger > *:nth-child(3) { animation-delay: calc(var(--motion-stagger) * 2); }
+[data-motion='on'] .motion-stagger > *:nth-child(4) { animation-delay: calc(var(--motion-stagger) * 3); }
+[data-motion='on'] .motion-stagger > *:nth-child(5) { animation-delay: calc(var(--motion-stagger) * 4); }
+[data-motion='on'] .motion-stagger > *:nth-child(6) { animation-delay: calc(var(--motion-stagger) * 5); }
+
+/* Respect a user who asked for less even when the app is told to animate. */
+@media (prefers-reduced-motion: reduce) {
+  .motion-stagger > * { animation-delay: 0ms !important; }
+  .motion-view { animation: none !important; }
+}

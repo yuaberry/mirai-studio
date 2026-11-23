@@ -582,4 +582,18 @@ export {
   MAX_AUTOPRODUCE_SHOTS,
 } from './episodeRuntime'
 export type { EpisodePlan } from './episodeRuntime'
+export {
+  MOTION_MS,
+  MOTION_EASE,
+  MOTION_KEYFRAMES,
+  MOTION_LABELS,
+  DETAIL_LABELS,
+  TRANSITION_LABELS,
+  DEFAULT_MOTION,
+  resolveMotion,
+  motionStyleVars,
+  describeMotion,
+  systemPrefersReducedMotion,
+} from './motion'
+export type { MotionSpeed, DetailLevel, TransitionStyle, MotionSettings } from './motion'
 export type { IpcEventChannel, IpcEventPayload } from './ipc/events'

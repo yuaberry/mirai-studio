@@ -4,6 +4,7 @@
  * without breaking older installs.
  */
 import { z } from 'zod'
+import { DEFAULT_MOTION } from '../motion'
 
 export const AppSettings = z.object({
   general: z
@@ -186,6 +187,20 @@ export const AppSettings = z.object({
       uiScale: z.number().min(0.8).max(1.4).default(1),
       /** Auto-fit: shrink the base UI on small windows automatically. */
       autoFit: z.boolean().default(true),
+      /**
+       * v2.1 motion (see shared/motion.ts — the single source of truth).
+       * `enabled: false` is the switch people with vestibular sensitivity need;
+       * `speed` goes from 'calm' (420ms) to 'instant' (0ms).
+       */
+      motion: z
+        .object({
+          enabled: z.boolean().default(DEFAULT_MOTION.enabled),
+          speed: z.enum(['off', 'calm', 'normal', 'swift', 'instant']).default(DEFAULT_MOTION.speed),
+          detail: z.enum(['minimal', 'balanced', 'rich']).default(DEFAULT_MOTION.detail),
+          transition: z.enum(['fade', 'rise', 'scale', 'slide', 'none']).default(DEFAULT_MOTION.transition),
+          respectSystemPreference: z.boolean().default(DEFAULT_MOTION.respectSystemPreference),
+        })
+        .default({}),
     })
     .default({}),
   editing: z

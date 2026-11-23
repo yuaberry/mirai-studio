@@ -18,6 +18,7 @@ import { cn } from '../../lib/utils'
 import { useT } from '../../lib/i18n'
 import { ContentCard } from './ContentCard'
 import { ProfileCard } from './ProfileCard'
+import { MotionCard } from './MotionCard'
 import { LocalGpuPanel } from './LocalGpuPanel'
 import { Badge, Button, Card, Input, Label, SectionTitle, Select, Spinner } from '../../system/ui'
 import { ErrorState } from '../../system/EmptyState'
@@ -60,6 +61,7 @@ export function SettingsPage() {
       <h1 className="mb-8 font-display text-2xl font-bold text-mirai-text">{tr('Settings')}</h1>
       <div className="space-y-6">
         <ProfileCard />
+        <MotionCard />
         <GeneralCard settings={settings} />
         <ProvidersCard />
         <ContentCard />
