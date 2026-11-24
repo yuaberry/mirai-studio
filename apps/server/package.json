@@ -1,6 +1,6 @@
 {
   "name": "@mirai/server",
-  "version": "2.1.1-alpha.1",
+  "version": "2.1.1-alpha.2",
   "private": true,
   "description": "Mirai Studio collaboration server \u2014 publish, discover and import anime projects",
   "type": "module",

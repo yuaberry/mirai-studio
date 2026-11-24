@@ -13,6 +13,7 @@
  * the network itself is exercised manually in the app.
  */
 import { mkdtempSync, mkdirSync, existsSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { deflateSync } from 'node:zlib'
 import { PluginHost } from '../src/main/plugins/pluginHost'
@@ -35,6 +36,7 @@ import {
   DocxService,
   AiUsageService,
   readZipEntries,
+  ffprobeBin,
   NotesImportService,
   DossierService,
   assertExplicitCastAllowed,
@@ -2317,7 +2319,7 @@ async function main(): Promise<void> {
       ai: {
         ...settingsSvc.get().ai,
         image: { baseUrl: 'https://img.example/v1', model: 'sheet-model', size: '768x1344' },
-        tts: { baseUrl: 'https://tts.example/v1', model: 'tts-1', voice: 'default-voice' },
+        tts: { protocol: 'openai' as const, baseUrl: 'https://tts.example/v1', model: 'tts-1', voice: 'default-voice' },
       },
     })
     const ai = new AiHost({
@@ -2443,7 +2445,7 @@ async function main(): Promise<void> {
       ai: {
         ...settingsSvc.get().ai,
         image: { baseUrl: 'https://img.example/v1', model: 'frame-model', size: '1344x768' },
-        tts: { baseUrl: 'https://tts.example/v1', model: 'tts-1', voice: 'default-voice' },
+        tts: { protocol: 'openai' as const, baseUrl: 'https://tts.example/v1', model: 'tts-1', voice: 'default-voice' },
       },
     })
     const ai = new AiHost({
@@ -2950,9 +2952,18 @@ async function main(): Promise<void> {
       voice: 'pt-BR-AntonioNeural',
     })
     if (result.bytes.byteLength < 2000) throw new Error(`synthesis returned ${result.bytes.byteLength} bytes`)
-    // A real MPEG frame sync (0xFF 0xEx) proves we got audio, not an error page.
-    const sync = result.bytes.subarray(0, 1)[0] === 0xff || result.bytes.subarray(0, 1)[0] === 0x49 // 'I' — ID3v2
-    if (!sync) throw new Error('synthesis did not return MPEG audio')
+    // The REAL validation: FFprobe decodes the bytes (Microsoft's stream does
+    // not begin with a frame sync or ID3 — a byte sniff would be a lie).
+    const probeDir = mkdtempSync(join(tmpdir(), 'mirai-edge-'))
+    const probeFile = join(probeDir, 'voice.mp3')
+    writeFileSync(probeFile, result.bytes)
+    const probe = spawnSync(ffprobeBin(), ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', probeFile])
+    const seconds = Number(probe.stdout.toString().trim())
+    rmSync(probeDir, { recursive: true, force: true })
+    if (!Number.isFinite(seconds) || seconds < 0.5) {
+      throw new Error(`synthesis is not decodable audio (ffprobe: ${probe.stdout.toString().trim() || 'nothing'})`)
+    }
+    if (seconds > 20) throw new Error(`synthesis suspiciously long: ${seconds}s`)
 
     // The same clock token regenerated per request — nothing to expire.
     const { generateSecMsGec } = await import('@mirai/ai')
@@ -2994,8 +3005,6 @@ async function main(): Promise<void> {
       if (result.fileBytes < 1000) throw new Error(`${motion}: suspiciously small (${result.fileBytes} bytes)`)
       renders.push({ preset: motion, seconds: duration ?? 0, bytes: result.fileBytes })
     }
-    // The suggested move follows the shot's OWN camera movement (DOLLY_IN).
-    ctx.storyboard.updateShot(shot.id, { cameraMovement: 'DOLLY_IN' } as never)
     console.log(`    camera clips: ${renders.map((r) => `${r.preset} ${r.seconds.toFixed(1)}s/${r.bytes}B`).join(' · ')}`)
     await projects.close()
   })
