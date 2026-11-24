@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, ChevronDown, ChevronUp, FileText, ListVideo, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronUp, FileText, Film, ListVideo, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import {
   MiraiError,
   TASK_STATUSES,
@@ -37,6 +37,7 @@ import {
   useExportDocx,
   useAssembleEpisode,
   useAutoEpisode,
+  useRenderCameraEpisode,
   useCurrentProject,
 } from '../../lib/queries'
 import { invoke } from '../../lib/ipc'
@@ -100,6 +101,9 @@ export function EpisodesPage() {
     () => (episodes ?? []).find((e) => e.id === selectedEpisodeId) ?? null,
     [episodes, selectedEpisodeId],
   )
+  // The free camera-move pass: one FFmpeg clip per framed shot of the episode.
+  const cameraEpisode = useRenderCameraEpisode()
+  const cameraEpisodeTarget = selected?.id ?? episodes?.[0]?.id ?? null
 
   useEffect(() => {
     if (!selectedEpisodeId && episodes && episodes.length > 0) {
@@ -151,6 +155,41 @@ export function EpisodesPage() {
               onClick={() => setAssembleOpen(true)}
             >
               <Sparkles className="h-3.5 w-3.5" /> <T k="AI Episode" />
+            </Button>
+            {/* v2.1: the FREE animatic pass — every framed shot of the episode
+                gets its camera-move clip (FFmpeg zoompan). This is what makes a
+                long episode watchable with NO video provider configured. */}
+            <Button
+              size="sm"
+              variant="outline"
+              loading={cameraEpisode.isPending}
+              disabled={!cameraEpisodeTarget}
+              title={
+                cameraEpisodeTarget
+                  ? 'Camera moves (free): one FFmpeg clip per framed shot of this episode — no provider, no key, no GPU'
+                  : 'This episode has no framed shots yet — generate the storyboard frames first'
+              }
+              onClick={() => {
+                if (!cameraEpisodeTarget) return
+                cameraEpisode.mutate(
+                  { episodeId: cameraEpisodeTarget, quality: 'PREVIEW' },
+                  {
+                    onSuccess: (r) =>
+                      toast({
+                        kind: r.queued > 0 ? 'success' : 'warning',
+                        title: r.queued > 0 ? 'Camera-move pass started' : 'Nothing to animate yet',
+                        description:
+                          r.queued > 0
+                            ? `${r.queued} clip${r.queued === 1 ? '' : 's'} queued${r.skippedNoFrame > 0 ? `, ${r.skippedNoFrame} shot(s) without a frame were skipped` : ''} — follow in Jobs.`
+                            : 'Every shot of this episode still lacks a storyboard frame.',
+                      }),
+                    onError: (err) =>
+                      toast({ kind: 'error', title: 'Camera pass failed to start', description: err.message }),
+                  },
+                )
+              }}
+            >
+              <Film className="h-3.5 w-3.5" /> <T k="Camera moves (free)" />
             </Button>
             <Button
               size="sm"

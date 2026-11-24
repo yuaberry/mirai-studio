@@ -463,6 +463,34 @@ export const ipcContracts = {
       text: z.string().min(1),
     }),
   },
+  // ---- EDGE TTS (v2.1) ------------------------------------------------------
+  /**
+   * The keyless neural voice catalog (Microsoft Edge's online voices). The
+   * renderer cannot compute the clock-derived Sec-MS-GEC (that needs
+   * packages/ai's port), so the catalog is read in the main process.
+   * `ok: false` means the endpoint refused — the UI must SAY it instead of
+   * pretending the voice list is empty.
+   */
+  'ai:edgeVoices': {
+    request: z.object({
+      /** Optional locale prefix filter, e.g. 'pt-BR' or 'ja'. */
+      locale: z.string().optional(),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+      voices: z
+        .array(
+          z.object({
+            shortName: z.string(),
+            name: z.string(),
+            gender: z.string(),
+            locale: z.string(),
+          }),
+        )
+        .default([]),
+      message: z.string().optional(),
+    }),
+  },
   // ---- THE ONE-CLICK EPISODE ------------------------------------------------
   /**
    * Fills the IP form, presses ONE button, gets ONE real episode:
@@ -1018,6 +1046,47 @@ export const ipcContracts = {
   'render:shot': {
     request: z.object({ shotId: zEntityId }),
     response: z.object({ jobId: zEntityId }),
+  },
+  /**
+   * CAMERA-MOTION CLIP (v2.1): the shot's storyboard frame gains a REAL
+   * camera move (push-in, pan, drift, handheld…) through FFmpeg zoompan —
+   * no provider, no key, no GPU. This is the free motion path for long
+   * episodes: one clip per shot instead of 2–4 paid video generations, and
+   * the reference an image-to-video provider animates when there IS a key.
+   * Runs as a job (same channel contracts as render:shot).
+   */
+  'render:cameraClip': {
+    request: z.object({
+      shotId: zEntityId,
+      /** The move — omitted = suggested from the shot's own metadata. */
+      motion: z
+        .enum(['locked', 'pushIn', 'pushOut', 'panLeft', 'panRight', 'tiltUp', 'tiltDown', 'drift', 'handheld'])
+        .optional(),
+      /** Motion amplitude 0–1 (1 = the preset's full move). */
+      amount: z.number().min(0).max(1).optional(),
+      presetId: z.string().optional(),
+      quality: z.enum(['PREVIEW', 'MASTER', 'CINEMA']).optional(),
+    }),
+    response: z.object({ jobId: zEntityId }),
+  },
+  /**
+   * The FREE animatic pass for a whole episode: every shot that HAS a
+   * storyboard frame gets a camera-move clip (its own camera movement,
+   * rendered with FFmpeg zoompan). One clip per SHOT — not the 2–4 model
+   * generations the shot would otherwise need — which is what makes a long
+   * episode watchable on the zero-cost path. Shots without a frame are
+   * skipped and reported, never faked.
+   */
+  'render:cameraEpisode': {
+    request: z.object({
+      episodeId: zEntityId,
+      quality: z.enum(['PREVIEW', 'MASTER', 'CINEMA']).optional(),
+    }),
+    response: z.object({
+      queued: z.number().int(),
+      skippedNoFrame: z.number().int(),
+      jobIds: z.array(zEntityId),
+    }),
   },
   'render:status': {
     request: emptyRequest,

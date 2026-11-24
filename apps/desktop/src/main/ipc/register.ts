@@ -519,6 +519,29 @@ export function registerIpcHandlers(c: Container): void {
     const result = await c.ai.speakShot(req.shotId)
     return result
   })
+  // EDGE TTS (v2.1): the keyless voice catalog, read in the main process.
+  // An honest refusal is an ANSWER, not an empty list.
+  handleIpc('ai:edgeVoices', async (req) => {
+    try {
+      const { listEdgeVoices } = await import('@mirai/ai')
+      const voices = await listEdgeVoices()
+      return {
+        ok: true,
+        voices: req.locale
+          ? voices.filter((v) => v.locale.toLowerCase().startsWith(req.locale!.toLowerCase()))
+          : voices,
+      }
+    } catch (err) {
+      c.logger.warn('AI', 'Edge voice catalog unavailable', {
+        message: err instanceof Error ? err.message : String(err),
+      })
+      return {
+        ok: false,
+        voices: [],
+        message: err instanceof Error ? err.message : 'The Edge voice catalog could not be read.',
+      }
+    }
+  })
   handleIpc('ai:autoEpisode', async (req) => {
     const ctx = requireActive(c)
     // ONE job for the whole episode, so an interruption parks it and the app's
@@ -970,6 +993,71 @@ export function registerIpcHandlers(c: Container): void {
   handleIpc('render:status', () => {
     const detect = RenderService.detect()
     return { available: detect.available, version: detect.version }
+  })
+
+  handleIpc('render:cameraClip', async (req) => {
+    const ctx = requireActive(c)
+    ctx.jobs.register('render.cameraClip', async (job, jobCtx) => {
+      const payload = (job.payload ?? {}) as {
+        shotId?: string
+        motion?: 'locked' | 'pushIn' | 'pushOut' | 'panLeft' | 'panRight' | 'tiltUp' | 'tiltDown' | 'drift' | 'handheld'
+        amount?: number
+        presetId?: string
+        quality?: 'PREVIEW' | 'MASTER' | 'CINEMA'
+      }
+      if (!payload.shotId) throw new MiraiError('VALIDATION_ERROR', 'render.cameraClip payload missing shotId.')
+      const controller = new AbortController()
+      const watcher = setInterval(() => {
+        if (jobCtx.signal.aborted) controller.abort()
+      }, 100)
+      try {
+        const result = await ctx.render.renderCameraClip({
+          shotId: payload.shotId,
+          motion: payload.motion,
+          amount: payload.amount,
+          presetId: payload.presetId,
+          quality: payload.quality,
+          reportProgress: jobCtx.reportProgress,
+          signal: controller.signal,
+        })
+        c.logger.info('RENDER', `Camera-move clip rendered: ${result.outputPath}`, { bytes: result.fileBytes })
+        return result
+      } finally {
+        clearInterval(watcher)
+      }
+    })
+    const job = await ctx.jobs.enqueue(
+      'render.cameraClip',
+      { shotId: req.shotId, motion: req.motion, amount: req.amount, presetId: req.presetId, quality: req.quality },
+      { priority: 9, maxAttempts: 2 },
+    )
+    return { jobId: job.id }
+  })
+
+  handleIpc('render:cameraEpisode', async (req) => {
+    const ctx = requireActive(c)
+    // The episode's scenes → shots, server-side: one job per FRAMED shot.
+    const scenes = ctx.creative.listScenes(req.episodeId)
+    const jobIds: string[] = []
+    let skippedNoFrame = 0
+    for (const scene of scenes) {
+      for (const shot of ctx.storyboard.listShots(scene.id)) {
+        if (!shot.frameAssetId) {
+          skippedNoFrame += 1
+          continue
+        }
+        const job = await ctx.jobs.enqueue(
+          'render.cameraClip',
+          { shotId: shot.id, quality: req.quality ?? 'PREVIEW' },
+          { priority: 8, maxAttempts: 2 },
+        )
+        jobIds.push(job.id)
+      }
+    }
+    c.logger.info('RENDER', `Camera-move pass: ${jobIds.length} queued, ${skippedNoFrame} without frame`, {
+      episodeId: req.episodeId,
+    })
+    return { queued: jobIds.length, skippedNoFrame, jobIds }
   })
 
   handleIpc('render:shot', async (req) => {
@@ -1657,10 +1745,11 @@ export function registerIpcHandlers(c: Container): void {
       throw new MiraiError('NOT_FOUND', `Unknown provider: ${req.providerId}`)
     }
     // The image/video sections accept a NARROWER protocol set than the whole
-    // Marketplace (no 'google-translate'), so the value is narrowed here.
-    // A voice protocol applied to an image section would be a silent misroute.
+    // Marketplace (no 'google-translate', no 'edge'), so the value is narrowed
+    // here. A voice protocol applied to an image section would be a silent
+    // misroute.
     const mediaProtocol: 'openai' | 'pollinations' | 'local' =
-      provider.protocol === 'google-translate' ? 'openai' : provider.protocol
+      provider.protocol === 'google-translate' || provider.protocol === 'edge' ? 'openai' : provider.protocol
     // "Bring your own" cards have no base URL: we still switch the protocol
     // and tell the user exactly what is left to type.
     const manual = provider.baseUrl.trim().length === 0
@@ -1722,7 +1811,14 @@ export function registerIpcHandlers(c: Container): void {
           ...c.settings.get().ai,
           tts: {
             ...current,
-            protocol: provider.protocol === 'google-translate' ? 'google-translate' : 'openai',
+            // The engine the CARD names — 'edge' is the keyless neural path
+            // (v2.1) and must not be flattened into 'openai'.
+            protocol:
+              provider.protocol === 'google-translate'
+                ? 'google-translate'
+                : provider.protocol === 'edge'
+                  ? 'edge'
+                  : 'openai',
             ...(manual ? {} : { baseUrl: provider.baseUrl, model: model ?? current.model }),
           },
         },

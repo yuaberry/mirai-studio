@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { MarketplaceService, type MarketplaceFetch } from '../src/marketplace/marketplaceService'
-import { MARKETPLACE_PROVIDERS } from '@mirai/shared'
+import { MARKETPLACE_PROVIDERS, ProviderProtocol } from '@mirai/shared'
 
 const clock = {
   isoNow: () => '2026-11-05T00:00:00.000Z',
@@ -55,11 +55,15 @@ describe('MarketplaceService.providers', () => {
 
     expect(providers.length).toBe(MARKETPLACE_PROVIDERS.length)
     // No duplicate ids, and every card names a protocol the app speaks.
+    // The list is read from the SCHEMA itself (not a copy that rots) — the
+    // 'edge' entry is the v2.1 keyless neural voice path.
     const ids = new Set(providers.map((p) => p.id))
     expect(ids.size).toBe(providers.length)
     for (const provider of providers) {
-      expect(['openai', 'pollinations', 'google-translate', 'local']).toContain(provider.protocol)
+      expect(ProviderProtocol.options).toContain(provider.protocol)
     }
+    // And the protocol is not merely declared: the tts engine maps it.
+    expect(ProviderProtocol.options).toContain('edge')
     // The zero-cost local cards carry the honest shape: no key, no invoice,
     // no cloud, no vendor logo — and their base URL is loopback.
     const localImage = providers.find((p) => p.id === 'local-image')

@@ -90,7 +90,14 @@ export const AppSettings = z.object({
       tts: z
         .object({
           /** Wire protocol of the endpoint — decides which adapter talks to it. */
-          protocol: z.enum(['openai', 'google-translate']).default('openai'),
+          /**
+           * 'edge' — Microsoft Edge's online neural voices (v2.1). KEYLESS
+           * and clock-authenticated (see packages/ai/src/edgeTts), so it
+           * cannot expire the way a session token does; 300+ voices, one
+           * per locale/gender. It is the DEFAULT: a fresh install speaks
+           * immediately instead of demanding an API key.
+           */
+          protocol: z.enum(['openai', 'edge', 'google-translate']).default('edge'),
           baseUrl: z.string().optional(),
           model: z.string().optional(),
           /** Default voice id when a character has none. */

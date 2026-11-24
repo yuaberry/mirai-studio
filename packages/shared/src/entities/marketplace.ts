@@ -26,7 +26,14 @@ export type AiCapability = z.infer<typeof AiCapability>
  *                      no key, no invoice, and the ONLY route to a real
  *                      anime model without paying a cloud provider.
  */
-export const ProviderProtocol = z.enum(['openai', 'pollinations', 'google-translate', 'local'])
+export const ProviderProtocol = z.enum([
+  'openai',
+  'pollinations',
+  'google-translate',
+  'local',
+  // v2.1: Microsoft Edge's online neural voices — keyless, clock-authenticated.
+  'edge',
+])
 export type ProviderProtocol = z.infer<typeof ProviderProtocol>
 
 /** A provider the user can select for a capability. */
@@ -247,6 +254,22 @@ export const MARKETPLACE_PROVIDERS: readonly MarketplaceProvider[] = [
     docsUrl: 'https://translate.google.com',
     summary: 'Instant dubbing with NO key — one natural voice per language.',
     notes: 'Unofficial endpoint: one voice per locale (pt-BR, pt-PT, en-US…), rate-limited and undocumented.',
+  },
+  {
+    id: 'edge-tts',
+    name: 'Edge Neural Voices',
+    capability: 'tts',
+    protocol: 'edge',
+    baseUrl: 'https://speech.platform.bing.com',
+    requiresKey: false,
+    freeTier: true,
+    watermarkFree: true,
+    cloud: true,
+    docsUrl: 'https://github.com/yuaberry/mirai-studio/blob/main/docs/edge-tts.md',
+    summary:
+      'HUNDREDS of neural voices, NO key, NO account — and nothing that expires (the auth token is derived from the clock, regenerated per request).',
+    notes:
+      'One voice per character: pick any voice id from the Settings → voice catalog (318 voices across locales). Offline or refused? The app says so and falls back to the local FFmpeg polish chain — never a silent fake.',
   },
   {
     id: 'custom-image',

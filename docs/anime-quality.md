@@ -384,12 +384,38 @@ offload trick turns 2 GiB into 12 GiB — the app refuses rather than pretend.
 
 ---
 
-## 5. Honest limitations
+## 5. Long episodes: the free motion path
+
+A long episode needs one motion clip per shot. Every free vendor model of
+video is paid-only, and generation quality is a GPU problem — so a
+zero-cost long episode is a **camera-move** problem, which FFmpeg solves
+deterministically:
+
+- Every storyboard frame the shot has gets a REAL clip with a real camera
+  move — push-in, pull-back, pan, tilt, diagonal drift, subtle handheld —
+  rendered by `zoompan` (Storyboard → shot → **Camera move (free)**, or
+  Episodes → **Camera moves (free)** for the whole episode).
+- **One clip per shot** replaces the 2–4 model generations that shot would
+  otherwise need — the animatic before animation, exactly as a real studio
+  works.
+- The clip follows the shot's OWN camera movement field (STATIC/PAN/
+  DOLLY_IN…): what the user wrote is what the engine executes.
+- When the user does have a video key (or a local ComfyUI), the same
+  keyframe is the image-to-video reference — consistency comes from the
+  frame, motion from the provider.
+
+This is not a substitute for animated footage; it is the honest free path
+to a watchable cut, and the app never pretends otherwise.
+
+## 6. Honest limitations
 
 - **No provider is guaranteed "watermark-free"** — the Marketplace reports the
   *measured* fact per provider. Local generation has no vendor logo because
   there is no vendor.
-- **Voice is one voice per locale** on the keyless path.
+- **Voice on the keyless path** is Edge's neural catalog (hundreds of voices,
+  one per character) — see `docs/edge-tts.md` for the auth model and the
+  honest failure modes. The legacy Google endpoint (one voice per locale)
+  still exists for when Edge is unreachable.
 - **Consistency score 100** means the prompt honoured the lock, not that two
   independent generations are pixel-identical. Lock characters with model
   sheets + reference frames for that.

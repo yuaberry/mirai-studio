@@ -19,6 +19,7 @@ import { useT } from '../../lib/i18n'
 import { ContentCard } from './ContentCard'
 import { ProfileCard } from './ProfileCard'
 import { MotionCard } from './MotionCard'
+import { TtsVoiceCard } from './TtsVoiceCard'
 import { LocalGpuPanel } from './LocalGpuPanel'
 import { Badge, Button, Card, Input, Label, SectionTitle, Select, Spinner } from '../../system/ui'
 import { ErrorState } from '../../system/EmptyState'
@@ -831,11 +832,16 @@ function ProvidersCard() {
           )}
         </div>
 
-        {/* AI Voice provider (TTS — the voice-acting piece) */}
+        {/* v2.1: the ENGINE lives in its own card (Edge / OpenAI / Google);
+            the endpoint fields below still configure the OpenAI-compatible
+            engine, and stay visible for it. */}
+        <TtsVoiceCard />
+
+        {/* AI Voice provider endpoint (TTS — the openai-compatible engine) */}
         <div className="rounded-lg border border-mirai-border bg-mirai-panel p-4">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs font-semibold text-mirai-text">
-              AI voice <span className="ml-2 font-normal text-mirai-faint">OpenAI audio/speech-compatible</span>
+              AI voice endpoint <span className="ml-2 font-normal text-mirai-faint">OpenAI audio/speech-compatible</span>
             </p>
             <Badge tone={cred('tts')?.configured ? 'success' : 'neutral'}>
               {cred('tts')?.configured ? 'key stored' : 'not set'}

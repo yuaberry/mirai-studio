@@ -43,6 +43,7 @@ export const queryKeys = {
   credentials: ['credentials', 'status'] as const,
   backups: (projectId: string) => ['backups', projectId] as const,
   marketplace: ['marketplace', 'catalog'] as const,
+  edgeVoices: (locale?: string) => ['edge', 'voices', locale ?? 'all'] as const,
 }
 
 export const creativeKeys = {
@@ -229,6 +230,21 @@ export function useUpdateSettings() {
     mutationFn: (patch: AppSettingsPatch) =>
       invoke('settings:update', { settings: patch }).then((r) => r.settings),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.settings }),
+  })
+}
+
+// ------------------------------------------------------------------- Edge TTS
+
+/**
+ * The keyless neural voice catalog (v2.1). `ok: false` is a REAL answer —
+ * the UI shows the reason instead of an empty picker that looks like a bug.
+ */
+export function useEdgeVoices(locale?: string) {
+  return useQuery({
+    queryKey: queryKeys.edgeVoices(locale),
+    queryFn: () => invoke('ai:edgeVoices', { locale }),
+    staleTime: 10 * 60_000, // the catalog changes on Microsoft's schedule, not the user's
+    retry: false,
   })
 }
 
@@ -805,6 +821,25 @@ export function useRenderStatus() {
     queryKey: mediaKeys.renderStatus,
     queryFn: () => invoke('render:status'),
     staleTime: 60_000,
+  })
+}
+
+/**
+ * CAMERA-MOTION CLIP (v2.1) — the free motion path: the shot's storyboard
+ * frame + the shot's own camera movement → a real MP4 through FFmpeg, no
+ * provider/key/GPU. Reads the shot's camera movement on the main side, so
+ * the button executes exactly what the user set on the shot.
+ */
+export function useRenderCameraClip() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      shotId: string
+      amount?: number
+      presetId?: string
+      quality?: 'PREVIEW' | 'MASTER' | 'CINEMA'
+    }) => invoke('render:cameraClip', input).then((r) => r.jobId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.jobs }),
   })
 }
 
@@ -2212,5 +2247,19 @@ export function useCheckConsistency() {
         suggestions?: string[]
       }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['shots'] }),
+  })
+}
+
+/**
+ * The FREE animatic pass for a whole episode (v2.1): enqueues a camera-move
+ * clip for every shot that has a storyboard frame. One clip per SHOT — the
+ * zero-cost motion path for long episodes.
+ */
+export function useRenderCameraEpisode() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { episodeId: string; quality?: 'PREVIEW' | 'MASTER' | 'CINEMA' }) =>
+      invoke('render:cameraEpisode', input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.jobs }),
   })
 }

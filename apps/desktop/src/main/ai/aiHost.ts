@@ -57,6 +57,31 @@ import {
   type ContextCharacter,
   type ContextScene,
 } from '@mirai/ai'
+
+/**
+ * The Edge voice for a UI locale — a sensible DISTINCT voice per language so
+ * the studio speaks the language the user reads. The full catalog (300+
+ * voices) is offered in Settings; this is the no-configuration default.
+ */
+function defaultEdgeVoice(locale: string | undefined): string {
+  switch ((locale ?? 'pt-BR').split('-')[0]) {
+    case 'pt':
+      return 'pt-BR-AntonioNeural'
+    case 'en':
+      return 'en-US-EmmaMultilingualNeural'
+    case 'ja':
+      return 'ja-JP-NanamiNeural'
+    case 'es':
+      return 'es-ES-ElviraNeural'
+    case 'fr':
+      return 'fr-FR-DeniseNeural'
+    case 'de':
+      return 'de-DE-KatjaNeural'
+    default:
+      return 'pt-BR-AntonioNeural'
+  }
+}
+
 import {
   // type ConsistencyLock,
 } from '@mirai/shared'
@@ -1492,15 +1517,28 @@ export class AiHost {
    * `google-translate` → the keyless speech endpoint (one voice per locale).
    */
   resolveTtsProvider(): {
-    protocol: 'openai' | 'google-translate'
+    protocol: 'openai' | 'edge' | 'google-translate'
     apiKey: string | null
     baseUrl: string
     model: string
     defaultVoice?: string
-  } | null {
+  } {
     const settings = this.deps.settings.get()
     const tts = settings.ai.tts
-    const protocol = tts.protocol ?? 'openai'
+    const protocol = tts.protocol ?? 'edge'
+    // EDGE (v2.1): the keyless neural path — no credentials to configure, and
+    // clock-authenticated so it cannot expire. It is ALSO the fallback for a
+    // fresh install whose 'openai' protocol has no key yet: refusing to speak
+    // before the user finishes configuration is how a studio loses its voice.
+    if (protocol === 'edge') {
+      return {
+        protocol,
+        apiKey: null,
+        baseUrl: 'https://speech.platform.bing.com',
+        model: 'edge-neural',
+        defaultVoice: tts.voice && tts.voice.trim() ? tts.voice.trim() : defaultEdgeVoice(settings.general.locale),
+      }
+    }
     if (protocol === 'google-translate') {
       return {
         protocol,
@@ -1511,7 +1549,16 @@ export class AiHost {
       }
     }
     const apiKey = this.deps.credentials.get('tts')
-    if (!apiKey || !tts?.baseUrl || !tts.model) return null
+    if (!apiKey || !tts?.baseUrl || !tts.model) {
+      // No key yet → Edge, instead of a dead end.
+      return {
+        protocol: 'edge',
+        apiKey: null,
+        baseUrl: 'https://speech.platform.bing.com',
+        model: 'edge-neural',
+        defaultVoice: tts.voice?.trim() || defaultEdgeVoice(settings.general.locale),
+      }
+    }
     return {
       protocol,
       apiKey,
@@ -1604,7 +1651,13 @@ export class AiHost {
 
     const results: Array<{ voice: string; bytes: Buffer; mime: string }> = []
     for (const [voice, input] of mergedByVoice) {
-      if (googleTts) {
+      if (provider.protocol === 'edge') {
+        // v2.1: the keyless neural path (clock-authenticated — nothing to
+        // expire). The voice id is the Edge voice name (e.g. pt-BR-AntonioNeural).
+        const { edgeSpeak } = await import('@mirai/ai')
+        const result = await edgeSpeak({ text: input, voice, signal })
+        results.push({ voice: result.voice, bytes: result.bytes, mime: result.mimeType })
+      } else if (googleTts) {
         // The keyless engine speaks one voice per locale; the voice id
         // carries the locale (and an optional speed marker).
         const { lang, speed } = parseGoogleVoice(voice)

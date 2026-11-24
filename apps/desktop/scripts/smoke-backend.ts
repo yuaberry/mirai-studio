@@ -2164,7 +2164,15 @@ async function main(): Promise<void> {
       ...settingsSvc.get(),
       ai: {
         ...settingsSvc.get().ai,
-        tts: { baseUrl: 'https://tts.example/v1', model: 'tts-1', voice: 'default-voice' },
+        // The MOCK exercise: the openai-compatible TTS adapter. The protocol
+        // is DECLARED — v2.1's default is 'edge', and a test that leaves it to
+        // the default would silently hit the real network.
+        tts: {
+          protocol: 'openai' as const,
+          baseUrl: 'https://tts.example/v1',
+          model: 'tts-1',
+          voice: 'default-voice',
+        },
       },
     })
     const ai = new AiHost({
@@ -2217,7 +2225,22 @@ async function main(): Promise<void> {
     ctx.storyboard.clearVoice(shot.id)
     ctx.creative.deleteEpisode(ep.id)
     ctx.creative.deleteCharacter(ayaka.id)
-    settingsSvc.update({ ...settingsSvc.get(), ai: { ...settingsSvc.get().ai, tts: {} } })
+    // v2.1: the PIPELINE steps (V31/V32) stay on the deterministic openai
+    // MOCK — their job is the multi-speaker merge, the reference sheet and
+    // the assembly, not the network. The REAL Edge path is proven by V39
+    // (live catalog + live synthesis + clock token).
+    settingsSvc.update({
+      ...settingsSvc.get(),
+      ai: {
+        ...settingsSvc.get().ai,
+        tts: {
+          protocol: 'openai' as const,
+          baseUrl: 'https://tts.example/v1',
+          model: 'tts-1',
+          voice: 'default-voice',
+        },
+      },
+    })
     await projects.close()
   })
 
@@ -2347,7 +2370,11 @@ async function main(): Promise<void> {
     ctx.creative.deleteCharacter(rin.id)
     settingsSvc.update({
       ...settingsSvc.get(),
-      ai: { ...settingsSvc.get().ai, image: { baseUrl: undefined, model: undefined, size: '1344x768' }, tts: {} },
+      ai: {
+        ...settingsSvc.get().ai,
+        image: { baseUrl: undefined, model: undefined, size: '1344x768' },
+        tts: { protocol: 'openai' as const, baseUrl: 'https://tts.example/v1', model: 'tts-1', voice: 'default-voice' },
+      },
     })
     rmSync(png, { force: true })
     await projects.close()
@@ -2450,7 +2477,11 @@ async function main(): Promise<void> {
     ctx.creative.deleteCharacter(ayaka.id)
     settingsSvc.update({
       ...settingsSvc.get(),
-      ai: { ...settingsSvc.get().ai, image: { baseUrl: undefined, model: undefined, size: '1344x768' }, tts: {} },
+      ai: {
+        ...settingsSvc.get().ai,
+        image: { baseUrl: undefined, model: undefined, size: '1344x768' },
+        tts: { protocol: 'openai' as const, baseUrl: 'https://tts.example/v1', model: 'tts-1', voice: 'default-voice' },
+      },
     })
     rmSync(pngPath, { force: true })
     await projects.close()
@@ -2899,6 +2930,73 @@ async function main(): Promise<void> {
     const expsAfter = experiments.listExperiments()
     if (expsAfter.length !== 0) throw new Error('expected 0 experiments after deletion')
 
+    await projects.close()
+  })
+
+  // ---- EDGE TTS (v2.1) ------------------------------------------------------
+  // The DEFAULT voice engine: keyless neural voices, clock-authenticated.
+  // A LIVE round-trip — catalog + a real MP3 — because a voice engine that
+  // cannot speak is not a voice engine. A network outage fails loudly here;
+  // the alternative (a green suite over a dead voice path) is a lie.
+  await step('V39 EDGE TTS: keyless neural voices, live round-trip', async () => {
+    const { listEdgeVoices, edgeSpeak } = await import('@mirai/ai')
+    const voices = await listEdgeVoices()
+    if (voices.length < 50) throw new Error(`voice catalog suspiciously small: ${voices.length}`)
+    const pt = voices.filter((v) => v.locale.startsWith('pt-BR'))
+    if (pt.length === 0) throw new Error('no pt-BR voice in the catalog')
+
+    const result = await edgeSpeak({
+      text: 'Prova de fumaça: voz neural do Mirai Studio, sem chave e sem expirar.',
+      voice: 'pt-BR-AntonioNeural',
+    })
+    if (result.bytes.byteLength < 2000) throw new Error(`synthesis returned ${result.bytes.byteLength} bytes`)
+    // A real MPEG frame sync (0xFF 0xEx) proves we got audio, not an error page.
+    const sync = result.bytes.subarray(0, 1)[0] === 0xff || result.bytes.subarray(0, 1)[0] === 0x49 // 'I' — ID3v2
+    if (!sync) throw new Error('synthesis did not return MPEG audio')
+
+    // The same clock token regenerated per request — nothing to expire.
+    const { generateSecMsGec } = await import('@mirai/ai')
+    const a = generateSecMsGec()
+    const b = generateSecMsGec()
+    if (!/^[0-9A-F]{16}-[0-9A-F]{64}$/.test(a) || a !== b) {
+      throw new Error('clock token is not reproducible within its window')
+    }
+  })
+
+  // ---- CAMERA MOTION (v2.1) -------------------------------------------------
+  // The FREE motion path for long episodes: a REAL FFmpeg clip with a real
+  // camera move on a REAL frame — no provider, no key, no GPU. Every preset
+  // the user can pick is rendered here (a select that builds no video is a
+  // decorative select).
+  await step('V40 CAMERA MOTION: free zoompan clips, every preset really renders', async () => {
+    ctx = (await projects.open(summary.path)) as typeof ctx
+    const ep = ctx.creative.createEpisode({ season: 9, number: 10, title: 'V40 Camera' })
+    const scene = ctx.creative.createScene(ep.id, { title: 'Cena V40', characterIds: [] })
+    const shot = ctx.storyboard.createShot(scene.id, { title: 'V40 shot', durationSeconds: 2, cameraMovement: 'DOLLY_IN' })
+    const png = join(summary.path, '..', 'v40-frame.png')
+    writeFileSync(png, makeRealPng(320, 180, [90, 120, 200]))
+    ctx.storyboard.registerGeneratedFrame(shot.id, readFileSync(png), 'image/png')
+
+    const renders: Array<{ preset: string; seconds: number; bytes: number }> = []
+    for (const motion of ['pushIn', 'panRight', 'handheld', 'locked'] as const) {
+      const result = await ctx.render.renderCameraClip({
+        shotId: shot.id,
+        motion,
+        quality: 'PREVIEW',
+        reportProgress: () => undefined,
+        signal: { aborted: false },
+      })
+      if (!existsSync(result.outputPath)) throw new Error(`${motion}: no output file`)
+      const duration = ctx.render.probeDuration(result.outputPath)
+      if (duration === null || Math.abs(duration - 2) > 0.5) {
+        throw new Error(`${motion}: duration ${duration} != ~2s`)
+      }
+      if (result.fileBytes < 1000) throw new Error(`${motion}: suspiciously small (${result.fileBytes} bytes)`)
+      renders.push({ preset: motion, seconds: duration ?? 0, bytes: result.fileBytes })
+    }
+    // The suggested move follows the shot's OWN camera movement (DOLLY_IN).
+    ctx.storyboard.updateShot(shot.id, { cameraMovement: 'DOLLY_IN' } as never)
+    console.log(`    camera clips: ${renders.map((r) => `${r.preset} ${r.seconds.toFixed(1)}s/${r.bytes}B`).join(' · ')}`)
     await projects.close()
   })
 

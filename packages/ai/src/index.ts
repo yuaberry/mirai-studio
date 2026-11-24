@@ -93,3 +93,32 @@ export type {
   LocalSystemStats,
 } from './local'
 export { ANIME_NEGATIVE_PROMPT } from './consistency'
+
+// ---------------------------------------------------------------- Edge TTS
+
+// v2.1: keyless neural voices, clock-authenticated — nothing to expire.
+export {
+  edgeSpeak,
+  listEdgeVoices,
+  buildSsml,
+  buildConfigMessage,
+  buildSsmlMessage,
+  edgeWssUrl,
+  escapeXml,
+  sanitizeText,
+  jsTimestamp,
+  wssHeaders,
+  voicesHeaders,
+  generateSecMsGec,
+  generateSecMsGecV2,
+  adjustClockSkewSeconds,
+  parseHttpDate,
+  SEC_MS_GEC_VERSION,
+  CHROMIUM_FULL_VERSION,
+  WssFrameParser,
+  buildHandshakeRequest,
+  encodeClientFrame,
+  splitHeadersAndData,
+  createTlsSocket,
+} from './edgeTts'
+export type { EdgeTtsOptions, EdgeTtsResult, EdgeVoice, WssSocket, WssFrame, WssSocketFactory } from './edgeTts'

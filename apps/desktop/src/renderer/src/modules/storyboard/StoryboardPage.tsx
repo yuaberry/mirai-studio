@@ -53,6 +53,7 @@ import {
   useRecordDecision,
   useRenderStatus,
   useRenderShot,
+  useRenderCameraClip,
   assetUrl,
 
   useSpeakShot,
@@ -413,6 +414,7 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
   const recordDecision = useRecordDecision()
   const { data: renderStatus } = useRenderStatus()
   const renderShot = useRenderShot()
+  const cameraClip = useRenderCameraClip()
   const consistencyLock = useConsistencyLock()
   const checkConsistency = useCheckConsistency()
   const lock = consistencyLock.data
@@ -664,6 +666,38 @@ function ShotEditor({ shot, onClose }: { shot: ShotRecord; onClose: () => void }
                 Clear
               </Button>
             )}
+            {/* v2.1: the FREE camera move — FFmpeg zoompan on the storyboard
+                frame, using the shot's own camera movement. No provider, no
+                key, no GPU: this is the long-episode motion path. */}
+            <Button
+              size="sm"
+              variant="outline"
+              loading={cameraClip.isPending}
+              disabled={!renderStatus?.available || !shot.frameAssetId}
+              title={
+                !shot.frameAssetId
+                  ? 'The shot needs a storyboard frame first — a camera move moves an image'
+                  : 'Render a camera-move clip (push-in / pan / drift…) with FFmpeg — free, no provider'
+              }
+              onClick={() =>
+                cameraClip.mutate(
+                  { shotId: shot.id, quality: 'MASTER' },
+                  {
+                    onSuccess: () =>
+                      toast({
+                        kind: 'info',
+                        title: 'Camera-move clip queued',
+                        description:
+                          'The move follows the shot’s camera movement — watch the Jobs panel, the clip lands in exports/.',
+                      }),
+                    onError: (err) =>
+                      toast({ kind: 'error', title: 'Camera clip failed to start', description: err.message }),
+                  },
+                )
+              }
+            >
+              <Film className="h-3.5 w-3.5" /> Camera move (free)
+            </Button>
             <Button
               size="sm"
               variant="outline"

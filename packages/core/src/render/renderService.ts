@@ -13,6 +13,7 @@ import {
   type RenderOutput,
   type RenderQuality,
   type RenderResult,
+  type ExportPreset,
   type SceneRenderResult,
   type TimelineBundle,
   type KeyframeRecord,
@@ -23,6 +24,7 @@ import type { TimelineService } from '../timeline/timelineService'
 import type { CreativeService } from '../creative/creativeService'
 import type { SubtitleService } from '../subtitles/subtitleService'
 import { buildSceneRenderSpec } from './sceneRenderBuilder'
+import { cameraMoveArgs, suggestMotion, type CameraMotionPreset } from './cameraMotion'
 import { ffmpegBin, ffprobeBin } from './ffmpegBin'
 
 export interface RenderOptions {
@@ -124,6 +126,102 @@ export class RenderService {
     }
 
     return this.executeFFmpeg(framePath, voicePath, outputPath, shot.durationSeconds, reportProgress, signal, shotId)
+  }
+
+  /**
+   * CAMERA-MOTION CLIP (v2.1): the shot's storyboard frame acquires a REAL
+   * camera move — push-in, pan, tilt, drift, handheld — through FFmpeg's
+   * zoompan. No provider, no key, no GPU: this is the free motion path that
+   * makes a long episode watchable before (or instead of) any paid video
+   * model, and the reference clip an image-to-video provider animates when
+   * the user does have a key.
+   *
+   * `renderShot` holds a still; THIS moves the camera on it.
+   */
+  async renderCameraClip(options: {
+    shotId: EntityId
+    /** The move — defaults to a suggestion from the shot's own metadata. */
+    motion?: CameraMotionPreset
+    /** Motion amplitude 0–1 (1 = the preset's full move). */
+    amount?: number
+    presetId?: string
+    quality?: RenderQuality
+    reportProgress: (pct: number) => void
+    signal: { readonly aborted: boolean }
+  }): Promise<RenderResult> {
+    const { shotId, reportProgress, signal } = options
+    const shot = this.storyboard.getShotById(shotId)
+    reportProgress(5)
+    if (signal.aborted) throw new MiraiError('CANCELLED', 'Render cancelled by user.')
+
+    if (!shot.frameAssetId) {
+      throw new MiraiError(
+        'VALIDATION_ERROR',
+        'The shot has no storyboard frame — generate or import one first (a camera move needs an image).',
+      )
+    }
+    const framePath = this.storyboard.assetAbsolutePath(shot.frameAssetId)
+    if (!existsSync(framePath)) {
+      throw new MiraiError('PATH_INVALID', `Frame image not found: ${framePath}`)
+    }
+
+    const resolution = this.probeResolution(framePath) ?? '1920x1080'
+    const [width, height] = resolution.split('x').map((n) => Number(n) || 0)
+    // The frame's own resolution IS the clip's resolution — the camera move
+    // must never upscale (or crop) the artist's frame.
+    const preset: ExportPreset =
+      (options.presetId ? exportPresetById(options.presetId) : undefined) ?? {
+        id: 'frame-native',
+        label: 'Frame native',
+        description: 'The storyboard frame’s own resolution.',
+        width: width || 1920,
+        height: height || 1080,
+        fps: 24,
+        videoKbps: 8000,
+        audioKbps: 192,
+      }
+    const motion = options.motion ?? suggestMotion(shot)
+
+    const exportsDir = join(this.projectRoot, 'exports')
+    mkdirSync(exportsDir, { recursive: true })
+    const outputFileName = `shot-${shot.orderIndex + 1}-${shot.title
+      .replace(/[^a-z0-9]/gi, '_')
+      .toLowerCase()}-${motion}.mp4`
+    const outputPath = join(exportsDir, outputFileName)
+    reportProgress(15)
+
+    const args = cameraMoveArgs(
+      framePath,
+      outputPath,
+      {
+        preset: motion,
+        durationSec: shot.durationSeconds,
+        fps: preset.fps ?? 24,
+        width: width || preset.width,
+        height: height || preset.height,
+        amount: options.amount,
+      },
+      options.quality ?? 'MASTER',
+      preset,
+    )
+    reportProgress(20)
+
+    await this.runFFmpeg(args, shot.durationSeconds, 20, 95, reportProgress, signal, `camera ${motion}`)
+
+    const duration = this.probeDuration(outputPath) ?? shot.durationSeconds
+    const bytes = existsSync(outputPath) ? statSync(outputPath).size : 0
+    reportProgress(100)
+    return {
+      shotId,
+      outputPath,
+      durationSeconds: duration,
+      fileBytes: bytes,
+      hasAudio: false,
+      hasVideo: true,
+      format: 'mp4',
+      codec: 'h264',
+      resolution: `${width || preset.width}x${height || preset.height}`,
+    }
   }
 
   private async executeFFmpeg(
