@@ -183,7 +183,7 @@ export function MarketplacePage() {
           <Spinner className="h-5 w-5" />
         </div>
       ) : tab === 'providers' ? (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="motion-stagger grid gap-3 md:grid-cols-2">
           {providers.map((provider) => (
             <ProviderCard
               key={provider.id}
@@ -243,11 +243,11 @@ export function MarketplacePage() {
               />
             </div>
           ) : (
-            <div className="space-y-1.5">
+            <div className="motion-stagger space-y-1.5">
               {models.map((model) => (
                 <div
                   key={`${model.providerId}:${model.id}`}
-                  className="panel flex flex-wrap items-center gap-3 px-3 py-2"
+                  className="motion-lift panel flex flex-wrap items-center gap-3 px-3 py-2"
                 >
                   <span className="text-mirai-faint">
                     {(() => {
@@ -322,7 +322,7 @@ function ProviderCard({
   }
 
   return (
-    <Card className="flex flex-col p-4">
+    <Card className="motion-lift flex flex-col p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-bold text-mirai-text">

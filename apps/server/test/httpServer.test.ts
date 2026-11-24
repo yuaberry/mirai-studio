@@ -62,8 +62,16 @@ const post = async (base: string, path: string, body: unknown) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return { status: res.status, json: await res.json().catch(() => null) }
+  // JSON over HTTP is an UNTYPED boundary; the asserts are what pin the
+  // shape. `unknown` (not `any`) keeps the lint honest, and the two deep
+  // accesses below cast at the point of use.
+  const json = (await res.json().catch(() => null)) as Record<string, unknown>
+  return { status: res.status, json }
 }
+
+/** GET-side twin of authPost's body handling — same rationale (see above). */
+const readJson = async (res: Response): Promise<Record<string, unknown>> =>
+  (await res.json()) as Record<string, unknown>
 
 describe('collaboration server (real HTTP)', () => {
   let srv: Awaited<ReturnType<typeof boot>> | null = null
@@ -94,10 +102,10 @@ describe('collaboration server (real HTTP)', () => {
     expect(publish.json.token).toBeTruthy()
     const id = publish.json.id as string
 
-    const browse = await fetch(`${srv.base}/projects`).then((r) => r.json())
+    const browse = await fetch(`${srv.base}/projects`).then(readJson)
     expect(browse.serverName).toBe('Test registry')
     expect(browse.projects).toHaveLength(1)
-    expect(browse.projects[0].title).toBe('Malfoid EP1')
+    expect((browse.projects as Array<{ title: string }>)[0]!.title).toBe('Malfoid EP1')
 
     // Downloading the bundle streams back the SAME bytes.
     const bundle = await fetch(`${srv.base}/projects/${id}/bundle`)
@@ -105,16 +113,16 @@ describe('collaboration server (real HTTP)', () => {
     expect(Buffer.from(await bundle.arrayBuffer())).toEqual(zip)
 
     // The manifest route counts the download.
-    const manifest = await fetch(`${srv.base}/projects/${id}`).then((r) => r.json())
+    const manifest = await fetch(`${srv.base}/projects/${id}`).then(readJson)
     expect(manifest.downloads).toBe(1)
-    const again = await fetch(`${srv.base}/projects/${id}`).then((r) => r.json())
+    const again = await fetch(`${srv.base}/projects/${id}`).then(readJson)
     expect(again.downloads).toBe(2)
 
     const del = await fetch(`${srv.base}/projects/${id}?token=${publish.json.token}`, {
       method: 'DELETE',
     })
     expect(del.status).toBe(200)
-    const after = await fetch(`${srv.base}/projects`).then((r) => r.json())
+    const after = await fetch(`${srv.base}/projects`).then(readJson)
     expect(after.projects).toHaveLength(0)
   })
 
@@ -132,9 +140,9 @@ describe('collaboration server (real HTTP)', () => {
     srv = await boot()
     const res = await fetch(`${srv.base}/projects/aaaaaaaaaaaa`)
     expect(res.status).toBe(404)
-    expect((await res.json()).error).toMatch(/Unknown project/)
+    expect((await readJson(res)).error).toMatch(/Unknown project/)
     // And the server is still healthy afterwards.
-    const health = await fetch(`${srv.base}/health`).then((r) => r.json())
+    const health = await fetch(`${srv.base}/health`).then(readJson)
     expect(health.ok).toBe(true)
   })
 
@@ -149,7 +157,7 @@ describe('collaboration server (real HTTP)', () => {
 
     const wrong = await fetch(`${srv.base}/projects/${id}?token=nope`, { method: 'DELETE' })
     expect(wrong.status).toBe(403)
-    expect((await wrong.json()).message).toMatch(/does not match/)
+    expect((await readJson(wrong)).message).toMatch(/does not match/)
 
     const still = await fetch(`${srv.base}/projects/${id}`)
     expect(still.status).toBe(200)
@@ -179,7 +187,7 @@ describe('collaboration server (real HTTP)', () => {
     const bundle = await fetch(`${srv.base}/projects/${id}/bundle`)
     expect(Buffer.from(await bundle.arrayBuffer())).toEqual(zip)
     // And the manifest's checksum matches what a re-hash gives.
-    const manifest = await fetch(`${srv.base}/projects/${id}`).then((r) => r.json())
+    const manifest = await fetch(`${srv.base}/projects/${id}`).then(readJson)
     const { createHash } = await import('node:crypto')
     expect(manifest.checksum).toBe(createHash('sha256').update(zip).digest('hex'))
   })
@@ -208,7 +216,7 @@ describe('accounts + revocation (over real HTTP)', () => {
 
     const me = await fetch(`${srv.base}/me`, { headers: { Authorization: `Bearer ${token}` } })
     expect(me.status).toBe(200)
-    expect((await me.json()).handle).toBe('zey.hashi')
+    expect((await readJson(me)).handle).toBe('zey.hashi')
   })
 
   it('a publish WITH a session records the owner on the manifest', async () => {
@@ -232,9 +240,9 @@ describe('accounts + revocation (over real HTTP)', () => {
     expect(pub.status).toBe(201)
 
     const me = await fetch(`${srv.base}/me`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
+      .then(readJson)
     expect(me.projects).toHaveLength(1)
-    expect(me.projects[0].owner).toBe('owner.user')
+    expect((me.projects as Array<{ owner: string }>)[0]!.owner).toBe('owner.user')
   })
 
   it('revoke closes sessions AND removes the account projects', async () => {
@@ -255,10 +263,10 @@ describe('accounts + revocation (over real HTTP)', () => {
       },
       token,
     )
-    expect((await fetch(`${srv.base}/projects`).then((r) => r.json())).projects).toHaveLength(1)
+    expect((await fetch(`${srv.base}/projects`).then(readJson)).projects).toHaveLength(1)
 
     const rev = await authPost(srv.base, '/revoke', {}, token)
-    const body = await rev.json()
+    const body = await readJson(rev)
     expect(body.ok).toBe(true)
     expect(body.revokedSessions).toBe(1)
     expect(body.removedProjects).toBe(1)
@@ -266,7 +274,7 @@ describe('accounts + revocation (over real HTTP)', () => {
     // The session is dead, and the project is gone.
     const me = await fetch(`${srv.base}/me`, { headers: { Authorization: `Bearer ${token}` } })
     expect(me.status).toBe(401)
-    expect((await fetch(`${srv.base}/projects`).then((r) => r.json())).projects).toHaveLength(0)
+    expect((await fetch(`${srv.base}/projects`).then(readJson)).projects).toHaveLength(0)
   })
 
   it('a wrong password is refused, not a crash', async () => {

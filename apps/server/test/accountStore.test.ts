@@ -63,15 +63,15 @@ describe('AccountStore', () => {
 
   it('refuses a weak password and an invalid handle', () => {
     made = make()
-    expect(() => made.store.register('ok.handle', 'short')).toThrow(/at least 8/)
-    expect(() => made.store.register('no!', 'supersecret1')).toThrow(/3-40 characters/)
-    expect(() => made.store.register('xx', 'supersecret1')).toThrow(/3-40 characters/)
+    expect(() => made!.store.register('ok.handle', 'short')).toThrow(/at least 8/)
+    expect(() => made!.store.register('no!', 'supersecret1')).toThrow(/3-40 characters/)
+    expect(() => made!.store.register('xx', 'supersecret1')).toThrow(/3-40 characters/)
   })
 
   it('refuses a duplicate handle', () => {
     made = make()
     made.store.register('taken.one', 'supersecret1')
-    expect(() => made.store.register('taken.one', 'anotherpass1')).toThrow(/already taken/)
+    expect(() => made!.store.register('taken.one', 'anotherpass1')).toThrow(/already taken/)
   })
 
   it('revokes ONE session (logout)', () => {

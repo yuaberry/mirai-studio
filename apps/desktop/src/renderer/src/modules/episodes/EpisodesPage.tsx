@@ -189,12 +189,12 @@ export function EpisodesPage() {
               className="min-h-40"
             />
           ) : (
-            <ul className="space-y-0.5">
+            <ul className="motion-stagger space-y-0.5">
               {(episodes ?? []).map((episode) => (
                 <li key={episode.id}>
                   <button
                     onClick={() => setSelectedEpisodeId(episode.id)}
-                    className={`w-full rounded-md px-2.5 py-2 text-left transition-colors ${
+                    className={`motion-press w-full rounded-md px-2.5 py-2 text-left ${
                       episode.id === selectedEpisodeId
                         ? 'bg-mirai-hover text-mirai-text'
                         : 'text-mirai-dim hover:bg-mirai-hover/60 hover:text-mirai-text'
@@ -488,9 +488,9 @@ function EpisodeDetail({ episode }: { episode: EpisodeWithStats }) {
               className="min-h-32"
             />
           ) : (
-            <ul className="space-y-1">
+            <ul className="motion-stagger space-y-1">
               {(scenes ?? []).map((scene, index) => (
-                <li key={scene.id} className="panel group flex items-center gap-2 px-3 py-2">
+                <li key={scene.id} className="motion-lift panel group flex items-center gap-2 px-3 py-2">
                   <button
                     onClick={() => setSelectedSceneId(scene.id)}
                     className={`min-w-0 flex-1 text-left ${scene.id === selectedSceneId ? 'text-mirai-text' : 'text-mirai-dim'}`}

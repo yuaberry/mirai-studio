@@ -596,4 +596,6 @@ export {
   systemPrefersReducedMotion,
 } from './motion'
 export type { MotionSpeed, DetailLevel, TransitionStyle, MotionSettings } from './motion'
+export { describeRelease } from './release'
+export type { ReleaseInfo, ReleaseTone } from './release'
 export type { IpcEventChannel, IpcEventPayload } from './ipc/events'

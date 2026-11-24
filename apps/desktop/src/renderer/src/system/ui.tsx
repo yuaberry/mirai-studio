@@ -47,7 +47,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center rounded-md transition-[filter,background-color,color,border-color] duration-100',
+        // v2.1: the transition (colour + press scale) is the MOTION system's
+        // `motion-press` class — every duration reads --motion-ms, so the
+        // buttons obey the speed setting (and stop dead when it is off)
+        // instead of the old hardcoded `duration-100`.
+        'motion-press inline-flex items-center justify-center rounded-md',
         'disabled:cursor-not-allowed disabled:opacity-50',
         buttonVariants[variant],
         buttonSizes[size],
@@ -78,7 +82,9 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       title={label}
       aria-label={label}
       className={cn(
-        'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-mirai-dim transition-colors',
+        // v2.1: motion-press — colour transitions + press scale from the
+        // user's speed setting (was Tailwind's default transition-colors).
+        'motion-press inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-mirai-dim',
         'hover:bg-mirai-hover hover:text-mirai-text',
         active && 'bg-mirai-hover text-mirai-text',
         'disabled:opacity-40',

@@ -2,8 +2,8 @@
  * StatusBar — ambient state at a glance: active project, live jobs,
  * DB health, app version.
  */
-import { Cpu, Database, Film, Wifi, WifiOff } from 'lucide-react'
-import { jobIsActive } from '@mirai/shared'
+import { Cpu, Database, Film, Sparkles, Wifi, WifiOff } from 'lucide-react'
+import { describeRelease, jobIsActive } from '@mirai/shared'
 import { useHealth, useJobs, useCurrentProject, useAiStatus } from '../lib/queries'
 
 export function StatusBar() {
@@ -16,6 +16,9 @@ export function StatusBar() {
   const running = activeJobs.filter((j) => j.status === 'RUNNING').length
   const dbOk = health?.appDb === 'ok' && health?.nativeSqlite === 'ok'
   const online = typeof navigator !== 'undefined' ? navigator.onLine : true
+  // v2.1: same shared derivation as the sidebar — an alpha build says so
+  // here too, in the same amber pill.
+  const release = describeRelease(health?.appVersion)
 
   return (
     <footer className="flex h-8 shrink-0 items-center justify-between border-t border-mirai-border bg-mirai-raise/60 px-3 text-[11px] text-mirai-faint">
@@ -42,10 +45,17 @@ export function StatusBar() {
           <Database className="h-3 w-3" />
           {dbOk ? 'Local DB ready' : 'Checking DB…'}
         </span>
-        <span className="flex items-center gap-1.5">
-          <Cpu className="h-3 w-3" />
-          Mirai Studio v{health?.appVersion ?? '…'}
-        </span>
+        {release.tone === 'alpha' ? (
+          <span className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 font-bold tracking-wide text-amber-300 uppercase">
+            <Sparkles className="h-3 w-3" />
+            {release.text}
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5">
+            <Cpu className="h-3 w-3" />
+            {release.text}
+          </span>
+        )}
       </div>
     </footer>
   )

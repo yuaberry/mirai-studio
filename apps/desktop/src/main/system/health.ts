@@ -71,7 +71,15 @@ export function createHealthChecker(deps: Deps): HealthChecker {
       if (!cachedFfmpeg) cachedFfmpeg = detectFfmpeg()
 
       return {
-        appVersion: app.getVersion(),
+        // v2.1: the REAL app version, inlined at build time by electron.vite
+        // (`__MIRAI_APP_VERSION__`). `app.getVersion()` falls back to
+        // ELECTRON's version in an unpackaged run — which is how a dev build
+        // once displayed "Mirai Studio v33.4.11" in the sidebar. The build
+        // constant is the honest source in BOTH dev and packaged runs;
+        // app.getVersion() remains the fallback when the source is executed
+        // without the bundler (smoke scripts under bun).
+        appVersion:
+          typeof __MIRAI_APP_VERSION__ !== 'undefined' ? __MIRAI_APP_VERSION__ : app.getVersion(),
         electronVersion: process.versions.electron ?? 'unknown',
         nodeVersion: process.versions.node ?? 'unknown',
         platform: process.platform,

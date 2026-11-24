@@ -5,8 +5,17 @@
  * them off, and a choice between minimal and rich detail. This card is that
  * switch, and it shows the RESOLVED value (the OS preference can override the
  * app one — the card says so instead of pretending the setting won).
+ *
+ * PATTERN NOTE (bug found by live-testing, now fixed): this card used to call
+ * the raw IPC itself and read the response wrong (`settings:get` answers
+ * `{ settings }`, so the unwrapped data is `{ settings: … }`, not the settings
+ * object). The result: every read threw, the catch fell back to DEFAULTS and
+ * the selects snapped back to "normal" the moment you touched them — a
+ * settings UI that pretends to save. The rest of this page uses the
+ * `useSettings()` / `useUpdateSettings()` pair, which unwraps correctly and
+ * invalidates the cache on success; this card now does the same.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Sparkles, Zap } from 'lucide-react'
 import {
   MOTION_LABELS,
@@ -17,81 +26,81 @@ import {
   resolveMotion,
   describeMotion,
   systemPrefersReducedMotion,
-  type DetailLevel,
-  type MotionSpeed,
-  type TransitionStyle,
+  type MotionSettings,
 } from '@mirai/shared'
-import { invoke } from '../../lib/ipc'
+import { useSettings, useUpdateSettings } from '../../lib/queries'
 import { useT } from '../../lib/i18n'
-import { Badge, Button, Label, Select } from '../../system/ui'
+import { Badge, Button, Card, Label, SectionTitle, Select, Spinner } from '../../system/ui'
+import { toast } from '../../store/appStore'
 
-/** The shape the hooks below return. */
-interface AppearanceMotion {
-  enabled: boolean
-  speed: MotionSpeed
-  detail: DetailLevel
-  transition: TransitionStyle
-  respectSystemPreference: boolean
-}
-
-export function useAppearance() {
-  const [motion, setMotion] = useState<AppearanceMotion | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
-  const reload = async () => {
-    try {
-      const s = (await invoke('settings:get', {})) as unknown as { appearance: { motion: AppearanceMotion } }
-      setMotion(s.appearance.motion)
-    } catch {
-      setMotion({ ...DEFAULT_MOTION })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  return { motion, isLoading, reload, setMotion }
+/** Placeholder that guarantees the card has a complete object before the
+ *  settings arrive — react-query may briefly hand us `undefined` and a
+ *  partial motion object would render invalid <option> values. */
+function motionOf(settings: { appearance: { motion: MotionSettings } } | undefined): MotionSettings {
+  return settings?.appearance?.motion ?? DEFAULT_MOTION
 }
 
 export function MotionCard() {
   const tr = useT()
-  const { motion, reload } = useAppearance()
+  const { data: settings, isLoading } = useSettings()
+  const update = useUpdateSettings()
   const reduced = useMemo(() => systemPrefersReducedMotion(), [])
 
-  // Load the settings on mount — without this the card renders NOTHING forever
-  // (MEASURED: the Settings page showed the profile and general cards but no
-  // motion card at all).
-  useEffect(() => {
-    void reload()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (!motion) return null
-
+  const motion = motionOf(settings)
   const resolved = resolveMotion(motion, reduced)
-  const speedOptions: MotionSpeed[] = ['off', 'calm', 'normal', 'swift', 'instant']
+  const speedOptions: MotionSettings['speed'][] = ['off', 'calm', 'normal', 'swift', 'instant']
 
-  const save = async (patch: Partial<AppearanceMotion>) => {
+  /**
+   * SECTION PATCH + PRESERVE: `settings:update` replaces whole sections, so
+   * the current `appearance` is spread in first — otherwise changing the
+   * motion speed would silently reset the theme, density and UI scale to
+   * their defaults (that exact bug bit this app before).
+   */
+  const save = (patch: Partial<MotionSettings>) => {
     const next = { ...motion, ...patch }
-    await invoke('settings:update', { settings: { appearance: { motion: next } } })
-    // Re-read so the RESOLVED value (the OS preference can override) is what
-    // the card shows.
-    await reload()
+    update.mutate(
+      { appearance: { ...(settings?.appearance ?? {}), motion: next } },
+      {
+        onSuccess: () => toast({ kind: 'success', title: tr('Motion setting saved') }),
+        onError: (err) =>
+          toast({ kind: 'error', title: tr('Save failed'), description: err.message }),
+      },
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <Card className="flex h-32 items-center justify-center">
+        <Spinner className="h-5 w-5" />
+      </Card>
+    )
   }
 
   return (
-    <div className="space-y-3">
-      {/* ---- the master switch, with the resolved truth ------------------ */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-3.5 w-3.5 text-mirai-accent" />
-          <p className="text-xs font-semibold text-mirai-text">{tr('Interface motion')}</p>
+    <Card className="p-5">
+      <SectionTitle
+        right={
           <Badge tone={resolved.active ? 'success' : 'neutral'}>
             {resolved.active ? `${tr('on')} · ${resolved.ms}ms` : tr('off')}
           </Badge>
-        </div>
+        }
+      >
+        <span className="flex items-center gap-1.5">
+          <Sparkles className="h-3.5 w-3.5 text-mirai-accent" />
+          {tr('Interface motion')}
+        </span>
+      </SectionTitle>
+
+      {/* ---- the master switch, with the resolved truth ------------------ */}
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-[11px] leading-relaxed text-mirai-dim">
+          {tr('Transitions between pages, card entrances and hovers — all from one value you control.')}
+        </p>
         <Button
           size="sm"
           variant={motion.enabled ? 'outline' : 'primary'}
-          onClick={() => void save({ enabled: !motion.enabled })}
+          loading={update.isPending}
+          onClick={() => save({ enabled: !motion.enabled })}
         >
           {motion.enabled ? tr('Turn off') : tr('Turn on')}
         </Button>
@@ -100,7 +109,7 @@ export function MotionCard() {
       {/* When the OS is the reason, the card must SAY it — a setting that
           appears ignored is a bug report waiting to happen. */}
       {!resolved.active && reduced && motion.respectSystemPreference && (
-        <p className="rounded-md border border-mirai-border bg-mirai-bg/40 px-3 py-2 text-[11px] leading-relaxed text-mirai-faint">
+        <p className="mb-3 rounded-md border border-mirai-border bg-mirai-bg/40 px-3 py-2 text-[11px] leading-relaxed text-mirai-faint">
           {tr('Your operating system asks for reduced motion, and Mirai respects it. ')}
           {tr('You can override that below if you want anyway.')}
         </p>
@@ -112,7 +121,7 @@ export function MotionCard() {
           <Select
             className="h-8 text-xs"
             value={motion.speed}
-            onChange={(e) => void save({ speed: e.target.value as MotionSpeed })}
+            onChange={(e) => save({ speed: e.target.value as MotionSettings['speed'] })}
           >
             {speedOptions.map((speed) => (
               <option key={speed} value={speed}>
@@ -127,9 +136,9 @@ export function MotionCard() {
           <Select
             className="h-8 text-xs"
             value={motion.transition}
-            onChange={(e) => void save({ transition: e.target.value as TransitionStyle })}
+            onChange={(e) => save({ transition: e.target.value as MotionSettings['transition'] })}
           >
-            {(Object.keys(TRANSITION_LABELS) as TransitionStyle[]).map((t) => (
+            {(Object.keys(TRANSITION_LABELS) as MotionSettings['transition'][]).map((t) => (
               <option key={t} value={t}>
                 {TRANSITION_LABELS[t]}
               </option>
@@ -141,9 +150,9 @@ export function MotionCard() {
           <Select
             className="h-8 text-xs"
             value={motion.detail}
-            onChange={(e) => void save({ detail: e.target.value as DetailLevel })}
+            onChange={(e) => save({ detail: e.target.value as MotionSettings['detail'] })}
           >
-            {(Object.keys(DETAIL_LABELS) as DetailLevel[]).map((d) => (
+            {(Object.keys(DETAIL_LABELS) as MotionSettings['detail'][]).map((d) => (
               <option key={d} value={d}>
                 {DETAIL_LABELS[d]}
               </option>
@@ -152,23 +161,26 @@ export function MotionCard() {
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-[11px] text-mirai-dim">
+      <label className="mt-3 flex items-center gap-2 text-[11px] text-mirai-dim">
         <input
           type="checkbox"
           className="accent-mirai-accent"
           checked={motion.respectSystemPreference}
-          onChange={(e) => void save({ respectSystemPreference: e.target.checked })}
+          onChange={(e) => save({ respectSystemPreference: e.target.checked })}
         />
         {tr('Respect my system\u2019s reduced-motion preference')}
       </label>
 
       {/* ---- live preview: no screenshot can show a duration ------------- */}
-      <div className="rounded-md border border-mirai-border bg-mirai-bg/40 p-3">
+      <div className="mt-4 rounded-md border border-mirai-border bg-mirai-bg/40 p-3">
         <p className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold text-mirai-dim">
           <Zap className="h-3 w-3" /> {tr('Preview — this is the real setting, not a mockup')}
         </p>
         <div className="flex gap-2">
-          <div key={motion.speed + motion.transition} className="animate-view-in rounded-md border border-mirai-border bg-mirai-panel px-3 py-2 text-[11px] text-mirai-dim">
+          <div
+            key={motion.speed + motion.transition}
+            className="animate-view-in rounded-md border border-mirai-border bg-mirai-panel px-3 py-2 text-[11px] text-mirai-dim"
+          >
             {describeMotion(motion, reduced)}
           </div>
         </div>
@@ -178,25 +190,15 @@ export function MotionCard() {
         </p>
       </div>
 
-      {motion.enabled === DEFAULT_MOTION.enabled &&
-        motion.speed === DEFAULT_MOTION.speed &&
-        motion.detail === DEFAULT_MOTION.detail && (
-          <p className="text-[10px] text-mirai-faint">{tr('You are on the recommended default.')}</p>
-        )}
-
-      <Button size="sm" variant="ghost" onClick={() => void reload()}>
-        {tr('Reload')}
-      </Button>
-
       {motion.enabled === false && (
         <button
           type="button"
-          className="text-[10px] text-mirai-accent underline"
-          onClick={() => void save({ enabled: true })}
+          className="mt-2 text-[10px] text-mirai-accent underline"
+          onClick={() => save({ enabled: true })}
         >
           {tr('Turn it back on')}
         </button>
       )}
-    </div>
+    </Card>
   )
 }

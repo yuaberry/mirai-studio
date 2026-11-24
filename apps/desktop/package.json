@@ -1,8 +1,8 @@
 {
   "name": "@mirai/desktop",
-  "version": "2.1.0-beta.1",
+  "version": "2.1.1-alpha.1",
   "private": true,
-  "description": "Mirai Studio — desktop application (Electron + React)",
+  "description": "Mirai Studio \u2014 desktop application (Electron + React)",
   "author": {
     "name": "Mirai Studio Developers",
     "email": "dev@mirai.studio"
@@ -18,7 +18,8 @@
     "prepare:sharp": "node scripts/prepare-sharp-runtime.mjs",
     "package:linux": "node scripts/fetch-ffmpeg.mjs && node scripts/prepare-sharp-runtime.mjs && electron-vite build && electron-builder --linux deb AppImage",
     "package:dir": "node scripts/prepare-sharp-runtime.mjs && electron-vite build && electron-builder --linux dir",
-    "fetch:ffmpeg": "node scripts/fetch-ffmpeg.mjs"
+    "fetch:ffmpeg": "node scripts/fetch-ffmpeg.mjs",
+    "e2e": "bun build scripts/e2e-anime.ts --target=node --format=cjs --external=better-sqlite3 --external=sharp --external=electron --outfile=out/e2e/e2e-anime.cjs && electron --no-sandbox --disable-gpu out/e2e/e2e-anime.cjs"
   },
   "dependencies": {
     "@emnapi/runtime": "1.3.1",

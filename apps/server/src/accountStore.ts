@@ -21,7 +21,35 @@
 import { randomBytes, scryptSync } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
+import { createRequire } from 'node:module'
+
+// `node:sqlite` is a NATIVE builtin (Node 22+). A static
+// `import { DatabaseSync } from 'node:sqlite'` is mis-resolved by the vite
+// transform when this package runs under bun+vitest ("Failed to load url
+// sqlite"), which took the whole test file down. Loading it through
+// createRequire at RUNTIME bypasses the transformer entirely — the same
+// native-module pattern the desktop main process uses for better-sqlite3.
+//
+// The surface below is the STRUCTURAL TYPE of what this file actually uses
+// (exec + prepared statements). It is declared here because @types/node@20
+// predates the builtin — depending on a version of the type package that
+// describes a runtime we do not run would be a lie.
+interface SqliteStatement {
+  run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint }
+  get(...params: unknown[]): unknown
+  all(...params: unknown[]): unknown[]
+}
+
+interface SqliteDatabase {
+  exec(sql: string): void
+  prepare(sql: string): SqliteStatement
+  close(): void
+}
+
+type SqliteConstructor = new (path: string) => SqliteDatabase
+
+const require = createRequire(import.meta.url)
+const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: SqliteConstructor }
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const HANDLE_RE = /^[a-zA-Z0-9_.-]{3,40}$/
@@ -40,7 +68,7 @@ export interface SessionRow {
 }
 
 export class AccountStore {
-  private readonly db: DatabaseSync
+  private readonly db: SqliteDatabase
 
   constructor(private readonly dir: string) {
     mkdirSync(dir, { recursive: true })

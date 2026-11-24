@@ -119,7 +119,14 @@ export class PublishStore {
       medium?: string
       author: PublishManifestType['author']
       totalBytes: number
-      bundle: NodeJS.ReadableStream | Buffer
+      /**
+       * The zip bytes, as anything the store can ITERATE. The store only
+       * ever does `for await (const chunk of bundle)`, so the type says
+       * exactly that — it used to claim `NodeJS.ReadableStream`, which is
+       * narrower than the real contract and rejected a perfectly valid
+       * async generator in the tests.
+       */
+      bundle: AsyncIterable<Uint8Array> | Buffer
       /** Handle of the publishing account, when the client has a session. */
       owner?: string | null
     },

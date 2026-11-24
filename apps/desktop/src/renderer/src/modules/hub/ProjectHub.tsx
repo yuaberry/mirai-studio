@@ -71,7 +71,7 @@ export function ProjectHub() {
                 <h2 className="mb-3 font-display text-[11px] font-bold tracking-[0.18em] text-mirai-faint uppercase">
                   {tr('Active productions')}
                 </h2>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className="motion-stagger grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {active.map((project) => (
                     <ProjectCard key={project.id} project={project} tr={tr} />
                   ))}
@@ -83,7 +83,7 @@ export function ProjectHub() {
                 <h2 className="mb-3 font-display text-[11px] font-bold tracking-[0.18em] text-mirai-faint uppercase">
                   {tr('Archived')}
                 </h2>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className="motion-stagger grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {archived.map((project) => (
                     <ProjectCard key={project.id} project={project} tr={tr} dimmed />
                   ))}

@@ -149,11 +149,13 @@
   }
 
   /* v0.26 — cards lift on hover (hub project cards, overview cards). */
+  /* v2.1: was a hardcoded 140ms — now it reads the motion variables, so the
+     user's speed setting (and the off switch) governs this hover too. */
   .card-lift {
     transition:
-      transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
-      border-color 140ms ease,
-      box-shadow 140ms ease;
+      transform var(--motion-ms) var(--motion-ease),
+      border-color var(--motion-ms) var(--motion-ease),
+      box-shadow var(--motion-ms) var(--motion-ease);
   }
   .card-lift:hover {
     transform: translateY(-2px);

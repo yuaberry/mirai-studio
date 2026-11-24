@@ -90,6 +90,23 @@
   }
 }
 
+/* ------------------------------------------------------------- upgrades */
+
+/* v2.1: every Tailwind transition utility reads the motion variable. Without
+   this rule the ~94 `transition-colors`/`transition-opacity` usages across
+   the app would keep Tailwind's baked-in 150ms and IGNORE the speed
+   setting — a select that changes some things and not others is a lie. The
+   `[data-motion='off']` kill switch above already forces durations to zero;
+   this makes the "on" case obey the chosen speed as well. Plain (unlayered)
+   CSS beats Tailwind's @layer utilities, so no !important is needed here. */
+[data-motion='on'] .transition-colors,
+[data-motion='on'] .transition-opacity,
+[data-motion='on'] .transition-transform,
+[data-motion='on'] .transition-all {
+  transition-duration: var(--motion-ms);
+  transition-timing-function: var(--motion-ease);
+}
+
 /* --------------------------------------------------- micro-interactions */
 
 /* A card that lifts when hovered: soft, short, and driven by the variable. */
@@ -105,13 +122,32 @@
   box-shadow: 0 8px 24px -12px rgb(0 0 0 / 0.55);
 }
 
-/* A button that answers the press — the cheapest "alive" cue there is. */
+/* A button that answers the press — the cheapest "alive" cue there is.
+   ONE transition declaration covers the colour/filter changes the buttons
+   already had AND the press scale, so nothing overrides nothing: the base
+   design-system button carries this class and obeys --motion-ms like
+   everything else (0ms when motion is off). */
 [data-motion='on'] .motion-press {
-  transition: transform 90ms var(--motion-ease);
+  transition:
+    transform var(--motion-ms) var(--motion-ease),
+    filter var(--motion-ms) var(--motion-ease),
+    background-color var(--motion-ms) var(--motion-ease),
+    color var(--motion-ms) var(--motion-ease),
+    border-color var(--motion-ms) var(--motion-ease);
 }
 
-[data-motion='on'] .motion-press:active {
+[data-motion='on'] .motion-press:active:not(:disabled) {
   transform: scale(0.975);
+}
+
+/* Buttons keep their colour transitions even when the press scale is off —
+   `data-motion="off"` already collapses every duration to zero. */
+.motion-press {
+  transition:
+    filter var(--motion-ms) var(--motion-ease),
+    background-color var(--motion-ms) var(--motion-ease),
+    color var(--motion-ms) var(--motion-ease),
+    border-color var(--motion-ms) var(--motion-ease);
 }
 
 /* Staggered children: a list that arrives in sequence rather than all at once.

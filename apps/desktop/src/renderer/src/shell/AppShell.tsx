@@ -38,6 +38,7 @@ import { isProjectView, PROJECT_VIEWS, useAppStore, type MainView, type ProjectV
 import type { AppSettingsPatch } from '@mirai/shared'
 import {
   DEFAULT_MOTION,
+  describeRelease,
   motionStyleVars,
   resolveMotion,
   systemPrefersReducedMotion,
@@ -85,17 +86,12 @@ import { ProjectHeader } from './ProjectHeader'
 
 /**
  * The sidebar release label is DERIVED from the REAL app version
- * (system:health → app.getVersion()).
- *
- * It used to be a hardcoded string, which silently drifted release after
- * release — the same class of bug as the website download links (lesson 31).
- * Deriving it makes the rot structurally impossible.
+ * (system:health → app.getVersion()) through shared/describeRelease — ONE
+ * pure mapping used by the sidebar AND the status bar, so the two can never
+ * drift apart. It used to be a hardcoded string, which silently drifted
+ * release after release — the same class of bug as the website download
+ * links (lesson 31).
  */
-function releaseLabel(appVersion: string | undefined): string {
-  const beta = /-beta\.(\d+)$/.exec(appVersion ?? '')
-  if (beta) return `V1 Beta Experimental ${beta[1]}`
-  return appVersion ? `Mirai Studio v${appVersion}` : 'Mirai Studio'
-}
 
 interface NavEntry {
   view: MainView
@@ -178,7 +174,9 @@ function NavGroup({
               // changes. The view id never changes.
               data-nav-view={item.view}
               className={cn(
-                'relative flex items-center gap-2.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
+                // v2.1: motion-press — colour transitions obey the user's
+                // speed setting instead of Tailwind's default 150ms.
+                'motion-press relative flex items-center gap-2.5 rounded-md px-3 py-1.5 text-xs font-semibold',
                 active
                   ? 'bg-mirai-hover text-mirai-text'
                   : 'text-mirai-dim hover:bg-mirai-hover/60 hover:text-mirai-text',
@@ -186,8 +184,11 @@ function NavGroup({
             >
               <span
                 className={cn(
-                  'absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full transition-opacity',
-                  active ? 'bg-gradient-mirai opacity-100' : 'opacity-0',
+                  // The active bar grows into place — opacity AND scale, both
+                  // driven by --motion-ms (0ms when motion is off).
+                  'absolute top-1/2 left-0 h-4 w-0.5 origin-center -translate-y-1/2 rounded-full',
+                  'transition-[opacity,transform] duration-[var(--motion-ms)] ease-[var(--motion-ease)]',
+                  active ? 'scale-y-100 bg-gradient-mirai opacity-100' : 'scale-y-0 opacity-0',
                 )}
               />
               <Icon className={cn('h-3.5 w-3.5', active && 'text-mirai-accent')} />
@@ -207,6 +208,9 @@ export function AppShell() {
   const { data: current } = useCurrentProject()
   const { data: settings } = useSettings()
   const { data: health } = useHealth()
+  // v2.1: ONE pure mapping for the version label — alpha builds wear the
+  // loud pill (see shared/release.ts). Also used by the StatusBar.
+  const release = describeRelease(health?.appVersion)
   const [onboardingOpen, setOnboardingOpen] = useState(false)
   const queryClient = useQueryClient()
 
@@ -404,10 +408,20 @@ export function AppShell() {
               </span>
             </button>
             <div className="mt-3 flex items-center justify-between border-t border-mirai-border pt-3">
-              <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
-                <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
-                {releaseLabel(health?.appVersion)}
-              </span>
+              {/* v2.1: the ALPHA build announces itself — an experimental
+                  version wearing the same grey as a stable one is how people
+                  end up trusting unfinished software. */}
+              {release.tone === 'alpha' ? (
+                <span className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold tracking-wider text-amber-300 uppercase">
+                  <Sparkles className="h-3 w-3" />
+                  {release.text}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-mirai-faint uppercase">
+                  <span className="h-1.5 w-1.5 rounded-full bg-gradient-mirai" />
+                  {release.text}
+                </span>
+              )}
               <a
                 href="https://github.com/yuaberry/mirai-studio/releases"
                 target="_blank"
