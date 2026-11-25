@@ -142,12 +142,40 @@ export function parallaxClipArgs(
   return args
 }
 
-/** O prompt do fundo: a locação, SEM personagem (para a camada distante). */
+/**
+ * A ASSINATURA VISUAL (v2.1) — a diferença medida entre "anime de verdade"
+ * e "render fotorrealista". O endpoint de imagem grátis (Pollinations/flux)
+ * sem esta assinatura devolve FOTOS: teste feito ao vivo, lado a lado, com o
+ * mesmo cenário. Com ela, devolve 2D cel-shaded de TV.
+ */
+/**
+ * A ordem IMPORTA (medido ao vivo, duas gerações lado a lado): a assinatura
+ * vem PRIMEIRO — quando a descrição do personagem vem antes, o modelo pesa
+ * os tokens iniciais e devolve semi-realista. Com a assinatura primeiro,
+ * devolve 2D cel-shaded de TV.
+ */
+const ANIME_SIGNATURE =
+  '2D anime TV screencap, cel shading, FLAT COLORS ONLY, clean black lineart, simple 2-color shading, ' +
+  'NO realistic skin texture, NO photorealism, NEVER realistic, manga illustration style, ' +
+  'Japanese TV anime like Doga Kobo / Kyoto Animation, emphatically NOT photorealistic, ' +
+  'NOT 3d render, NOT live action, illustration'
+
+/** O prompt do fundo: a locação, SEM personagem — o look noturno da referência. */
 export function backgroundPrompt(sceneLocation: string, timeOfDay: string, art: string): string {
-  return `${sceneLocation}, ${timeOfDay === 'NIGHT' ? 'noite' : timeOfDay.toLowerCase()}, cenário vazio sem pessoas, fundo de anime, ${art}`
+  const mood = timeOfDay === 'NIGHT'
+    ? 'noite, iluminação de luar azulada, luz quente vindo de dentro, sombras profundas, ambiente cinematográfico'
+    : timeOfDay === 'DUSK'
+      ? 'fim de tarde, luz dourada baixa entrando pela janela, sombras longas, quente'
+      : 'dia, luz natural suave de janela, arejado'
+  // O fundo também leva a assinatura primeiro — mesmo motivo, mesmo resultado.
+  return `${ANIME_SIGNATURE}, ${sceneLocation}, ${mood}, cenário vazio sem pessoas, fundo de anime`
 }
 
-/** O prompt do personagem: chapado, contra verde, para a key sair limpa. */
-export function characterPrompt(name: string, appearance: string, action: string, art: string): string {
-  return `${name}, ${appearance}, ${action}, corpo inteiro ou plano médio, isolado sozinho, fundo magenta chroma key sólido (#FF00FF), personagem de anime, ${art}`
+/** O prompt do personagem: A ASSINATURA PRIMEIRO, depois a descrição. */
+export function characterPrompt(name: string, appearance: string, action: string, _art: string): string {
+  return (
+    `${ANIME_SIGNATURE}, ` +
+    `${name}, ${appearance}, ${action}, ` +
+    `isolated alone, completely EMPTY solid magenta #FF00FF chroma key background, flat background, no scenery`
+  )
 }

@@ -68,7 +68,10 @@ const log = (...parts: unknown[]) => console.log(new Date().toISOString().slice(
 // ------------------------------------------------------------------ bootstrap
 
 async function main() {
-  const root = mkdtempSync(join(tmpdir(), 'mirai-gen-'))
+  // RAIZ ESTÁVEL: a geração roda por horas e precisa RETOMAR entre processos
+// (um mkdtemp por boot perdia as ~100 camadas já geradas).
+const GEN_ROOT = process.env.MIRAI_GEN_ROOT ?? '/tmp/mirai-gen-studio'
+const root = GEN_ROOT
   const dirs: AppDirs = {
     root,
     logs: join(root, 'logs'),
@@ -309,7 +312,10 @@ async function main() {
     if (existsSync(file) && statSync(file).size > 3000) return true
     for (let attempt = 1; attempt <= 6; attempt++) {
       try {
-        const res = await fetch('https://image.pollinations.ai/' + encodeURIComponent(prompt))
+      // MEDIDO AO VIVO: o modelo 'flux' (padrão) ignora assinatura de estilo e
+      // devolve semi-real ~70% das vezes. 'z-image-turbo' devolve 2D cel-shaded
+      // consistently, e o magenta do chroma sai limpo. O modelo É a alavanca.
+      const res = await fetch('https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?model=z-image-turbo')
         if (res.ok) {
           const bytes = Buffer.from(await res.arrayBuffer())
           if (bytes.length > 1000) {
@@ -324,6 +330,20 @@ async function main() {
       await sleep(46_000)
     }
     return false
+  }
+
+  /**
+   * Descritor ENXUTO (medido ao vivo: a descrição longa — "garota de 16
+   * anos, cabelo castanho claro com franja chançada, olhos âmbar
+   * provocantes..." — pesa mais que a assinatura e devolve semi-realista).
+   * Só o essencial visual: cabelo, olhos, roupa. A assinatura 2D vem
+   * primeiro no prompt, então o enxuto é o que mantém o resultado anime.
+   */
+  const shortDescriptor = (appearance: string): string => {
+    const parts = appearance.split(',').map((p) => p.trim()).filter(Boolean)
+    const keep = parts.filter((p) => /cabelo|olho|uniforme|kimono|blusa|saia|óculos|corpo|pele/i.test(p))
+    const desc = (keep.length > 0 ? keep : parts.slice(0, 3)).join(', ')
+    return desc.length > 90 ? desc.slice(0, 90) : desc
   }
 
   /** A expressão do personagem pelo texto da fala. */
@@ -398,7 +418,7 @@ async function main() {
     const text = dialogue.split('\n').slice(1).join(' ').trim()
     const chFile = join(layersDir, `ch-${shot.id}.jpg`)
     const ok = await genLayer(
-      characterPrompt(who?.name ?? speaker, who?.appearance ?? '', expressionFor(text), story.artDirection),
+      characterPrompt(who?.name ?? speaker, shortDescriptor(who?.appearance ?? 'anime character'), expressionFor(text), story.artDirection),
       chFile,
     )
     if (ok) {
