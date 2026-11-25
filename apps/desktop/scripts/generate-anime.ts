@@ -41,6 +41,9 @@ import {
   SettingsService,
   CredentialStore,
   suggestMotion,
+  backgroundPrompt,
+  characterPrompt,
+  parallaxClipArgs,
   type AppDirs,
 } from '@mirai/core'
 import { AiHost } from '../src/main/ai/aiHost'
@@ -113,6 +116,7 @@ async function main() {
   const render = ctx.render as RenderService
 
   // settings: imagem Pollinations (sem chave), voz Edge (sem chave)
+  // v2.1: MOTOR PRÓPRIO POR CAMADAS — fundo + personagem + parallax.
   const settingsSvc = new SettingsService(appDb)
   settingsSvc.patch({
     ai: {
@@ -295,24 +299,120 @@ async function main() {
     return false
   }
 
-  // ------------------------------------------------------------------ 3. frames
+  // ------------------------------------------------- CAMADAS (motor próprio)
+  const layersDir = join(summary.path, 'layers')
+  mkdirSync(layersDir, { recursive: true })
+  const { spawnSync: spawnFF } = await import('node:child_process')
 
-  log('=== FASE 3: FRAMES (Pollinations, 1/45s) ===')
+  /** Gera uma camada diretamente no Pollinations (prompt NOSSO). */
+  const genLayer = async (prompt: string, file: string): Promise<boolean> => {
+    if (existsSync(file) && statSync(file).size > 3000) return true
+    for (let attempt = 1; attempt <= 6; attempt++) {
+      try {
+        const res = await fetch('https://image.pollinations.ai/' + encodeURIComponent(prompt))
+        if (res.ok) {
+          const bytes = Buffer.from(await res.arrayBuffer())
+          if (bytes.length > 1000) {
+            writeFileSync(file, bytes)
+            return true
+          }
+        }
+        log(`  camada: HTTP ${res.status} — aguardando a janela (${attempt})`)
+      } catch (err) {
+        log(`  camada: ${(err as Error).message} (${attempt})`)
+      }
+      await sleep(46_000)
+    }
+    return false
+  }
+
+  /** A expressão do personagem pelo texto da fala. */
+  const expressionFor = (dialogue: string): string => {
+    const t = dialogue.toLowerCase()
+    if (/!/.test(dialogue) && /provoc|rir|zoar|deixa eu ver/i.test(t)) return 'sorrindo provocando, bochechas coradas'
+    if (/não|neg|para|chega/i.test(t)) return 'sorrindo sem graça, mão na cabeça'
+    if (/autorizo|beija|deita|contorno/i.test(t)) return 'olhar intenso e úmido, lábios entreabertos, respiração pes'
+    if (/senpai|você|nm/i.test(t)) return 'expressão terna, olhos brilhando'
+    return 'expressão calma, olhar suave'
+  }
+
+  /** O clipe em PARALLAX de um shot (3 camadas, velocidades diferentes). */
+  const composeParallax = (shot: ReturnType<StoryboardService['listShots']>[number], sceneTitle: string): string | null => {
+    const loc = sceneTitle.split('—').slice(1).join('—').trim() || sceneTitle
+    const time = sceneTitle.includes('NIGHT') ? 'NIGHT' : 'DAY'
+    const bgFile = join(layersDir, `bg-${loc.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}-${time}.jpg`)
+    const chFile = join(layersDir, `ch-${shot.id}.jpg`)
+    if (!existsSync(bgFile) || !existsSync(chFile)) return null
+    const out = join(summary.path, 'exports', `parallax-${shot.orderIndex + 1}-${shot.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp4`)
+    if (existsSync(out) && statSync(out).size > 5000) return out
+    const args = parallaxClipArgs(
+      out,
+      {
+        preset: suggestMotion(shot) === 'locked' ? 'pushIn' : suggestMotion(shot),
+        durationSec: shot.durationSeconds,
+        fps: 24,
+        width: 1014,
+        height: 580,
+        layers: { backgroundPath: bgFile, characterPath: chFile },
+      },
+      'MASTER',
+    )
+    const r = spawnFF('/home/llinux/mirai-studio/apps/desktop/resources/ffmpeg/ffmpeg', args)
+    return r.status === 0 && existsSync(out) ? out : null
+  }
+
+  // ------------------------------------------------------------------ 3. camadas
+
+  log('=== FASE 3: CAMADAS (motor próprio: fundo + personagem, Pollinations) ===')
   let frameFailures = 0
+  // 3a. FUNDOS — um por (locação, hora): a cache faz 40 imagens servirem 170 shots
+  const bgJobs = new Map<string, string>()
+  for (const scene of creative.listScenes(episode.id)) {
+    const loc = scene.title.split('—').slice(1).join('—').trim() || scene.title
+    const time = scene.timeOfDay
+    const key = `${loc}|${time}`
+    const file = join(layersDir, `bg-${loc.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}-${time}.jpg`)
+    if (!bgJobs.has(key)) bgJobs.set(key, file)
+  }
+  let bgDone = 0
+  for (const [key, file] of bgJobs) {
+    const [loc, time] = key.split('|')
+    const ok = await genLayer(backgroundPrompt(loc!, time!, story.artDirection), file!)
+    if (ok) bgDone++
+    else frameFailures++
+    if (bgDone % 5 === 0) log(`fundos: ${bgDone}/${bgJobs.size}`)
+  }
+  log(`fundos prontos: ${bgDone}/${bgJobs.size}`)
+
+  // 3b. PERSONAGENS — um por shot com fala (o chroma sai no parallax)
+  let charDone = 0
   for (let i = 0; i < allShots.length; i++) {
     const entry = allShots[i]!
-    if (entry.shot.frameAssetId) continue
-    const ok = await frameWithRetry(entry.id, extraPromptFor(entry.shot))
+    const shot = storyboard.getShotById(entry.id)
+    const dialogue = (shot.dialogue ?? '').trim()
+    if (!dialogue.includes('\n')) continue // estabelecedor/narração: só o fundo
+    const scene = creative.getSceneById(shot.sceneId)
+    const castInScene = creative.listCharacters().filter((c) => scene.characterIds.includes(c.id))
+    const speaker = dialogue.split('\n')[0]!.trim()
+    const who = castInScene.find((c) => c.name.toUpperCase() === speaker.toUpperCase()) ?? castInScene[0]
+    const text = dialogue.split('\n').slice(1).join(' ').trim()
+    const chFile = join(layersDir, `ch-${shot.id}.jpg`)
+    const ok = await genLayer(
+      characterPrompt(who?.name ?? speaker, who?.appearance ?? '', expressionFor(text), story.artDirection),
+      chFile,
+    )
     if (ok) {
-      state.frames += 1
-      if (state.frames % 10 === 0) {
-        SAVE()
-        log(`frames: ${state.frames}/${allShots.length}`)
+      charDone++
+      // o personagem chapado vira o "quadro" do shot na UI
+      if (!shot.frameAssetId) {
+        storyboard.registerGeneratedFrame(shot.id, readFileSync(chFile), 'image/jpeg')
       }
     } else frameFailures += 1
+    if (charDone % 10 === 0) log(`personagens: ${charDone}`)
   }
+  state.frames = charDone
   SAVE()
-  log(`frames prontos: ${state.frames}/${allShots.length} (falhas: ${frameFailures})`)
+  log(`camadas prontas: ${bgDone} fundos · ${charDone} personagens (falhas: ${frameFailures})`)
 
   // ------------------------------------------------------------------ 4. vozes
 
@@ -338,33 +438,42 @@ async function main() {
 
   // ------------------------------------------------------------------ 5. clipes
 
-  log('=== FASE 5: CLIPES (camera-motion FFmpeg) ===')
+  log('=== FASE 5: CLIPES EM PARALLAX (motor próprio, 3 camadas) ===')
+  let composed = 0
   for (let i = 0; i < allShots.length; i++) {
     const entry = allShots[i]!
-    // snapshot fresco: o frame pode ter sido gerado DEPOIS desta lista
     const shot = storyboard.getShotById(entry.id)
-    if (!shot.frameAssetId) continue
-    const clipName = `shot-${shot.orderIndex + 1}-${shot.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}-${suggestMotion(shot)}.mp4`
-    log(`  clipe ${clipName} | frame: ${shot.frameAssetId ?? 'NENHUM'} | existe: ${existsSync(join(summary.path, 'exports', clipName))}`)
-    if (existsSync(join(summary.path, 'exports', clipName))) continue
-    try {
-      await render.renderCameraClip({
-        shotId: entry.id,
-        quality: 'MASTER',
-        reportProgress: () => undefined,
-        signal: AbortSignal.timeout(300_000),
-      })
-      state.clips += 1
-      if (state.clips % 20 === 0) {
-        SAVE()
-        log(`clipes: ${state.clips}`)
-      }
-    } catch (err) {
-      log(`  FALHA clipe ${entry.id}: ${err instanceof Error ? err.message : String(err)}`)
+    const scene = creative.getSceneById(shot.sceneId)
+    const hasChar = (shot.dialogue ?? '').includes('\n')
+    if (!hasChar) {
+      // shot de estabelecimento/narração: movimento de câmera no quadro cheio
+      if (!shot.frameAssetId) continue
+      const clipName = `parallax-${shot.orderIndex + 1}-${shot.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp4`
+      const out = join(summary.path, 'exports', clipName)
+      if (existsSync(out) && statSync(out).size > 5000) continue
+      const args = cameraMoveArgs(
+        storyboard.assetAbsolutePath(shot.frameAssetId),
+        out,
+        { preset: suggestMotion(shot), durationSec: shot.durationSeconds, fps: 24, width: 1014, height: 580 },
+        'MASTER',
+        { id: 'frame-native', label: 'Frame', description: 'nativo', width: 1014, height: 580, fps: 24, videoKbps: 8000, audioKbps: 192 },
+      )
+      const r = spawnSync(FFMPEG, args)
+      if (r.status === 0) composed++
+      continue
+    }
+    const out = composeParallax(shot, scene.title)
+    if (out) {
+      composed++
+      if (composed % 20 === 0) log(`clipes: ${composed}/${allShots.length}`)
+    } else {
+      frameFailures += 1
+      log(`  FALHA parallax shot ${entry.id}`)
     }
   }
+  state.clips = composed
   SAVE()
-  log(`clipes prontos: ${state.clips}`)
+  log(`clipes prontos: ${composed}/${allShots.length}`)
 
   // ------------------------------------------------------------------ 6. montagem
 

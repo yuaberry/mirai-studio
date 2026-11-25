@@ -52,6 +52,13 @@ export { MediaService } from './media/mediaService'
 export { RenderService } from './render/renderService'
 export { suggestMotion, cameraMoveArgs, CAMERA_MOTION_PRESETS, CAMERA_MOTION_LABELS } from './render/cameraMotion'
 export { SyncAgent } from './collaboration/syncAgent'
+export {
+  parallaxClipArgs,
+  parallaxFilterComplex,
+  backgroundPrompt,
+  characterPrompt,
+} from './render/parallaxCompositor'
+export type { ParallaxSpec, ParallaxLayerSpec } from './render/parallaxCompositor'
 export type { SyncAgentOptions } from './collaboration/syncAgent'
 export type { CameraMotionPreset, CameraMotionSpec } from './render/cameraMotion'
 export { ffmpegBin, ffprobeBin, ffmpegSource } from './render/ffmpegBin'
