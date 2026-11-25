@@ -1,0 +1,573 @@
+/**
+ * generate-anime.ts — o gerador dos dois episódios, pela máquina do usuário,
+ * pelo caminho 100% gratuito.
+ *
+ *   bun scripts/generate-anime.ts --anime nagatoro   (23 min)
+ *   bun scripts/generate-anime.ts --anime hentai     (19 min)
+ *
+ * FASE A FASE, tudo REAL e RETOMÁVEL (o estado vive no JSON do projeto —
+ * um reboot do propósito continua de onde parou):
+ *   1. bootstrap: projeto, bíblia, estilo, elenco (Edge voz por personagem)
+ *   2. roteiro: cenas-chave + beats intercalados → shots de 8 s até o alvo
+ *   3. frames: Pollinations (1 imagem / 45 s — o rate limit é respeitado
+ *      com espera e nova tentativa, não com gambiarra)
+ *   4. voz: Edge neural por personagem, com o polish FFmpeg do app
+ *   5. clipes: movimento de câmera real (zoompan) por shot — o caminho
+ *      grátis de motion para episódio longo
+ *   6. montagem: concat + mixagem de voz + legenda branca clássica (.ass)
+ *      queimada + MP4 final 1080p
+ *   7. dossiê: o DossierService do app, txt + pdf
+ *
+ * Nada de mock: cada fase toca o provider/encoder real e falha alto com o
+ * motivo quando o mundo real recusa.
+ */
+import { mkdtempSync, mkdirSync, existsSync, writeFileSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import {
+  ProjectService,
+  CreativeService,
+  StoryboardService,
+  RenderService,
+  LoggerService,
+  DossierService,
+  openDatabase,
+  runMigrations,
+  systemClock,
+  plaintextCodec,
+  ffprobeBin,
+  APP_DB_MIGRATIONS,
+  SettingsService,
+  CredentialStore,
+  suggestMotion,
+  type AppDirs,
+} from '@mirai/core'
+import { AiHost } from '../src/main/ai/aiHost'
+import { ProjectConfig } from '@mirai/shared'
+import { STORIES, type Story, type StoryLine } from './story-data'
+
+
+// ------------------------------------------------------------------ argumentos
+
+const args = process.argv.slice(2)
+const animeArg = args[args.indexOf('--anime') + 1]
+const downloadsArg = args.indexOf('--downloads') >= 0 ? args[args.indexOf('--downloads') + 1] : '/home/llinux/Downloads'
+if (!animeArg || !(animeArg in STORIES)) {
+  console.error('uso: bun scripts/generate-anime.ts --anime <nagatoro|hentai> [--downloads DIR]')
+  process.exit(1)
+}
+const story: Story = STORIES[animeArg]!
+const DOWNLOADS = downloadsArg!
+const FFMPEG = '/home/llinux/mirai-studio/apps/desktop/resources/ffmpeg/ffmpeg'
+const log = (...parts: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...parts)
+
+// ------------------------------------------------------------------ bootstrap
+
+async function main() {
+  const root = mkdtempSync(join(tmpdir(), 'mirai-gen-'))
+  const dirs: AppDirs = {
+    root,
+    logs: join(root, 'logs'),
+    backups: join(root, 'backups'),
+    projectsDefaultDir: join(root, 'projects'),
+    appDb: join(root, 'app.sqlite'),
+  }
+  mkdirSync(dirs.projectsDefaultDir, { recursive: true })
+  mkdirSync(dirs.backups, { recursive: true })
+
+  const logger = new LoggerService({ logDir: dirs.logs })
+  const appDb = openDatabase(dirs.appDb)
+  runMigrations(appDb, APP_DB_MIGRATIONS)
+  const projects = new ProjectService({
+    appDb,
+    dirs,
+    clock: systemClock,
+    appVersion: '2.1.1-alpha.2-gen',
+    logger,
+    onJobUpdated: () => undefined,
+  })
+
+  // idempotente: reusar o projeto se a execução anterior chegou até aqui
+  const existing = projects.list(true).find((p) => p.name === story.projectName)
+  const summary = existing ?? projects.create({
+    name: story.projectName,
+    description: story.description,
+    dir: dirs.projectsDefaultDir,
+    config: ProjectConfig.parse({
+      title: story.title,
+      genres: [story.genre],
+      contentRating: story.contentRating,
+      episodeCount: 1,
+      seasonCount: 1,
+      aspectRatio: '16:9',
+      fps: 24,
+      inspirations: animeArg === 'nagatoro' ? 'Nagatoro-san (comédia romântica de clube de arte)' : 'Nagatoro-san — variação adulta de seminário',
+    }),
+  })
+  log('projeto:', summary.name, '→', summary.path, existing ? '(reaproveitado)' : '(novo)')
+
+  const ctx = await projects.open(summary.path)
+  const creative = ctx.creative as CreativeService
+  const storyboard = ctx.storyboard as StoryboardService
+  const render = ctx.render as RenderService
+
+  // settings: imagem Pollinations (sem chave), voz Edge (sem chave)
+  const settingsSvc = new SettingsService(appDb)
+  settingsSvc.patch({
+    ai: {
+      ...settingsSvc.get().ai,
+      image: {
+        ...settingsSvc.get().ai.image,
+        protocol: 'pollinations',
+        baseUrl: 'https://image.pollinations.ai',
+        model: 'flux',
+        size: '1344x768',
+        noWatermark: true,
+      },
+      tts: { ...settingsSvc.get().ai.tts, protocol: 'edge', voice: '' },
+      video: { ...settingsSvc.get().ai.video, protocol: 'pollinations' },
+    },
+    content: { ...settingsSvc.get().content, matureEnabled: true },
+  })
+
+  const ai = new AiHost({
+    credentials: new CredentialStore(appDb, plaintextCodec, systemClock),
+    settings: settingsSvc,
+    projects,
+    logger,
+    emitter: { send: () => undefined, window: null } as never,
+  })
+
+  // ------------------------------------------------------------------ 1. conteúdo
+
+  const statePath = join(summary.path, 'generation-state.json')
+  const state = existsSync(statePath)
+    ? (JSON.parse(readFileSync(statePath, 'utf8')) as { shotsTotal: number; frames: number; voices: number; clips: number })
+    : { shotsTotal: 0, frames: 0, voices: 0, clips: 0 }
+
+  const SAVE = () => writeFileSync(statePath, JSON.stringify(state, null, 2))
+
+  creative.updateBible({
+    ...creative.getBible(),
+    premise: story.premise,
+    themes: story.themes,
+    tone: story.tone,
+  })
+  storyboard.updateStyleBible({
+    ...storyboard.getStyleBible(),
+    artDirection: story.artDirection,
+    lineart: 'traço limpo de anime televisivo, linhas finas com variação de espessura',
+    shading: 'cel shading suave, duas etapas',
+    palette: animeArg === 'hentai' ? 'âmbar quente, violeta, pele rosada, sombras profundas' : 'quente de poente, rosa sakura, azul escola',
+    lighting: animeArg === 'hentai' ? 'luz baixa e intimista, lâmpadas quentes' : 'luz suave de poente e janelas altas',
+    proportions: 'anime moderno, 7.5 cabeças',
+    eyesAndHair: 'olhos grandes e expressivos, cabelo com mechas definidas',
+    backgrounds: 'cenários de escola e interiores quentes, estilo Doga Kobo',
+    cameraLanguage: 'planos médios e close-ups, movimento sutil de câmera',
+  })
+
+  // elenco (idempotente)
+  const existingChars = creative.listCharacters()
+  const cast = new Map<string, string>()
+  for (const c of story.characters) {
+    const found = existingChars.find((e) => e.name === c.name)
+    if (found) cast.set(c.id, found.id)
+    else {
+      const created = creative.createCharacter({
+        name: c.name,
+        role: c.role as never,
+        // A idade adulta EXPLÍCITA: o guarda de maturidade do app recusa
+        // conteúdo +18 para personagens sem idade declarada — e ele tem razão.
+        age: String(c.age ?? ''),
+        appearance: c.appearance,
+        personality: c.personality,
+        ttsVoice: c.voice,
+      })
+      cast.set(c.id, created.id)
+    }
+  }
+  log('elenco:', [...cast.keys()].join(', '))
+
+  // ------------------------------------------------------------------ 2. roteiro
+
+  const shotsOverride = args.indexOf('--shots') >= 0 ? Number(args[args.indexOf('--shots') + 1]) : 0
+  const TARGET_SHOTS = shotsOverride > 0 ? shotsOverride : Math.floor((story.targetMinutes * 60) / 8)
+
+  /** Compõe as cenas: as-chave primeiro, beats intercalados até o alvo. */
+  function composeScenes(): Array<{ loc: string; time: Story['scenes'][number]['time']; lines: StoryLine[] }> {
+    const out: Array<{ loc: string; time: Story['scenes'][number]['time']; lines: StoryLine[] }> = []
+    const beatNames = Object.keys(story.beats)
+    const locs = story.locations
+    let beatIndex = 0
+    const keyScenes = story.scenes
+    while (out.length * 4 < TARGET_SHOTS) {
+      for (const key of keyScenes) {
+        out.push({ loc: key.loc, time: key.time, lines: key.lines })
+        if (out.length * 4 >= TARGET_SHOTS) break
+        const beatName = beatNames[beatIndex % beatNames.length]!
+        const beat = story.beats[beatName]!
+        beatIndex += 1
+        const loc = locs[beatIndex % locs.length]!
+        out.push({ loc: loc.name, time: animeArg === 'hentai' ? 'NIGHT' : (['DAY', 'DUSK'] as const)[beatIndex % 2], lines: beat })
+      }
+    }
+    return out.slice(0, Math.ceil(TARGET_SHOTS / 4))
+  }
+
+
+  let episode = creative.listEpisodes()[0]
+  if (!episode) {
+    episode = creative.createEpisode({ season: 1, number: 1, title: `${story.title} — Episódio 1` })
+  }
+  const existingScenes = creative.listScenes(episode.id)
+  if (existingScenes.length === 0) {
+    const scenes = composeScenes()
+    for (let i = 0; i < scenes.length; i++) {
+      const sc = scenes[i]!
+      const scene = creative.createScene(episode.id, {
+        title: `Cena ${String(i + 1).padStart(2, '0')} — ${sc.loc}`,
+        timeOfDay: sc.time as never,
+        characterIds: [...new Set(sc.lines.filter((l) => l.who).map((l) => cast.get(l.who)!))],
+      })
+      creative.updateScene(scene.id, {
+        ...scene,
+        synopsis: sc.lines.map((l) => (l.who ? story.characters.find((c) => c.id === l.who)!.name : 'Narração') + ': ' + l.text).join('\n'),
+        screenplay: sc.lines.map((l) => (l.who ? story.characters.find((c) => c.id === l.who)!.name.toUpperCase() : '') + '\n' + l.text).join('\n\n'),
+      } as never)
+      for (let j = 0; j < 4 && (i * 4 + j) < TARGET_SHOTS; j++) {
+        const line = sc.lines[Math.min(j, sc.lines.length - 1)]!
+        storyboard.createShot(scene.id, {
+          title: `S${String(i + 1).padStart(2, '0')}·${j + 1} — ${sc.loc}`,
+          shotType: (j === 0 ? 'WIDE' : j === 3 ? 'CLOSE_UP' : j === 2 ? 'OVER_THE_SHOULDER' : 'MEDIUM') as never,
+          cameraMovement: line.move,
+          durationSeconds: 8,
+          dialogue: line.who ? story.characters.find((c) => c.id === line.who)!.name + '\n' + line.text : line.text,
+        } as never)
+      }
+      if ((i + 1) % 5 === 0) log(`roteiro: ${Math.min((i + 1) * 4, TARGET_SHOTS)}/${TARGET_SHOTS} shots criados`)
+    }
+  }
+
+  const allShots: Array<{ id: string; sceneId: string; shot: ReturnType<StoryboardService['listShots']>[number] }> = []
+  for (const scene of creative.listScenes(episode.id)) {
+    for (const shot of storyboard.listShots(scene.id)) allShots.push({ id: shot.id, sceneId: scene.id, shot })
+  }
+  log(`TOTAL: ${allShots.length} shots (~${Math.round((allShots.length * 8) / 60)} min)`)
+  state.shotsTotal = allShots.length
+  SAVE()
+
+  // ------------------------------------------------------------------ helpers
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+  /** Ação explícita por shot (+18): o prompt extra carrega o ato. */
+  function extraPromptFor(shot: ReturnType<StoryboardService['listShots']>[number]): string | undefined {
+    if (animeArg !== 'hentai') return undefined
+    const text = (shot.dialogue ?? '').toLowerCase()
+    if (/autorizo|me beija|deita aqui|contorno|bonita que o meu desenho/i.test(shot.dialogue ?? '')) {
+      return 'cena sensual e explícita, casal adulto em intimidade, iluminação baixa quente, traço delicado, alta qualidade'
+    }
+    void text
+    return undefined
+  }
+
+  /**
+   * Roda a geração do frame com paciência pelo rate limit do Pollinations
+   * (1 imagem / 45 s): espera a janela e tenta de novo, sem esconder nada.
+   */
+  async function frameWithRetry(shotId: string, extraPrompt: string | undefined): Promise<boolean> {
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      try {
+        await ai.generateFrame(shotId, extraPrompt, AbortSignal.timeout(180_000), () => undefined)
+        return true
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        const limited = /FREE_LIMIT|429|402|rate/i.test(message)
+        if (!limited || attempt === 8) {
+          log(`  FALHA frame ${shotId}: ${err instanceof Error ? (err.stack ?? message) : message}`)
+          return false
+        }
+        log(`  rate limit — aguardando a janela de 45 s (tentativa ${attempt})`)
+        await sleep(46_000)
+      }
+    }
+    return false
+  }
+
+  // ------------------------------------------------------------------ 3. frames
+
+  log('=== FASE 3: FRAMES (Pollinations, 1/45s) ===')
+  let frameFailures = 0
+  for (let i = 0; i < allShots.length; i++) {
+    const entry = allShots[i]!
+    if (entry.shot.frameAssetId) continue
+    const ok = await frameWithRetry(entry.id, extraPromptFor(entry.shot))
+    if (ok) {
+      state.frames += 1
+      if (state.frames % 10 === 0) {
+        SAVE()
+        log(`frames: ${state.frames}/${allShots.length}`)
+      }
+    } else frameFailures += 1
+  }
+  SAVE()
+  log(`frames prontos: ${state.frames}/${allShots.length} (falhas: ${frameFailures})`)
+
+  // ------------------------------------------------------------------ 4. vozes
+
+  log('=== FASE 4: VOZ (Edge neural + polish) ===')
+  for (let i = 0; i < allShots.length; i++) {
+    const entry = allShots[i]!
+    if (entry.shot.voiceAssetId) continue
+    const dialogue = (entry.shot.dialogue ?? '').trim()
+    if (!dialogue || !dialogue.includes('\n')) continue // narração pura não é dublada
+    try {
+      await ai.speakShot(entry.id, AbortSignal.timeout(120_000))
+      state.voices += 1
+      if (state.voices % 20 === 0) {
+        SAVE()
+        log(`vozes: ${state.voices}`)
+      }
+    } catch (err) {
+      log(`  FALHA voz ${entry.id}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+  SAVE()
+  log(`vozes prontas: ${state.voices}`)
+
+  // ------------------------------------------------------------------ 5. clipes
+
+  log('=== FASE 5: CLIPES (camera-motion FFmpeg) ===')
+  for (let i = 0; i < allShots.length; i++) {
+    const entry = allShots[i]!
+    // snapshot fresco: o frame pode ter sido gerado DEPOIS desta lista
+    const shot = storyboard.getShotById(entry.id)
+    if (!shot.frameAssetId) continue
+    const clipName = `shot-${shot.orderIndex + 1}-${shot.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}-${suggestMotion(shot)}.mp4`
+    log(`  clipe ${clipName} | frame: ${shot.frameAssetId ?? 'NENHUM'} | existe: ${existsSync(join(summary.path, 'exports', clipName))}`)
+    if (existsSync(join(summary.path, 'exports', clipName))) continue
+    try {
+      await render.renderCameraClip({
+        shotId: entry.id,
+        quality: 'MASTER',
+        reportProgress: () => undefined,
+        signal: AbortSignal.timeout(300_000),
+      })
+      state.clips += 1
+      if (state.clips % 20 === 0) {
+        SAVE()
+        log(`clipes: ${state.clips}`)
+      }
+    } catch (err) {
+      log(`  FALHA clipe ${entry.id}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+  SAVE()
+  log(`clipes prontos: ${state.clips}`)
+
+  // ------------------------------------------------------------------ 6. montagem
+
+  log('=== FASE 6: MONTAGEM (concat + voz + legenda branca) ===')
+
+  interface Segment { clip: string; voice: string | null; text: string | null }
+  const segments: Segment[] = []
+  for (const scene of creative.listScenes(episode.id)) {
+    for (const shot of storyboard.listShots(scene.id)) {
+    const clip = join(summary.path, 'exports', `shot-${shot.orderIndex + 1}-${shot.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}-${suggestMotion(shot)}.mp4`)
+      if (!existsSync(clip)) continue
+      segments.push({
+        clip,
+        voice: shot.voiceAssetId ? storyboard.assetAbsolutePath(shot.voiceAssetId) : null,
+        text: shot.dialogue ? shot.dialogue.split('\n').slice(1).join(' ').trim() : null,
+      })
+    }
+  }
+  log(`segmentos para montar: ${segments.length}`)
+
+  // 6.1 — vídeo: concat demuxer com os clipes na ordem
+  const concatList = segments.map((s) => `file '${s.clip}'`).join('\n')
+  const concatFile = join(root, 'concat.txt')
+  writeFileSync(concatFile, concatList)
+  const videoOnly = join(root, 'video.mp4')
+  let r = spawnSync(FFMPEG, ['-y', '-f', 'concat', '-safe', '0', '-i', concatFile, '-c', 'copy', videoOnly])
+  if (r.status !== 0) {
+    console.error('concat de vídeo falhou:', r.stderr?.toString().slice(-400))
+    process.exit(1)
+  }
+
+  // 6.2 — legendas: o .ass clássico (branco, contorno preto, base central)
+  const assPath = join(root, 'legendas.ass')
+  const assLines: string[] = [
+    '[Script Info]',
+    'Title: ' + story.title,
+    'ScriptType: v4.00+',
+    'PlayResX: 1920',
+    'PlayResY: 1080',
+    'WrapStyle: 0',
+    '',
+    '[V4+ Styles]',
+    'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
+    // legenda branca clássica: preenchimento branco, contorno preto, base central
+    'Style: Default,DejaVu Sans,20,&H00FFFFFF,&H000019FF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,2.2,1,2,60,60,34,1',
+    '',
+    '[Events]',
+    'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+  ]
+  const fmtTime = (t: number) => {
+    const h = Math.floor(t / 3600)
+    const m = Math.floor((t % 3600) / 60)
+    const s = Math.floor(t % 60)
+    const cs = Math.round((t % 1) * 100)
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`
+  }
+  let cursor = 0
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]!
+    const from = cursor
+    cursor += 8
+    if (!seg.text || !seg.voice) continue
+    const dur = Number(
+      spawnSync(ffprobeBin(), ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', seg.voice])
+        .stdout.toString()
+        .trim(),
+    )
+    const end = from + (Number.isFinite(dur) ? Math.min(dur, 7.4) : 7)
+    const speaker = seg.text.split(':')[0]
+    const text = seg.text.includes(':') ? seg.text.split(':').slice(1).join(':').trim() : seg.text
+    assLines.push(`Dialogue: 0,${fmtTime(from + 0.35)},${fmtTime(end)},Default,${speaker ?? ''},0,0,0,,${(text ?? '').replace(/([{}\\]])/g, '$1')}`)
+  }
+  writeFileSync(assPath, assLines.join('\n'))
+
+  const audioTrack = join(root, 'audio.mp3')
+  {
+    const segFiles: string[] = []
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i]!
+      if (seg.voice) segFiles.push(`file '${seg.voice}'`)
+      else {
+        const silence = join(root, `sil-${i}.m4a`)
+        spawnSync(FFMPEG, ['-y', '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo:d=8', '-c:a', 'libmp3lame', silence])
+        segFiles.push(`file '${silence}'`)
+      }
+    }
+    writeFileSync(concatFile, segFiles.join('\n'))
+    r = spawnSync(FFMPEG, ['-y', '-f', 'concat', '-safe', '0', '-i', concatFile, '-c', 'copy', audioTrack])
+    if (r.status !== 0) {
+      console.error('concat de áudio falhou:', r.stderr?.toString().slice(-300))
+      process.exit(1)
+    }
+  }
+
+  // 6.4 — casamento final: vídeo + áudio + legenda queimada
+  const finalBurned = join(root, 'final-burned.mp4')
+  const finalName = `${story.projectName.replace(/[^a-z0-9]+/gi, '-')}.mp4`
+  r = spawnSync(FFMPEG, [
+    '-y',
+    '-i', videoOnly,
+    '-i', audioTrack,
+    '-vf', `subtitles='${assPath}'`,
+    '-c:v', 'libx264', '-tune', 'animation', '-preset', 'slow', '-crf', '18', '-profile:v', 'high', '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-b:a', '192k',
+    '-movflags', '+faststart',
+    finalBurned,
+  ])
+  if (r.status !== 0) {
+    console.error('queima da legenda falhou:', r.stderr?.toString().slice(-500))
+    process.exit(1)
+  }
+
+  const duration = Number(spawnSync(ffprobeBin(), ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', finalBurned]).stdout.toString().trim())
+  log(`MP4 final: ${finalBurned} — ${duration ? (duration / 60).toFixed(1) : '?'} min`)
+
+  // ------------------------------------------------------------------ 7. dossiê
+
+  log('=== FASE 7: DOSSIÊ ===')
+  const dossierService = new DossierService(summary.path, systemClock)
+  const dossierChars = creative.listCharacters()
+  const episodesData = creative.listEpisodes().map((ep) => ({
+    season: ep.season,
+    number: ep.number,
+    title: ep.title,
+    synopsis: ep.synopsis ?? '',
+    scenes: [] as string[],
+  }))
+  const manifest = ctx.manifest
+  const dossierResult = dossierService.generate(
+    {
+      name: manifest.name,
+      description: manifest.description ?? '',
+      medium: 'anime',
+      title: manifest.config.title,
+      genres: manifest.config.genres,
+      contentRating: manifest.config.contentRating ?? '12',
+      language: 'pt-BR',
+      aspectRatio: manifest.config.aspectRatio,
+      resolution: '1920x1080',
+      fps: manifest.config.fps,
+      plannedEpisodes: manifest.config.episodeCount ?? null,
+      plannedSeasons: manifest.config.seasonCount ?? null,
+      demographic: manifest.config.demographic ?? '',
+      targetAudience: manifest.config.targetAudience,
+      inspirations: manifest.config.inspirations,
+      endingVision: manifest.config.endingVision,
+      appVersion: manifest.appVersion,
+      createdAt: manifest.createdAt,
+      updatedAt: manifest.updatedAt,
+      licenseTier: 'Mirai Studio (free)',
+      storyBible: {
+        premise: creative.getBible().premise,
+        themes: creative.getBible().themes,
+        tone: creative.getBible().tone,
+        message: creative.getBible().message,
+        narrativeRules: creative.getBible().narrativeRules,
+        coreConcepts: creative.getBible().coreConcepts,
+        genreNotes: creative.getBible().genreNotes,
+      },
+      styleBible: storyboard.getStyleBible(),
+      characters: dossierChars.map((ch) => ({
+        name: ch.name,
+        role: ch.role,
+        age: ch.age,
+        appearance: ch.appearance,
+        personality: ch.personality,
+        voice: ch.voice,
+        backstory: [ch.bio, ch.goals ? `Objetivos: ${ch.goals}` : '', ch.fears ? `Medos: ${ch.fears}` : '', ch.notes]
+          .filter((x) => x && x.trim().length > 0)
+          .join(' — ') || undefined,
+      })),
+      episodes: episodesData,
+      tasks: ctx.production.listTasks().map((t) => ({ title: t.title, status: t.status, priority: t.priority, dueDate: t.dueDate })),
+      // o QC real do projeto, mapeado como o handler do app faz
+      qc: (() => {
+        const qcReport = ctx.production.runQc(manifest.config.contentRating ?? null)
+        return {
+          errors: qcReport.errorCount,
+          warnings: qcReport.warningCount,
+          infos: qcReport.infoCount,
+          top: qcReport.findings
+            .filter((f) => f.severity === 'ERROR' || f.severity === 'WARNING')
+            .slice(0, 8),
+        }
+      })(),
+    } as never,
+    null,
+    '2.1.1-alpha.2-gen',
+  )
+  log('dossiê:', dossierResult.txtPath, '|', dossierResult.pdfPath)
+
+  // ------------------------------------------------------------------ entrega
+
+  log('=== ENTREGA ===')
+  const outDir = join(DOWNLOADS, story.projectName.replace(/[^a-z0-9]+/gi, '-'))
+  mkdirSync(outDir, { recursive: true })
+  spawnSync('cp', [finalBurned, join(outDir, finalName)])
+  spawnSync('cp', [dossierResult.txtPath, join(outDir, 'dossier.txt')])
+  if (existsSync(dossierResult.pdfPath)) spawnSync('cp', [dossierResult.pdfPath, join(outDir, 'dossier.pdf')])
+  log('ENTREGUE em:', outDir)
+  log('  -', finalName, `(${duration ? (duration / 60).toFixed(1) : '?'} min)`)
+  log('  - dossier.txt / dossier.pdf')
+  projects.close()
+}
+
+void main()

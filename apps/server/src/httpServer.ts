@@ -13,15 +13,28 @@
  *   GET  /projects/:id                 → PublishManifest (and counts a download)
  *   GET  /projects/:id/bundle          → the zip bytes
  *   DELETE /projects/:id?token=…       → remove, needs the right token
+ *
+ * v2.1 — TEMPO REAL (o celular e o computador na MESMA conta):
+ *   GET  /events?since=&token=…        → SSE: eventos desde `since` (e os
+ *                                        novos, ao vivo, enquanto conectado)
+ *   POST /ops                          → enfileira uma operação (o celular
+ *                                        manda; o computador executa)
+ *   GET  /ops/pending?for=computer     → a próxima operação da fila
+ *   POST /ops/:id/progress             → progresso (0–100) do computador
+ *   POST /ops/:id/done                 → resultado (ou falha)
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { PublishStore } from './publishStore'
 import { AccountStore } from './accountStore'
+import { SyncStore } from './syncStore'
+import type { SyncEvent } from '@mirai/shared'
 import { PublishCatalog, PublishManifest, type PublishManifest as PublishManifestType } from '@mirai/shared'
 
 export interface MiraiServerOptions {
   store: PublishStore
   accounts?: AccountStore
+  /** The real-time channel (v2.1). Optional so the legacy surface is unchanged. */
+  sync?: SyncStore
   port?: number
   host?: string
   /** Public name of this registry, shown to browsing clients. */
@@ -230,7 +243,134 @@ export function createMiraiServer(opts: MiraiServerOptions) {
           totalBytes: bundle.byteLength,
           bundle,
         })
+        opts.sync?.emit({
+          type: 'project.published',
+          owner: published.manifest.owner ?? undefined,
+          projectId: published.id,
+          summary: `${published.manifest.title} publicado`,
+          data: published.manifest,
+        })
         json(res, 201, { id: published.id, token: published.token, manifest: published.manifest })
+        return
+      }
+
+      // ---- real-time channel (v2.1) -------------------------------------
+      if (req.method === 'GET' && path === '/events') {
+        const since = Number(url.searchParams.get('since') ?? '0') || 0
+        const session = opts.accounts ? opts.accounts.resolve(bearer(req)) : null
+        const owner = session?.handle
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        })
+        res.write(`retry: 2000\n\n`)
+        const send = (event: SyncEvent) => {
+          res.write(`id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`)
+        }
+        if (!opts.sync) {
+          res.write(': this server has no sync channel\n\n')
+          return
+        }
+        // 1. tudo que aconteceu enquanto o celular estava fora
+        for (const event of opts.sync.eventsSince(since, owner)) send(event)
+        // 2. e o que acontecer daqui em diante, ao vivo
+        const unsubscribe = opts.sync.subscribe((event) => {
+          if (owner !== undefined && event.owner !== undefined && event.owner !== owner) return
+          send(event)
+        })
+        const keepAlive = setInterval(() => res.write(': ping\n\n'), 25_000)
+        req.on('close', () => {
+          clearInterval(keepAlive)
+          unsubscribe()
+        })
+        return
+      }
+
+      // ---- operations: the phone SENDS, the computer EXECUTES -------------
+      if (req.method === 'POST' && path === '/ops') {
+        if (!opts.sync) {
+          json(res, 501, { error: 'This server has no operations channel.' })
+          return
+        }
+        const session = opts.accounts ? opts.accounts.resolve(bearer(req)) : null
+        const raw = await readBody(req, 1024 * 1024)
+        let body: { kind?: string; projectId?: string; payload?: Record<string, unknown> }
+        try {
+          body = JSON.parse(raw.toString('utf8')) as typeof body
+        } catch {
+          json(res, 400, { error: 'The body must be JSON.' })
+          return
+        }
+        const kind = body.kind
+        if (
+          kind !== 'produceEpisode' &&
+          kind !== 'renderCamera' &&
+          kind !== 'speakShot' &&
+          kind !== 'generateFrames' &&
+          kind !== 'render' &&
+          kind !== 'refreshSnapshot'
+        ) {
+          json(res, 400, { error: `Unknown operation: ${String(kind)}` })
+          return
+        }
+        if (!body.projectId) {
+          json(res, 400, { error: 'An operation must name the project.' })
+          return
+        }
+        const op = opts.sync.enqueue(kind, body.projectId, body.payload ?? {})
+        // O evento SAI sempre (um telefone anônimo também precisa ver a fila
+        // andar); quando há sessão, é ESCOPADO ao dono — a operação de uma
+        // conta não vaza para o feed de outra.
+        opts.sync.emit({
+          type: 'op.queued',
+          opId: op.id,
+          owner: session?.handle,
+          projectId: op.projectId,
+          summary: `${kind} enfileirado`,
+        })
+        json(res, 201, { opId: op.id, status: op.status })
+        return
+      }
+
+      if (req.method === 'GET' && path === '/ops/pending') {
+        if (!opts.sync) {
+          json(res, 501, { error: 'This server has no operations channel.' })
+          return
+        }
+        const op = opts.sync.claimNext()
+        json(res, 200, { op })
+        return
+      }
+
+      const opMatch = /^\/ops\/([0-9a-z_]+)\/(progress|done)$/.exec(path)
+      if (opMatch && req.method === 'POST') {
+        if (!opts.sync) {
+          json(res, 501, { error: 'This server has no operations channel.' })
+          return
+        }
+        const opId = opMatch[1]!
+        const raw = await readBody(req, 64 * 1024 * 1024)
+        let body: Record<string, unknown> = {}
+        try {
+          body = JSON.parse(raw.toString('utf8')) as Record<string, unknown>
+        } catch {
+          json(res, 400, { error: 'The body must be JSON.' })
+          return
+        }
+        if (opMatch[2] === 'progress') {
+          opts.sync.progressOp(opId, Number(body.progress ?? 0), String(body.message ?? ''))
+        } else {
+          if (body.error) opts.sync.failOp(opId, String(body.error))
+          else opts.sync.completeOp(opId, body.result)
+        }
+        json(res, 200, { ok: true })
+        return
+      }
+
+      if (req.method === 'GET' && path === '/ops') {
+        json(res, 200, { ops: opts.sync?.listOps() ?? [] })
         return
       }
 
@@ -239,6 +379,9 @@ export function createMiraiServer(opts: MiraiServerOptions) {
         const id = projectMatch[1]!
         const token = url.searchParams.get('token') ?? ''
         const result = opts.store.remove(id, token)
+        if (result.ok) {
+          opts.sync?.emit({ type: 'project.removed', projectId: id, summary: `Projeto ${id} removido` })
+        }
         json(res, result.ok ? 200 : 403, result)
         return
       }

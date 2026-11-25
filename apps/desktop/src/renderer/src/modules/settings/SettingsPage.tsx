@@ -20,6 +20,7 @@ import { ContentCard } from './ContentCard'
 import { ProfileCard } from './ProfileCard'
 import { MotionCard } from './MotionCard'
 import { TtsVoiceCard } from './TtsVoiceCard'
+import { SyncCard } from './SyncCard'
 import { LocalGpuPanel } from './LocalGpuPanel'
 import { Badge, Button, Card, Input, Label, SectionTitle, Select, Spinner } from '../../system/ui'
 import { ErrorState } from '../../system/EmptyState'
@@ -836,6 +837,7 @@ function ProvidersCard() {
             the endpoint fields below still configure the OpenAI-compatible
             engine, and stay visible for it. */}
         <TtsVoiceCard />
+        <SyncCard />
 
         {/* AI Voice provider endpoint (TTS — the openai-compatible engine) */}
         <div className="rounded-lg border border-mirai-border bg-mirai-panel p-4">

@@ -43,6 +43,11 @@ if (!gotLock) {
     }
     registerIpcHandlers(container)
     registerAssetProtocol(() => container?.projects.current()?.storyboard ?? null)
+    // v2.1: o agente de tempo real — se o usuário ligou a sincronização, a
+    // máquina começa a escutar a fila do celular IMEDIATAMENTE (um clique no
+    // celular precisa achar este computador acordado, não depois de um restart).
+    container.syncAgent?.start()
+    container.logger.info('SYNC', container.syncAgent ? 'agente de sincronização ativo' : 'sincronização desligada')
     createWindow(container)
     app.on('activate', () => {
       // macOS: re-create the window on dock click.

@@ -162,6 +162,13 @@ export const AppSettings = z.object({
         .object({
           url: z.string().default(''),
           token: z.string().default(''),
+          /**
+           * v2.1: o agente de tempo real. Ligado, o computador escuta a fila
+           * de operações do servidor e executa o que o CELULAR pede — os dois
+           * dispositivos veem o progresso pelo mesmo canal de eventos.
+           */
+          syncEnabled: z.boolean().default(false),
+          syncPollMs: z.number().int().min(1000).max(60_000).default(4_000),
         })
         .default({}),
       temperature: z.number().min(0).max(2).default(0.7),

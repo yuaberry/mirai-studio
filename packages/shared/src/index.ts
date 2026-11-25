@@ -597,5 +597,17 @@ export {
 } from './motion'
 export type { MotionSpeed, DetailLevel, TransitionStyle, MotionSettings } from './motion'
 export { describeRelease } from './release'
+export {
+  SYNC_OP_KINDS,
+  SYNC_EVENT_TYPES,
+} from './entities/sync'
+export type {
+  SyncEvent,
+  SyncEventType,
+  SyncOp,
+  SyncOpKind,
+  SyncOpStatus,
+  SyncOpRequest,
+} from './entities/sync'
 export type { ReleaseInfo, ReleaseTone } from './release'
 export type { IpcEventChannel, IpcEventPayload } from './ipc/events'

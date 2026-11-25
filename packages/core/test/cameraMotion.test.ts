@@ -16,6 +16,7 @@ import {
   CAMERA_MOTION_LABELS,
   cameraMoveArgs,
   encodeTier,
+  evenSize,
   frameCount,
   suggestMotion,
   zoompanExpression,
@@ -109,6 +110,19 @@ describe('cameraMoveArgs', () => {
     expect(encodeTier('CINEMA')).toEqual({ preset: 'slower', crf: '14', premium: true })
     expect(encodeTier('MASTER').crf).toBe('16')
     expect(encodeTier('PREVIEW').preset).toBe('ultrafast')
+  })
+})
+
+describe('evenSize', () => {
+  it('rounds odd AI frame sizes down to even (yuv420p demands it)', () => {
+    // A 1015x580 Pollinations image — odd width — must not reach the encoder.
+    expect(evenSize(1015, 580)).toEqual({ width: 1014, height: 580 })
+    expect(evenSize(1344, 768)).toEqual({ width: 1344, height: 768 })
+  })
+
+  it('feeds the EVEN size into the zoompan expression', () => {
+    const expr = zoompanExpression({ ...spec('pushIn'), width: 1015, height: 580 })!
+    expect(expr).toContain('s=1014x580')
   })
 })
 

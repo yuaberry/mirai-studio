@@ -282,7 +282,7 @@ describe('edgeSpeak resilience', () => {
         list.push(listener)
         handlers.set(event, list)
       },
-      write: (d: Buffer) => undefined,
+      write: () => undefined,
       end: () => undefined,
       destroy: () => undefined,
     }

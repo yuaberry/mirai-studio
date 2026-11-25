@@ -86,12 +86,23 @@ export function frameCount(spec: CameraMotionSpec): number {
 }
 
 /**
+ * yuv420p — the pixel format every delivery player expects — needs EVEN
+ * dimensions, and AI frames arrive at odd sizes (a 1015×580 Pollinations
+ * image, say). The camera move does not decide the canvas: rounding DOWN to
+ * even is the smallest honest change that keeps the encode legal.
+ */
+export function evenSize(width: number, height: number): { width: number; height: number } {
+  return { width: Math.max(2, Math.floor(width / 2) * 2), height: Math.max(2, Math.floor(height / 2) * 2) }
+}
+
+/**
  * The `zoompan` expression for a preset, or null for `locked` (no filter).
  * zoompan crops the image at `zoom` and places the window at (x, y); `on`
  * is the OUTPUT frame number, so every move is time-driven and smooth.
  */
 export function zoompanExpression(spec: CameraMotionSpec): string | null {
   const frames = frameCount(spec)
+  const even = evenSize(spec.width, spec.height)
   const amount = clamp(spec.amount ?? 1, 0, 1)
   // The headroom a pan/tilt needs to move inside without exposing edges.
   const zoomMax = round6(1 + 0.22 * amount)
@@ -106,43 +117,43 @@ export function zoompanExpression(spec: CameraMotionSpec): string | null {
       return (
         `zoompan=z='min(1+(${zoomMax}-1)*${progress},${zoomMax})'` +
         `:x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2'` +
-        `:d=1:s=${spec.width}x${spec.height}:fps=${spec.fps}`
+        `:d=1:s=${even.width}x${even.height}:fps=${spec.fps}`
       )
     case 'pushOut':
       return (
         `zoompan=z='max(${zoomMax}-(${zoomMax}-1)*${progress},1)'` +
         `:x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2'` +
-        `:d=1:s=${spec.width}x${spec.height}:fps=${spec.fps}`
+        `:d=1:s=${even.width}x${even.height}:fps=${spec.fps}`
       )
     case 'panRight':
       return (
         `zoompan=z='${zoomMax}'` +
         `:x='${travel('iw')}*${progress}':y='(ih-ih/zoom)/2'` +
-        `:d=1:s=${spec.width}x${spec.height}:fps=${spec.fps}`
+        `:d=1:s=${even.width}x${even.height}:fps=${spec.fps}`
       )
     case 'panLeft':
       return (
         `zoompan=z='${zoomMax}'` +
         `:x='${travel('iw')}*(1-${progress})':y='(ih-ih/zoom)/2'` +
-        `:d=1:s=${spec.width}x${spec.height}:fps=${spec.fps}`
+        `:d=1:s=${even.width}x${even.height}:fps=${spec.fps}`
       )
     case 'tiltUp':
       return (
         `zoompan=z='${zoomMax}'` +
         `:x='(iw-iw/zoom)/2':y='${travel('ih')}*(1-${progress})'` +
-        `:d=1:s=${spec.width}x${spec.height}:fps=${spec.fps}`
+        `:d=1:s=${even.width}x${even.height}:fps=${spec.fps}`
       )
     case 'tiltDown':
       return (
         `zoompan=z='${zoomMax}'` +
         `:x='(iw-iw/zoom)/2':y='${travel('ih')}*${progress}'` +
-        `:d=1:s=${spec.width}x${spec.height}:fps=${spec.fps}`
+        `:d=1:s=${even.width}x${even.height}:fps=${spec.fps}`
       )
     case 'drift':
       return (
         `zoompan=z='${zoomMax}'` +
         `:x='${travel('iw')}*${progress}':y='${travel('ih')}*(1-${progress})'` +
-        `:d=1:s=${spec.width}x${spec.height}:fps=${spec.fps}`
+        `:d=1:s=${even.width}x${even.height}:fps=${spec.fps}`
       )
     case 'handheld': {
       // A slow two-frequency wobble on a zoomed crop: small enough to read as
@@ -153,7 +164,7 @@ export function zoompanExpression(spec: CameraMotionSpec): string | null {
         `zoompan=z='${zoomMax}'` +
         `:x='(iw-iw/zoom)/2+${wobbleX}*sin(on/7)+${wobbleX / 2}*sin(on/23)'` +
         `:y='(ih-ih/zoom)/2+${wobbleY}*cos(on/5)+${wobbleY / 2}*cos(on/17)'` +
-        `:d=1:s=${spec.width}x${spec.height}:fps=${spec.fps}`
+        `:d=1:s=${even.width}x${even.height}:fps=${spec.fps}`
       )
     }
   }
@@ -172,6 +183,7 @@ export function cameraMoveArgs(
   preset: ExportPreset,
 ): string[] {
   const tier = encodeTier(quality)
+  const even = evenSize(spec.width, spec.height)
   const args: string[] = [
     '-loop', '1',
     '-t', spec.durationSec.toFixed(3),
@@ -187,7 +199,7 @@ export function cameraMoveArgs(
       `scale=${spec.width * 2}:${spec.height * 2}:force_original_aspect_ratio=increase:flags=lanczos,${zoom}`,
     )
   } else {
-    args.push('-vf', `scale=${spec.width}:${spec.height}:force_original_aspect_ratio=decrease,pad=${spec.width}:${spec.height}:(ow-iw)/2:(oh-ih)/2`)
+    args.push('-vf', `scale=${even.width}:${even.height}:force_original_aspect_ratio=decrease,pad=${even.width}:${even.height}:(ow-iw)/2:(oh-ih)/2`)
   }
   args.push(
     '-c:v', 'libx264',

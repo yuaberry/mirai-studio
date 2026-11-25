@@ -20,6 +20,7 @@ import {
   AssetIntelligenceService,
   ProfileService,
   CollaborationService,
+  SyncAgent,
 } from '@mirai/core'
 import type { IpcEventChannel, IpcEventPayload, OpenedProject } from '@mirai/shared'
 import { ipcEventPayloads } from '@mirai/shared'
@@ -69,6 +70,8 @@ export interface Container {
   ai: AiHost
   profile: ProfileService
   collaboration: CollaborationService
+  /** v2.1: o agente que executa as operações que o celular enfileira. */
+  syncAgent?: import('@mirai/core').SyncAgent | null
   aiUsage: AiUsageService
   /** v0.36: Sound & Voice Studio — real audio mix + master via FFmpeg. */
   audio: AudioMixService
@@ -152,6 +155,18 @@ export function bootstrap(): Container {
 
   const plugins = new PluginRegistry(appDb, systemClock, join(dirs.root, 'plugins'))
 
+  // v2.1: o agente de tempo real — o celular manda, ESTA máquina executa.
+  // Ele só existe quando o usuário liga (Settings → colaboração); desligado,
+  // não há socket nenhum aberto para o servidor.
+  const syncAgent = buildSyncAgent({
+    settings,
+    projects,
+    ai,
+    collaboration,
+    logger,
+    emitter,
+  })
+
   const container: Container = {
     dirs,
     logger,
@@ -162,6 +177,7 @@ export function bootstrap(): Container {
     ai,
     profile,
     collaboration,
+    syncAgent,
     aiUsage,
     audio,
     assetIntelligence,
@@ -171,6 +187,7 @@ export function bootstrap(): Container {
     plugins,
     pluginHost: undefined as never,
     shutdown: async () => {
+      syncAgent?.stop()
       await projects.close()
       logger.close()
       appDb.close()
@@ -183,4 +200,74 @@ export function bootstrap(): Container {
 /** Build the wire representation of an open project. */
 export function toOpenedProject(ctx: OpenProjectContext): OpenedProject {
   return { ...ctx.summary, manifest: ctx.manifest }
+}
+
+/**
+ * Constrói o agente de sincronização (v2.1) — a metade da máquina do
+ * "mando do celular, executo no computador".
+ *
+ * O `runOp` é o ÚNICO lugar que conhece os serviços: cada operação que o
+ * celular pode pedir vira a chamada real correspondente. Um kind sem
+ * implementação é recusado com honestidade — a fila não aceita fantasia.
+ */
+function buildSyncAgent(deps: {
+  settings: import('@mirai/core').SettingsService
+  projects: import('@mirai/core').ProjectService
+  ai: import('./ai/aiHost').AiHost
+  collaboration: import('@mirai/core').CollaborationService
+  logger: import('@mirai/core').LoggerService
+  emitter: import('./bootstrap').MainEmitter
+}): import('@mirai/core').SyncAgent | null {
+  const ai = () => deps.settings.get()
+  const collab = () => ai().ai.collaboration
+  if (!collab().syncEnabled || !collab().url) return null
+  return new SyncAgent({
+    baseUrl: collab().url,
+    token: collab().token || undefined,
+    pollIntervalMs: collab().syncPollMs,
+    log: (message) => deps.logger.info('SYNC', message),
+    runOp: async (kind, payload, report) => {
+      const ctx = deps.projects.current()
+      if (!ctx) throw new Error('Nenhum projeto aberto — abra o projeto no computador primeiro.')
+      switch (kind) {
+        case 'speakShot': {
+          const shotId = String(payload.shotId ?? '')
+          if (!shotId) throw new Error('A operação speakShot precisa de shotId.')
+          const spoken = await deps.ai.speakShot(shotId)
+          report(100, 'voz gerada')
+          return spoken
+        }
+        case 'generateFrames': {
+          const shotId = String(payload.shotId ?? '')
+          if (!shotId) throw new Error('A operação generateFrames precisa de shotId.')
+          const generated = await deps.ai.generateFrame(shotId, undefined as never, AbortSignal.timeout(300_000), (pct) => report(pct, 'gerando quadro'))
+          return generated
+        }
+        case 'renderCamera': {
+          const shotId = String(payload.shotId ?? '')
+          if (!shotId) throw new Error('A operação renderCamera precisa de shotId.')
+          const rendered = await ctx.render.renderCameraClip({
+            shotId,
+            quality: (payload.quality as never) ?? 'MASTER',
+            reportProgress: (pct) => report(pct, 'renderizando clipe'),
+            signal: AbortSignal.timeout(300_000),
+          })
+          return rendered
+        }
+        case 'refreshSnapshot': {
+          // publica o projeto atual no servidor — o celular recebe o evento
+          // project.published/manifest pelo canal de eventos (tempo real).
+          const published = await deps.collaboration.publish(
+            ctx.summary.path,
+            ctx.manifest.config.title || ctx.summary.name,
+            ctx.manifest.description ?? '',
+          )
+          report(100, 'projeto publicado')
+          return { id: published.id }
+        }
+        default:
+          throw new Error(`Operação "${kind}" ainda não é executável pelo agente.`)
+      }
+    },
+  })
 }

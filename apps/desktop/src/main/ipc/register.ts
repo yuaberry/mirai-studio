@@ -1710,6 +1710,20 @@ export function registerIpcHandlers(c: Container): void {
     return { ...gate, checkpoints }
   })
 
+  // O estado do agente de tempo real — o celular só confia no botão se esta
+  // resposta disser que há alguém do outro lado.
+  handleIpc('collaboration:status', () => {
+    const collab = c.settings.get().ai.collaboration
+    const agent = c.syncAgent ?? null
+    return {
+      configured: Boolean(collab.url),
+      agentActive: agent !== null,
+      lastPollAt: agent?.lastPollAt ?? 0,
+      lastError: agent?.lastError ?? null,
+      url: collab.url,
+    }
+  })
+
   handleIpc('marketplace:apply', (req) => {
     // 'active-chat' is the pseudo-provider of the LIVE chat catalog: those
     // models belong to whichever chat provider is configured right now.

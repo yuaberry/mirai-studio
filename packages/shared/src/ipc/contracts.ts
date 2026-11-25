@@ -463,6 +463,23 @@ export const ipcContracts = {
       text: z.string().min(1),
     }),
   },
+  /**
+   * O estado do agente de sincronização (v2.1): se o computador está
+   * escutando a fila do celular, e quando foi a última verificação. O
+   * celular só confia no botão "produzir" se esta resposta disser que há
+   * alguém do outro lado.
+   */
+  'collaboration:status': {
+    request: emptyRequest,
+    response: z.object({
+      configured: z.boolean(),
+      agentActive: z.boolean(),
+      lastPollAt: z.number().int().min(0),
+      lastError: z.string().nullable(),
+      url: z.string(),
+    }),
+  },
+
   // ---- EDGE TTS (v2.1) ------------------------------------------------------
   /**
    * The keyless neural voice catalog (Microsoft Edge's online voices). The

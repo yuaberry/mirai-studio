@@ -45,6 +45,8 @@ export const LOG_CATEGORIES = [
   'MEDIA',
   'IPC',
   'PLUGINS',
+  // v2.1: o canal em tempo real com o celular
+  'SYNC',
 ] as const
 export type LogCategory = (typeof LOG_CATEGORIES)[number]
 

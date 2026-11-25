@@ -50,6 +50,10 @@ export { MediaService } from './media/mediaService'
 
 // render (Phase 4)
 export { RenderService } from './render/renderService'
+export { suggestMotion, cameraMoveArgs, CAMERA_MOTION_PRESETS, CAMERA_MOTION_LABELS } from './render/cameraMotion'
+export { SyncAgent } from './collaboration/syncAgent'
+export type { SyncAgentOptions } from './collaboration/syncAgent'
+export type { CameraMotionPreset, CameraMotionSpec } from './render/cameraMotion'
 export { ffmpegBin, ffprobeBin, ffmpegSource } from './render/ffmpegBin'
 export { NotesImportService } from './import/notesImport'
 export { AiUsageService } from './ai/aiUsage'
