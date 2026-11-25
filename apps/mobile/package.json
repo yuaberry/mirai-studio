@@ -1,7 +1,7 @@
 {
   "name": "@mirai/mobile-companion",
   "private": true,
-  "version": "0.16.0",
+  "version": "2.1.2",
   "description": "Mirai Studio Companion — leitor do Dossiê do Projeto no celular",
   "type": "module",
   "scripts": {

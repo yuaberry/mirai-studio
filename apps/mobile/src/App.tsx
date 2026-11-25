@@ -20,7 +20,7 @@ import { parseDossier, type ParsedDossier } from './dossier'
 import { readZipTexts } from './zip'
 import { motionCss } from './motion'
 
-const APP_VERSION = '2.1.1-companion'
+const APP_VERSION = "2.1.2-companion"
 
 interface ServerProject {
   id: string
