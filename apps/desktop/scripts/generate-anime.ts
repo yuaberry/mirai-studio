@@ -21,7 +21,7 @@
  * Nada de mock: cada fase toca o provider/encoder real e falha alto com o
  * motivo quando o mundo real recusa.
  */
-import { mkdtempSync, mkdirSync, existsSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, existsSync, writeFileSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -68,9 +68,9 @@ const log = (...parts: unknown[]) => console.log(new Date().toISOString().slice(
 // ------------------------------------------------------------------ bootstrap
 
 async function main() {
-  // RAIZ ESTÁVEL: a geração roda por horas e precisa RETOMAR entre processos
-// (um mkdtemp por boot perdia as ~100 camadas já geradas).
-const GEN_ROOT = process.env.MIRAI_GEN_ROOT ?? '/tmp/mirai-gen-studio'
+  // RAIZ PERSISTENTE: a geração roda por HORAS e um restart do servidor
+// limpou /tmp levando ~2h de camadas. Fora do /tmp ela sobrevive a reboot.
+const GEN_ROOT = process.env.MIRAI_GEN_ROOT ?? join(homedir(), 'mirai-gen')
 const root = GEN_ROOT
   const dirs: AppDirs = {
     root,
@@ -356,11 +356,20 @@ const root = GEN_ROOT
     return 'expressão calma, olhar suave'
   }
 
-  /** O clipe em PARALLAX de um shot (3 camadas, velocidades diferentes). */
-  const composeParallax = (shot: ReturnType<StoryboardService['listShots']>[number], sceneTitle: string): string | null => {
+  /**
+   * O clipe em PARALLAX de um shot (3 camadas, velocidades diferentes).
+   * BUG MEU CORRIGIDO: a hora era derivada do TÍTULO da cena
+   * ("Cena 11 — Avenida Molhada" não contém "NIGHT"), então as cenas
+   * noturnas procuravam um fundo -DAY que não existe e o shot ficava sem
+   * clipe. Agora vem do campo timeOfDay REAL da cena.
+   */
+  const composeParallax = (
+    shot: ReturnType<StoryboardService['listShots']>[number],
+    sceneTitle: string,
+    timeOfDay: string,
+  ): string | null => {
     const loc = sceneTitle.split('—').slice(1).join('—').trim() || sceneTitle
-    const time = sceneTitle.includes('NIGHT') ? 'NIGHT' : 'DAY'
-    const bgFile = join(layersDir, `bg-${loc.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}-${time}.jpg`)
+    const bgFile = join(layersDir, `bg-${loc.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}-${timeOfDay}.jpg`)
     const chFile = join(layersDir, `ch-${shot.id}.jpg`)
     if (!existsSync(bgFile) || !existsSync(chFile)) return null
     const out = join(summary.path, 'exports', `parallax-${shot.orderIndex + 1}-${shot.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp4`)
@@ -434,6 +443,27 @@ const root = GEN_ROOT
   SAVE()
   log(`camadas prontas: ${bgDone} fundos · ${charDone} personagens (falhas: ${frameFailures})`)
 
+  /** Um mp3 só é voz se DECODIFICAR: um corte de resposta do Edge (medido:
+   *  1 em 140) tem 33 KB e não toca. Prova antes de usar. */
+  const rmSyncSafe = (file: string) => {
+    try {
+      const { rmSync } = require('node:fs') as typeof import('node:fs')
+      rmSync(file, { force: true })
+    } catch {
+      /* um arquivo que não some não impede a retentativa */
+    }
+  }
+
+  const audioIsValid = (file: string): boolean => {
+    try {
+      const p = spawnSync(ffprobeBin(), ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file])
+      const d = Number(p.stdout.toString().trim())
+      return Number.isFinite(d) && d > 0.1
+    } catch {
+      return false
+    }
+  }
+
   // ------------------------------------------------------------------ 4. vozes
 
   log('=== FASE 4: VOZ (Edge neural + polish) ===')
@@ -442,15 +472,32 @@ const root = GEN_ROOT
     if (entry.shot.voiceAssetId) continue
     const dialogue = (entry.shot.dialogue ?? '').trim()
     if (!dialogue || !dialogue.includes('\n')) continue // narração pura não é dublada
-    try {
-      await ai.speakShot(entry.id, AbortSignal.timeout(120_000))
-      state.voices += 1
-      if (state.voices % 20 === 0) {
-        SAVE()
-        log(`vozes: ${state.voices}`)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const shot = storyboard.getShotById(entry.id)
+        const voiceFile = shot.voiceAssetId ? storyboard.assetAbsolutePath(shot.voiceAssetId) : null
+        if (voiceFile && audioIsValid(voiceFile)) {
+          state.voices += 1
+          break
+        }
+        if (voiceFile && existsSync(voiceFile)) rmSyncSafe(voiceFile)
+        await ai.speakShot(entry.id, AbortSignal.timeout(120_000))
+        const spoken = storyboard.getShotById(entry.id)
+        const newFile = spoken.voiceAssetId ? storyboard.assetAbsolutePath(spoken.voiceAssetId) : null
+        if (newFile && audioIsValid(newFile)) {
+          state.voices += 1
+          if (state.voices % 20 === 0) {
+            SAVE()
+            log(`vozes: ${state.voices}`)
+          }
+          break
+        }
+        if (newFile && existsSync(newFile)) rmSyncSafe(newFile)
+        log(`  voz ${entry.id}: mp3 inválido — retentando (${attempt})`)
+      } catch (err) {
+        log(`  FALHA voz ${entry.id}: ${err instanceof Error ? err.message : String(err)}`)
+        break
       }
-    } catch (err) {
-      log(`  FALHA voz ${entry.id}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
   SAVE()
@@ -482,7 +529,7 @@ const root = GEN_ROOT
       if (r.status === 0) composed++
       continue
     }
-    const out = composeParallax(shot, scene.title)
+    const out = composeParallax(shot, scene.title, scene.timeOfDay)
     if (out) {
       composed++
       if (composed % 20 === 0) log(`clipes: ${composed}/${allShots.length}`)
@@ -503,7 +550,13 @@ const root = GEN_ROOT
   const segments: Segment[] = []
   for (const scene of creative.listScenes(episode.id)) {
     for (const shot of storyboard.listShots(scene.id)) {
-    const clip = join(summary.path, 'exports', `shot-${shot.orderIndex + 1}-${shot.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}-${suggestMotion(shot)}.mp4`)
+      // Os clipes do motor próprio são `parallax-<n>-<titulo>.mp4` (o nome
+      // antigo `shot-*` era do camera-motion simples).
+      const clip = join(
+        summary.path,
+        'exports',
+        `parallax-${shot.orderIndex + 1}-${shot.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp4`,
+      )
       if (!existsSync(clip)) continue
       segments.push({
         clip,
@@ -519,7 +572,17 @@ const root = GEN_ROOT
   const concatFile = join(root, 'concat.txt')
   writeFileSync(concatFile, concatList)
   const videoOnly = join(root, 'video.mp4')
-  let r = spawnSync(FFMPEG, ['-y', '-f', 'concat', '-safe', '0', '-i', concatFile, '-c', 'copy', videoOnly])
+  // RE-ENCODE no concat: com `-c copy` o muxer empacota clipes de timebases
+  // ligeiramente diferentes e o arquivo final nasce com NAL inválido
+  // (MEDIDO: o hentai anterior decodia com "Invalid NAL unit size" aos
+  // montes). Re-encodar em H.264 com o mesmo preset do burn é alguns minutos
+  // e entrega um arquivo limpo.
+  let r = spawnSync(FFMPEG, [
+    '-y', '-f', 'concat', '-safe', '0', '-i', concatFile,
+    '-c:v', 'libx264', '-tune', 'animation', '-preset', 'medium', '-crf', '17',
+    '-pix_fmt', 'yuv420p', '-r', '24',
+    videoOnly,
+  ])
   if (r.status !== 0) {
     console.error('concat de vídeo falhou:', r.stderr?.toString().slice(-400))
     process.exit(1)
@@ -568,20 +631,31 @@ const root = GEN_ROOT
   }
   writeFileSync(assPath, assLines.join('\n'))
 
-  const audioTrack = join(root, 'audio.mp3')
+  // A faixa de áudio é RE-ENCODADA: os mp3 do Edge têm taxas e quadros
+  // ligeiramente diferentes, e o concat com `-c copy` engasga neles
+  // ("invalid dropping st:0"). Re-encodar em AAC normaliza a pista inteira.
+  const audioTrack = join(root, 'audio.m4a')
   {
     const segFiles: string[] = []
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i]!
-      if (seg.voice) segFiles.push(`file '${seg.voice}'`)
-      else {
+      if (seg.voice) {
+        segFiles.push(`file '${seg.voice}'`)
+      } else {
         const silence = join(root, `sil-${i}.m4a`)
-        spawnSync(FFMPEG, ['-y', '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo:d=8', '-c:a', 'libmp3lame', silence])
+        spawnSync(FFMPEG, [
+          '-y', '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo:d=8',
+          '-c:a', 'aac', '-b:a', '192k', silence,
+        ])
         segFiles.push(`file '${silence}'`)
       }
     }
     writeFileSync(concatFile, segFiles.join('\n'))
-    r = spawnSync(FFMPEG, ['-y', '-f', 'concat', '-safe', '0', '-i', concatFile, '-c', 'copy', audioTrack])
+    r = spawnSync(FFMPEG, [
+      '-y', '-f', 'concat', '-safe', '0', '-i', concatFile,
+      '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
+      audioTrack,
+    ])
     if (r.status !== 0) {
       console.error('concat de áudio falhou:', r.stderr?.toString().slice(-300))
       process.exit(1)
@@ -589,12 +663,29 @@ const root = GEN_ROOT
   }
 
   // 6.4 — casamento final: vídeo + áudio + legenda queimada
+  // A pista de áudio precisa ter A MESMA duraçăo do vídeo: as vozes do Edge
+  // duram ~3 s e o silêncio 8 s, então a faixa somada fica MENOR que o vídeo
+  // e o burn sai cortado (MEDIDO: 524 s em vez de 1088 s). O apad estica a
+  // faixa com silêncio até a duraçăo exata do corte.
+  const targetSeconds = segments.length * 8
+  const audioPadded = join(root, 'audio-padded.m4a')
+  r = spawnSync(FFMPEG, [
+    '-y', '-i', audioTrack,
+    '-af', `apad`, '-t', targetSeconds.toFixed(3),
+    '-c:a', 'aac', '-b:a', '192k',
+    audioPadded,
+  ])
+  if (r.status !== 0) {
+    console.error('apad do áudio falhou:', r.stderr?.toString().slice(-300))
+    process.exit(1)
+  }
+
   const finalBurned = join(root, 'final-burned.mp4')
   const finalName = `${story.projectName.replace(/[^a-z0-9]+/gi, '-')}.mp4`
   r = spawnSync(FFMPEG, [
     '-y',
     '-i', videoOnly,
-    '-i', audioTrack,
+    '-i', audioPadded,
     '-vf', `subtitles='${assPath}'`,
     '-c:v', 'libx264', '-tune', 'animation', '-preset', 'slow', '-crf', '18', '-profile:v', 'high', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', '192k',
